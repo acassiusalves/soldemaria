@@ -80,6 +80,7 @@ export default function VendasPage() {
     Object.keys(detailedSalesData[0] || {})
       .map(key => ({ id: key, label: getLabel(key), isSortable: true }))
   );
+  const [uploadedFileNames, setUploadedFileNames] = React.useState<string[]>([]);
   
   const [date, setDate] = React.useState<DateRange | undefined>({
     from: new Date(2025, 5, 1), // June 1, 2025
@@ -97,7 +98,7 @@ export default function VendasPage() {
     });
   }, [date, sales]);
 
-  const handleDataUpload = (data: VendaDetalhada[]) => {
+  const handleDataUpload = (data: VendaDetalhada[], fileNames: string[]) => {
     if (data.length > 0) {
       const firstRow = data[0];
       const newColumns = Object.keys(firstRow).map(key => ({
@@ -105,7 +106,11 @@ export default function VendasPage() {
         label: getLabel(key),
         isSortable: true
       }));
-      setColumns(newColumns);
+      
+      const uniqueNewColumns = newColumns.filter(newCol => !columns.some(existingCol => existingCol.id === newCol.id));
+      if (uniqueNewColumns.length > 0) {
+        setColumns(prev => [...prev, ...uniqueNewColumns]);
+      }
     }
     
     const formattedData = data.map((item, index) => {
@@ -137,6 +142,7 @@ export default function VendasPage() {
       }
     });
     setSales(prev => [...prev, ...formattedData]);
+    setUploadedFileNames(prev => [...prev, ...fileNames]);
   };
 
   return (
@@ -221,7 +227,7 @@ export default function VendasPage() {
                     Filtre as vendas que você deseja analisar.
                   </CardDescription>
                 </div>
-                <SupportDataDialog onDataUpload={handleDataUpload}>
+                <SupportDataDialog onDataUpload={handleDataUpload} uploadedFileNames={uploadedFileNames}>
                    <Button variant="outline">
                     <Settings className="mr-2 h-4 w-4" />
                     Dados de Apoio
