@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useMemo } from "react";
-import { format } from "date-fns";
+import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { ArrowUpDown } from "lucide-react";
 import { Venda } from "@/lib/data";
@@ -89,7 +89,7 @@ export default function SalesHistoryTable({ data }: { data: Venda[] }) {
               paginatedData.map((sale) => (
                 <TableRow key={sale.id}>
                   <TableCell>
-                    {format(new Date(sale.data), "dd/MM/yyyy", { locale: ptBR })}
+                    {format(parseISO(sale.data), "dd/MM/yyyy", { locale: ptBR })}
                   </TableCell>
                   <TableCell className="font-medium">{sale.produto}</TableCell>
                   <TableCell>
