@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useMemo } from "react";
@@ -17,7 +16,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "./ui/input";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "./ui/collapsible";
+// Collapsible não será mais usado para envolver, então podemos remover se não for usado em outro lugar
+// import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "./ui/collapsible";
 import { Card, CardContent } from "./ui/card";
 
 const ITEMS_PER_PAGE = 10;
@@ -38,6 +38,8 @@ export default function DetailedSalesHistoryTable({ data }: { data: VendaDetalha
   const [sortKey, setSortKey] = useState<SortKey>("data");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [filter, setFilter] = useState('');
+  // Reintroduzindo o estado para controlar as linhas abertas
+  const [openRows, setOpenRows] = useState<Set<string>>(new Set());
 
   const filteredData = useMemo(() => {
     return data.filter(sale =>
@@ -78,6 +80,19 @@ export default function DetailedSalesHistoryTable({ data }: { data: VendaDetalha
       setSortDirection("asc");
     }
   };
+
+  // Função para abrir/fechar a linha
+  const toggleRow = (id: string) => {
+    setOpenRows(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(id)) {
+        newSet.delete(id);
+      } else {
+        newSet.add(id);
+      }
+      return newSet;
+    });
+  };
   
   const SortableHeader = ({ tkey, label, className }: { tkey: SortKey; label: string, className?: string }) => (
     <TableHead className={className}>
@@ -116,60 +131,58 @@ export default function DetailedSalesHistoryTable({ data }: { data: VendaDetalha
             <TableBody>
               {paginatedData.length > 0 ? (
                 paginatedData.map((sale) => (
-                  <Collapsible asChild key={sale.id} tag="tbody">
-                    <>
+                  // INÍCIO DA MUDANÇA PRINCIPAL
+                  <React.Fragment key={sale.id}>
+                    <TableRow>
+                      <TableCell>
+                        <Button variant="ghost" size="sm" className="w-9 p-0" onClick={() => toggleRow(sale.id)}>
+                          <ChevronsUpDown className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
+                      <TableCell>
+                        {format(parseISO(sale.data), "dd/MM/yyyy", { locale: ptBR })}
+                      </TableCell>
+                      <TableCell className="font-medium">{sale.codigo}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{sale.bandeira1}</Badge>
+                      </TableCell>
+                      <TableCell className="text-center">{sale.parcelas1}</TableCell>
+                      <TableCell className="text-right font-semibold">{formatCurrency(sale.final)}</TableCell>
+                    </TableRow>
+                    {openRows.has(sale.id) && (
                       <TableRow>
-                        <TableCell>
-                          <CollapsibleTrigger asChild>
-                            <Button variant="ghost" size="sm" className="w-9 p-0">
-                              <ChevronsUpDown className="h-4 w-4" />
-                              <span className="sr-only">Expandir</span>
-                            </Button>
-                          </CollapsibleTrigger>
-                        </TableCell>
-                        <TableCell>
-                          {format(parseISO(sale.data), "dd/MM/yyyy", { locale: ptBR })}
-                        </TableCell>
-                        <TableCell className="font-medium">{sale.codigo}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline">{sale.bandeira1}</Badge>
-                        </TableCell>
-                        <TableCell className="text-center">{sale.parcelas1}</TableCell>
-                        <TableCell className="text-right font-semibold">{formatCurrency(sale.final)}</TableCell>
-                      </TableRow>
-                      <CollapsibleContent asChild>
-                        <TableRow>
-                          <TableCell colSpan={6} className="p-0">
-                            <div className="grid grid-cols-4 gap-4 p-4 text-sm bg-muted/10">
-                              <div className="space-y-1">
+                        <TableCell colSpan={6} className="p-0">
+                          <div className="grid grid-cols-4 gap-4 p-4 text-sm bg-muted/10">
+                            {/* O conteúdo detalhado permanece o mesmo */}
+                            <div className="space-y-1">
                                 <p className="font-semibold text-muted-foreground">Pagamento 1</p>
                                 <p>Valor Parcela: {formatCurrency(sale.valorParcela1)}</p>
                                 <p>Taxa Cartão: {formatCurrency(sale.taxaCartao1)}</p>
-                              </div>
-                              <div className="space-y-1">
+                            </div>
+                            <div className="space-y-1">
                                 <p className="font-semibold text-muted-foreground">Pagamento 2</p>
                                 <p>Modo: {sale.modoPagamento2 || "N/A"}</p>
                                 <p>Bandeira: {sale.bandeira2 || "N/A"}</p>
                                 <p>Parcelas: {sale.parcelas2 || "N/A"}</p>
                                 <p>Valor Parcela: {formatCurrency(sale.valorParcela2)}</p>
                                 <p>Taxa Cartão: {formatCurrency(sale.taxaCartao2)}</p>
-                              </div>
-                              <div className="space-y-1">
+                            </div>
+                            <div className="space-y-1">
                                 <p className="font-semibold text-muted-foreground">Custos</p>
                                 <p>Frete: {formatCurrency(sale.custoFrete)}</p>
                                 <p>Imposto: {formatCurrency(sale.imposto)}</p>
                                 <p>Embalagem: {formatCurrency(sale.embalagem)}</p>
-                              </div>
-                               <div className="space-y-1">
+                            </div>
+                            <div className="space-y-1">
                                 <p className="font-semibold text-muted-foreground">Resultado</p>
                                 <p>Comissão: {formatCurrency(sale.comissao)}</p>
-                              </div>
                             </div>
-                          </TableCell>
-                        </TableRow>
-                      </CollapsibleContent>
-                    </>
-                  </Collapsible>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </React.Fragment>
+                  // FIM DA MUDANÇA PRINCIPAL
                 ))
               ) : (
                 <TableRow>
@@ -182,25 +195,26 @@ export default function DetailedSalesHistoryTable({ data }: { data: VendaDetalha
           </Table>
         </div>
         <div className="flex items-center justify-end space-x-2 py-4">
-          <span className="text-sm text-muted-foreground">
-            Página {currentPage} de {totalPages}
-          </span>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-            disabled={currentPage === 1}
-          >
-            Anterior
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
-            disabled={currentPage === totalPages}
-          >
-            Próxima
-          </Button>
+            {/* Paginação permanece igual */}
+            <span className="text-sm text-muted-foreground">
+                Página {currentPage} de {totalPages}
+            </span>
+            <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+                disabled={currentPage === 1}
+            >
+                Anterior
+            </Button>
+            <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+                disabled={currentPage === totalPages}
+            >
+                Próxima
+            </Button>
         </div>
       </CardContent>
     </Card>
