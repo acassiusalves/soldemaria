@@ -278,8 +278,19 @@ export const resolveSystemKey = (normalized: string): string => {
   return normalized.replace(/\s/g, '_'); // Fallback to snake_case
 };
 
-// Normaliza o código para chave de comparação
-const normCode = (v: any) => String(v ?? "").trim().replace(/\.0+$/, "");
+// Normaliza o código para comparação
+const normCode = (v: any) => {
+  let s = String(v ?? "").replace(/\u00A0/g, " ").trim();
+
+  // 357528.0 -> 357528
+  if (/^\d+(?:\.0+)?$/.test(s)) s = s.replace(/\.0+$/, "");
+
+  // remove tudo que não é dígito (ponto, traço, espaço, etc.)
+  s = s.replace(/[^\d]/g, "");
+  // remove zeros à esquerda
+  s = s.replace(/^0+/, "");
+  return s;
+};
 
 // Celula vazia/inútil não deve sobrescrever
 const isEmptyCell = (v: any) => {
@@ -312,10 +323,63 @@ const mergeNonEmpty = (existing: Record<string, any>, incoming: Record<string, a
   return out;
 };
 
-// define se uma linha é "detalhe" (item) ou "cabeçalho" (pedido)
-const ITEM_KEYS = ["item","descricao","quantidade","custoUnitario","valorUnitario","valorCredito","valorDescontos"];
-const isDetailRow = (row: Record<string, any>) =>
-  ITEM_KEYS.some(k => !isEmptyCell(row[k]));
+// Converte uma linha crua em chaves do sistema (codigo, data, ...)
+const mapRowToSystem = (row: Record<string, any>) => {
+  const out: Record<string, any> = {};
+  for (const rawHeader in row) {
+    const normalized = normalizeHeader(rawHeader);
+    const sysKey = resolveSystemKey(normalized); // ex.: "mov. estoque" -> "codigo"
+    const val = cleanNumericValue(row[rawHeader]);
+
+    if (sysKey) out[sysKey] = val;
+    else {
+      // guarda também a versão "snake" pra consultas por nome cru
+      const fallback = normalized.replace(/\s+/g, "_");
+      out[fallback] = val;
+    }
+  }
+  if (out.codigo != null) out.codigo = normCode(out.codigo);
+  if (out.data != null) {
+    const d = toDate(out.data);
+    if (d) out.data = d; else delete out.data;
+  }
+  return out;
+};
+
+// Tenta achar, em uma linha, o valor de chave (código) usando várias estratégias
+const pickCodeFromRow = (
+  rawRow: Record<string, any>,
+  mappedRow: Record<string, any>,
+  assocKey?: string
+) => {
+  // 1) se o usuário marcou uma coluna no diálogo:
+  if (assocKey) {
+    // tenta exatamente o nome cru
+    if (rawRow[assocKey] != null) return normCode(rawRow[assocKey]);
+
+    // tenta o normalizado/snake da coluna marcada
+    const assocNorm = normalizeHeader(assocKey).replace(/\s+/g, "_");
+    if (mappedRow[assocNorm] != null) return normCode(mappedRow[assocNorm]);
+
+    // se a coluna marcada "resolve" para 'codigo', usa mappedRow.codigo
+    const resolved = resolveSystemKey(normalizeHeader(assocKey));
+    if (resolved === "codigo" && mappedRow.codigo != null) {
+      return normCode(mappedRow.codigo);
+    }
+  }
+
+  // 2) sem assocKey: qualquer header da linha que resolva para 'codigo'
+  if (mappedRow.codigo != null) return normCode(mappedRow.codigo);
+
+  // 3) fallback absoluto: tenta alguns nomes comuns
+  const candidates = ["codigo", "cod", "documento", "nf", "numero_documento", "mov_estoque", "movestoque"];
+  for (const c of candidates) {
+    if (mappedRow[c] != null) return normCode(mappedRow[c]);
+    if (rawRow[c] != null) return normCode(rawRow[c]);
+  }
+
+  return "";
+};
 
 const MotionCard = motion(Card);
 
@@ -401,76 +465,81 @@ export default function VendasPage() {
   
   const handleDataUpload = async (datasets: IncomingDataset[]) => {
     if (!datasets || datasets.length === 0) return;
-
-    // índice do banco por código normalizado
+  
+    // index do banco por código normalizado
     const dbByCode = new Map(
       salesFromDb
         .filter(s => (s as any).codigo != null)
         .map(s => [normCode((s as any).codigo), s])
     );
-
+  
     const uploadTimestamp = Date.now();
-
-    // para evitar “duplo update” do mesmo doc, use Map por id
+  
     const stagedUpdates = new Map<string, any>();
     const stagedInserts: any[] = [];
-
-    // contadores para notificação
+  
     let updated = 0;
     let notFound = 0;
     let skippedNoKey = 0;
     let inserted = 0;
-
+  
     for (const ds of datasets) {
-      const key = ds.assocKey && ds.assocKey.trim() ? ds.assocKey : "codigo"; // fallback
-
-      for (let i = 0; i < ds.rows.length; i++) {
-        const row = ds.rows[i];
-
-        // 1) obtenha o “código” a partir da coluna marcada como chave
-        const rawKey = row[key];
-        const code = normCode(rawKey);
+      const { rows, fileName, assocKey } = ds;
+      if (!rows?.length) continue;
+  
+      // mapeia todas as linhas para chaves do sistema
+      const mapped = rows.map(mapRowToSystem);
+  
+      // logs úteis (veja no console)
+      console.log("[apoio] arquivo:", fileName);
+      console.log("[apoio] assocKey marcada:", assocKey);
+      console.log("[apoio] headers brutos:", Object.keys(rows[0] ?? {}));
+      console.log("[apoio] headers mapeados:", Object.keys(mapped[0] ?? {}));
+  
+      for (let i = 0; i < rows.length; i++) {
+        const rawRow = rows[i];
+        const mappedRow = mapped[i];
+  
+        const code = pickCodeFromRow(rawRow, mappedRow, assocKey);
         if (!code) { skippedNoKey++; continue; }
-
+  
         const fromDb = dbByCode.get(code);
-
+  
         if (fromDb) {
-          // 2) MERGE: preserve o que já existe quando o novo valor vier vazio
-          const incoming = { ...row };
-          // garanta que o próprio `codigo` fique preenchido p/ agrupamento
-          incoming.codigo = code;
-
-          const merged = mergeNonEmpty(fromDb as any, incoming);
+          // merge preservando valores existentes quando a planilha vier vazia
+          const merged = mergeNonEmpty(fromDb as any, { ...mappedRow, codigo: code });
           merged.id = (fromDb as any).id;
-          merged.sourceFile = ds.fileName;
+          merged.sourceFile = fileName;
           merged.uploadTimestamp = new Date(uploadTimestamp);
-
+  
           stagedUpdates.set(merged.id, merged);
           updated++;
         } else {
-          // 3) Não criar novos para planilhas de apoio: só conte “não encontrado”.
-          //    Se você quiser permitir upsert, troque este bloco por um insert.
+          // por padrão, planilha de apoio não cria novo doc — apenas contabiliza
           notFound++;
-
-          // --- Exemplo de "permitir upsert" (opcional):
+  
+          // // Se quiser permitir upsert, descomente:
           // const docId = `staged-${uploadTimestamp}-${inserted}`;
-          // const payload = { ...row, codigo: code, id: docId, sourceFile: ds.fileName,
-          //                   uploadTimestamp: new Date(uploadTimestamp) };
-          // const d = toDate(row.data); if (d) payload.data = d;
-          // stagedInserts.push(payload); inserted++;
+          // stagedInserts.push({
+          //   ...mappedRow,
+          //   codigo: code,
+          //   id: docId,
+          //   sourceFile: fileName,
+          //   uploadTimestamp: new Date(uploadTimestamp),
+          // });
+          // inserted++;
         }
       }
     }
-
-    // monte o estágio final (updates únicos por id + eventuais inserts)
+  
     const stagedArray = [...Array.from(stagedUpdates.values()), ...stagedInserts];
-
+  
     setStagedSales(prev => [...prev, ...stagedArray]);
     setStagedFileNames(prev => [
       ...new Set([...prev, ...datasets.map(d => d.fileName)])
     ]);
-
-    // 👇 duas notificações: 1) resumo da associação 2) pronto para revisão
+  
+    // 2 toasts: resumo + revisão
     toast({
       title: "Associação concluída",
       description: [
@@ -480,7 +549,7 @@ export default function VendasPage() {
         inserted ? `${inserted} inserido(s)` : null,
       ].filter(Boolean).join(" • "),
     });
-
+  
     toast({
       title: "Dados Prontos para Revisão",
       description: `${stagedArray.length} registro(s) adicionados à revisão.`,
