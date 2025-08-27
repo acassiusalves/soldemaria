@@ -49,24 +49,36 @@ import {
 } from "@/components/ui/sidebar";
 import { Logo } from "@/components/icons";
 import DetailedSalesHistoryTable from "@/components/detailed-sales-history-table";
-import { detailedSalesData } from "@/lib/data";
+import { detailedSalesData, type VendaDetalhada } from "@/lib/data";
+import { SupportDataDialog } from "@/components/support-data-dialog";
 
 export default function VendasPage() {
+  const [sales, setSales] = React.useState(detailedSalesData);
   const [date, setDate] = React.useState<DateRange | undefined>({
     from: new Date(2025, 5, 1), // June 1, 2025
     to: addDays(new Date(2025, 7, 31), 0), // August 31, 2025
   });
 
   const filteredSales = React.useMemo(() => {
-    if (!date?.from) return detailedSalesData;
+    if (!date?.from) return sales;
     const fromDate = date.from;
     const toDate = date.to ?? fromDate;
 
-    return detailedSalesData.filter((sale) => {
+    return sales.filter((sale) => {
       const saleDate = parseISO(sale.data);
       return saleDate >= fromDate && saleDate <= toDate;
     });
-  }, [date]);
+  }, [date, sales]);
+
+  const handleDataUpload = (data: VendaDetalhada[]) => {
+    const formattedData = data.map(item => ({
+      ...item,
+      // dates from xlsx are not in ISO format, let's assume they are DD/MM/YYYY
+      // and convert them to YYYY-MM-DD
+      data: new Date().toISOString().split('T')[0] // Placeholder for now
+    }))
+    setSales(prev => [...prev, ...formattedData]);
+  };
 
   return (
     <SidebarProvider>
@@ -150,10 +162,12 @@ export default function VendasPage() {
                     Filtre as vendas que você deseja analisar.
                   </CardDescription>
                 </div>
-                <Button variant="outline">
-                  <Settings className="mr-2 h-4 w-4" />
-                  Dados de Apoio
-                </Button>
+                <SupportDataDialog onDataUpload={handleDataUpload}>
+                   <Button variant="outline">
+                    <Settings className="mr-2 h-4 w-4" />
+                    Dados de Apoio
+                  </Button>
+                </SupportDataDialog>
               </div>
             </CardHeader>
             <CardContent>
