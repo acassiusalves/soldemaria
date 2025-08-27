@@ -9,6 +9,7 @@ import {
   Calendar as CalendarIcon,
   LayoutDashboard,
   LogOut,
+  Save,
   Settings,
   ShoppingBag,
 } from "lucide-react";
@@ -170,7 +171,8 @@ const headerMappingNormalized: Record<string, string> = {
   'custo frete': 'custoFrete', 'frete rs': 'custoFrete',
 
   // Itens (se existirem)
-  'item': 'item', 'descricao': 'descricao',
+  'item': 'item',
+  'descricao': 'descricao',
   'qtd': 'quantidade', 'qtde': 'quantidade', 'quantidade': 'quantidade',
   'custo unitario': 'custoUnitario', 'valor unitario': 'valorUnitario',
 
@@ -241,7 +243,9 @@ const cleanNumericValue = (value: any): number | string => {
 const MotionCard = motion(Card);
 
 export default function VendasPage() {
-  const [sales, setSales] = React.useState<VendaDetalhada[]>([]);
+  const [salesFromDb, setSalesFromDb] = React.useState<VendaDetalhada[]>([]);
+  const [stagedSales, setStagedSales] = React.useState<VendaDetalhada[]>([]);
+  const [stagedFileNames, setStagedFileNames] = React.useState<string[]>([]);
   const [columns, setColumns] = React.useState<ColumnDef[]>([]);
   const [uploadedFileNames, setUploadedFileNames] = React.useState<string[]>([]);
   const { toast } = useToast();
@@ -254,26 +258,23 @@ export default function VendasPage() {
     const unsub = onSnapshot(q, (snapshot) => {
         if (snapshot.metadata.hasPendingWrites) return;
 
-        setSales(currentSales => {
-            let newSales = [...currentSales];
-            const changes = snapshot.docChanges();
-
-            changes.forEach(change => {
-                const data = { ...change.doc.data(), id: change.doc.id } as VendaDetalhada;
-                const index = newSales.findIndex(s => s.id === data.id);
-
-                if (change.type === "added") {
-                    if (index === -1) newSales.push(data);
-                }
-                if (change.type === "modified") {
-                    if (index !== -1) newSales[index] = data;
-                    else newSales.push(data); // Handle case where local state is out of sync
-                }
+        let newSales: VendaDetalhada[] = [];
+        snapshot.docChanges().forEach(change => {
+            const data = { ...change.doc.data(), id: change.doc.id } as VendaDetalhada;
+            if (change.type !== "removed") {
+                newSales.push(data);
+            }
+        });
+        
+        setSalesFromDb(currentSales => {
+            const salesMap = new Map(currentSales.map(s => [s.id, s]));
+            newSales.forEach(s => salesMap.set(s.id, s));
+            snapshot.docChanges().forEach(change => {
                 if (change.type === "removed") {
-                    if (index !== -1) newSales.splice(index, 1);
+                    salesMap.delete(change.doc.id);
                 }
             });
-            return newSales;
+            return Array.from(salesMap.values());
         });
     });
     
@@ -290,17 +291,19 @@ export default function VendasPage() {
         metaUnsub();
     };
   }, []);
+  
+  const allSales = React.useMemo(() => [...salesFromDb, ...stagedSales], [salesFromDb, stagedSales]);
 
   const filteredSales = React.useMemo(() => {
-    if (!date?.from) return sales;
+    if (!date?.from) return allSales;
     const fromDate = date.from;
     const toDate = date.to ? endOfDay(date.to) : endOfDay(fromDate);
 
-    return sales.filter((sale) => {
+    return allSales.filter((sale) => {
       const saleDate = toDate(sale.data);
       return saleDate && saleDate >= fromDate && saleDate <= toDate;
     });
-  }, [date, sales]);
+  }, [date, allSales]);
   
   const handleDataUpload = async (raw_data: any[], fileNames: string[]) => {
     if (raw_data.length === 0) return;
@@ -321,7 +324,6 @@ export default function VendasPage() {
       return newRow;
     });
     
-    // mostra quantas linhas ficaram com valor em cada chave mapeada
     const counts: Record<string, number> = {};
     for (const row of mappedData) {
       for (const k of Object.keys(row)) {
@@ -332,8 +334,6 @@ export default function VendasPage() {
       }
     }
     console.table(Object.entries(counts).map(([k, n]) => ({ campo: k, linhasComValor: n })));
-
-    // e também mostra os cabeçalhos brutos da planilha
     console.log('>> Cabeçalhos brutos (linha 1):', Object.keys(raw_data?.[0] ?? {}));
 
     const recognizedKeys = Array.from(new Set(mappedData.flatMap(r => Object.keys(r))));
@@ -348,50 +348,81 @@ export default function VendasPage() {
       });
       return;
     }
+    
+    const uploadTimestamp = Date.now();
+    const allFileNames = fileNames.join(', ');
+    
+    const dataToStage = mappedData.map((item, index) => {
+      const docId = `staged-${uploadTimestamp}-${index}`;
+      const salePayload: any = { 
+          ...item, 
+          id: docId, 
+          sourceFile: allFileNames,
+          uploadTimestamp: new Date(uploadTimestamp) // Use JS Date for local state
+      };
+      const saleDate = toDate(item.data);
+      if (saleDate) {
+          salePayload.data = saleDate;
+      } else {
+          delete salePayload.data;
+      }
+      return salePayload;
+    });
+    
+    setStagedSales(prev => [...prev, ...dataToStage]);
+    setStagedFileNames(prev => [...new Set([...prev, ...fileNames])]);
+
+    toast({
+        title: "Dados Prontos para Revisão",
+        description: `${dataToStage.length} registros foram carregados e estão prontos para serem salvos no banco.`,
+    });
+  };
+
+  const handleSaveChangesToDb = async () => {
+    if (stagedSales.length === 0) {
+      toast({ title: "Nenhum dado novo para salvar", variant: "default" });
+      return;
+    }
 
     try {
-        const uploadTimestamp = Date.now();
-        const allFileNames = fileNames.join(', ');
-        
         const chunks = [];
-        for (let i = 0; i < mappedData.length; i += 450) {
-            chunks.push(mappedData.slice(i, i + 450));
+        for (let i = 0; i < stagedSales.length; i += 450) {
+            chunks.push(stagedSales.slice(i, i + 450));
         }
 
         for (const chunk of chunks) {
             const batch = writeBatch(db);
-            chunk.forEach((item, index) => {
-                const docId = `uploaded-${uploadTimestamp}-${index}`;
+            chunk.forEach((item) => {
+                const docId = `uploaded-${item.uploadTimestamp.getTime()}-${item.id.split('-').pop()}`;
                 const saleRef = doc(db, "vendas", docId);
+                const { ...payload } = item;
                 
-                const salePayload: any = { 
-                    ...item, 
-                    id: docId, 
-                    sourceFile: allFileNames,
-                    uploadTimestamp: Timestamp.fromMillis(uploadTimestamp)
-                };
-
-                const saleDate = toDate(item.data);
-                if (saleDate) {
-                    salePayload.data = Timestamp.fromDate(saleDate);
-                } else {
-                    delete salePayload.data;
+                // Convert dates back to Timestamps for Firestore
+                if (payload.data instanceof Date) {
+                  payload.data = Timestamp.fromDate(payload.data);
                 }
-                batch.set(saleRef, salePayload);
+                 if (payload.uploadTimestamp instanceof Date) {
+                  payload.uploadTimestamp = Timestamp.fromDate(payload.uploadTimestamp);
+                }
+
+                batch.set(saleRef, { ...payload, id: docId });
             });
             await batch.commit();
         }
 
-        const allKeys = Array.from(new Set(mappedData.flatMap(row => Object.keys(row))));
+        const allKeys = Array.from(new Set(stagedSales.flatMap(row => Object.keys(row))));
         const detectedColumns: ColumnDef[] = allKeys.map(key => ({
             id: key,
             label: getLabel(key),
             isSortable: true
         }));
         
-        const newUploadedFileNames = [...new Set([...uploadedFileNames, ...fileNames])];
+        const newUploadedFileNames = [...new Set([...uploadedFileNames, ...stagedFileNames])];
         const metaRef = doc(db, "metadata", "vendas");
         await updateDoc(metaRef, { columns: detectedColumns, uploadedFileNames: newUploadedFileNames });
+
+        setStagedSales([]);
+        setStagedFileNames([]);
 
         toast({
             title: "Sucesso!",
@@ -399,7 +430,7 @@ export default function VendasPage() {
         });
 
     } catch (error) {
-        console.error("Error uploading data to Firestore:", error);
+        console.error("Error saving data to Firestore:", error);
         toast({
             title: "Erro ao Salvar",
             description: "Houve um problema ao salvar os dados. Tente novamente.",
@@ -408,7 +439,17 @@ export default function VendasPage() {
     }
   };
 
+
   const handleRemoveUploadedFileName = async (fileName: string) => {
+    // Handle removing from local stage first
+    if(stagedFileNames.includes(fileName)) {
+      setStagedSales(prev => prev.filter(s => s.sourceFile !== fileName));
+      setStagedFileNames(prev => prev.filter(f => f !== fileName));
+      toast({ title: "Removido da Fila", description: `Dados do arquivo ${fileName} não serão salvos.` });
+      return;
+    }
+
+    // Then handle removing from DB
     try {
       const salesQuery = query(collection(db, "vendas"), where("sourceFile", "==", fileName));
       const salesSnapshot = await getDocs(salesQuery);
@@ -523,16 +564,25 @@ export default function VendasPage() {
                     Filtre as vendas que você deseja analisar.
                   </CardDescription>
                 </div>
-                <SupportDataDialog 
-                  onDataUpload={handleDataUpload} 
-                  uploadedFileNames={uploadedFileNames}
-                  onRemoveUploadedFile={handleRemoveUploadedFileName}
-                >
-                   <Button variant="outline">
-                    <Settings className="mr-2 h-4 w-4" />
-                    Dados de Apoio
-                  </Button>
-                </SupportDataDialog>
+                 <div className="flex items-center gap-2">
+                    <SupportDataDialog 
+                      onDataUpload={handleDataUpload} 
+                      uploadedFileNames={uploadedFileNames}
+                      onRemoveUploadedFile={handleRemoveUploadedFileName}
+                      stagedFileNames={stagedFileNames}
+                    >
+                       <Button variant="outline">
+                        <Settings className="mr-2 h-4 w-4" />
+                        Dados de Apoio
+                      </Button>
+                    </SupportDataDialog>
+                    {stagedSales.length > 0 && (
+                       <Button onClick={handleSaveChangesToDb}>
+                          <Save className="mr-2 h-4 w-4" />
+                          Salvar no Banco
+                       </Button>
+                    )}
+                 </div>
               </div>
             </CardHeader>
             <CardContent>
@@ -586,6 +636,3 @@ export default function VendasPage() {
     </SidebarProvider>
   );
 }
-
-
-    

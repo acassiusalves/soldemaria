@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useCallback } from "react";
@@ -12,7 +13,7 @@ import {
   DialogClose,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { UploadCloud, File as FileIcon, CheckCircle, X, PlusCircle } from "lucide-react";
+import { UploadCloud, File as FileIcon, CheckCircle, X, PlusCircle, History } from "lucide-react";
 import { useDropzone } from "react-dropzone";
 import * as XLSX from "xlsx";
 import { useToast } from "@/hooks/use-toast";
@@ -21,10 +22,11 @@ interface SupportDataDialogProps {
   children: React.ReactNode;
   onDataUpload: (data: any[], fileNames: string[]) => void;
   uploadedFileNames: string[];
-  onRemoveUploadedFile?: (fileName: string) => Promise<void> | void;
+  stagedFileNames: string[];
+  onRemoveUploadedFile: (fileName: string) => Promise<void> | void;
 }
 
-export function SupportDataDialog({ children, onDataUpload, uploadedFileNames, onRemoveUploadedFile }: SupportDataDialogProps) {
+export function SupportDataDialog({ children, onDataUpload, uploadedFileNames, stagedFileNames, onRemoveUploadedFile }: SupportDataDialogProps) {
   const [files, setFiles] = useState<File[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const { toast } = useToast();
@@ -41,7 +43,11 @@ export function SupportDataDialog({ children, onDataUpload, uploadedFileNames, o
           const workbook = XLSX.read(data, { type: "array", cellDates: true });
           const sheetName = workbook.SheetNames[0];
           const worksheet = workbook.Sheets[sheetName];
-          const json = XLSX.utils.sheet_to_json(worksheet);
+          const json = XLSX.utils.sheet_to_json(worksheet, {
+            defval: "",
+            raw: false,
+            dateNF: "yyyy-mm-dd"
+          });
           resolve(json);
         } catch (error) {
           console.error("Erro ao processar o arquivo:", error);
@@ -55,11 +61,12 @@ export function SupportDataDialog({ children, onDataUpload, uploadedFileNames, o
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     setFiles(prev => {
-      const existing = new Set(prev.map(f => f.name));
-      const uniqueNewFiles = acceptedFiles.filter(f => !existing.has(f.name));
-      return [...prev, ...uniqueNewFiles];
+      const newAndUniqueFiles = acceptedFiles.filter(
+        newFile => !prev.some(existingFile => existingFile.name === newFile.name) && !uploadedFileNames.includes(newFile.name) && !stagedFileNames.includes(newFile.name)
+      );
+      return [...prev, ...newAndUniqueFiles];
     });
-  }, []);
+  }, [uploadedFileNames, stagedFileNames]);
 
   const { getRootProps, getInputProps, isDragActive, open: openFileDialog } = useDropzone({
     onDrop,
@@ -76,7 +83,7 @@ export function SupportDataDialog({ children, onDataUpload, uploadedFileNames, o
     setFiles(prev => prev.filter(f => f.name !== fileName));
   }
 
-  const handleSubmit = async () => {
+  const handleSubmitAndStage = async () => {
     if (files.length === 0) {
         toast({
             title: "Nenhum arquivo novo",
@@ -111,10 +118,11 @@ export function SupportDataDialog({ children, onDataUpload, uploadedFileNames, o
     }
   };
   
-  const allFiles = [
-    ...uploadedFileNames.map(name => ({ name, isUploaded: true })),
-    ...files.map(f => ({ name: f.name, isUploaded: false })),
-  ];
+  const displayedStagedFiles = stagedFileNames.map(name => ({ name, isUploaded: false, isStaged: true }));
+  const displayedUploadedFiles = uploadedFileNames.map(name => ({ name, isUploaded: true, isStaged: false }));
+  const displayedNewFiles = files.map(f => ({ name: f.name, isUploaded: false, isStaged: false }));
+
+  const allFiles = [...displayedUploadedFiles, ...displayedStagedFiles, ...displayedNewFiles];
   const uniqueFiles = allFiles.filter(
     (file, i, self) => i === self.findIndex(f => f.name === file.name)
   );
@@ -129,7 +137,7 @@ export function SupportDataDialog({ children, onDataUpload, uploadedFileNames, o
         <DialogHeader>
           <DialogTitle>Importar Dados de Apoio</DialogTitle>
           <DialogDescription>
-            Selecione uma ou mais planilhas (XLSX, XLS ou CSV) para preencher a tabela de vendas.
+            Selecione planilhas para análise. Elas serão pré-carregadas para sua revisão antes de salvar no banco.
           </DialogDescription>
         </DialogHeader>
         <div {...getRootProps({ className: `flex flex-col gap-4 py-4 border-2 border-dashed rounded-md transition-colors min-h-[200px] justify-center ${isDragActive ? "border-primary bg-primary/10" : "border-input"}` })}>
@@ -137,23 +145,20 @@ export function SupportDataDialog({ children, onDataUpload, uploadedFileNames, o
             
             {uniqueFiles.length > 0 ? (
                 <div className="flex flex-col gap-2 p-4">
-                    {uniqueFiles.map(({name, isUploaded}) => (
+                    {uniqueFiles.map(({name, isUploaded, isStaged}) => (
                         <div key={name} className="flex items-center justify-between p-2 rounded-md bg-muted/50 text-sm">
                             <div className="flex items-center gap-2 overflow-hidden">
-                                {isUploaded ? <CheckCircle className="w-5 h-5 text-green-500 flex-shrink-0" /> : <FileIcon className="w-5 h-5 text-muted-foreground flex-shrink-0" />}
+                                {isUploaded ? <CheckCircle className="w-5 h-5 text-green-500 flex-shrink-0" title="Salvo no banco" /> : (isStaged ? <History className="w-5 h-5 text-blue-500 flex-shrink-0" title="Aguardando salvar" /> : <FileIcon className="w-5 h-5 text-muted-foreground flex-shrink-0" />)}
                                 <span className={`truncate ${isUploaded ? 'text-muted-foreground' : 'text-foreground'}`} title={name}>{name}</span>
                             </div>
-                            <Button
+                             <Button
                                 variant="ghost"
                                 size="icon"
                                 className="h-6 w-6 flex-shrink-0"
                                 onClick={async (e) => {
                                   e.stopPropagation();
-                                  if (isUploaded) {
-                                    if (onRemoveUploadedFile) {
-                                      await onRemoveUploadedFile(name);
-                                      toast({ title: "Removido", description: `Arquivo ${name} removido do histórico.` });
-                                    }
+                                  if (isUploaded || isStaged) {
+                                    await onRemoveUploadedFile(name);
                                   } else {
                                     removeFile(name);
                                   }
@@ -189,11 +194,12 @@ export function SupportDataDialog({ children, onDataUpload, uploadedFileNames, o
           <DialogClose asChild>
             <Button variant="outline">Cancelar</Button>
           </DialogClose>
-          <Button onClick={handleSubmit} disabled={files.length === 0}>
-            Carregar {files.length > 0 ? `${files.length} Novo(s)` : ''}
+          <Button onClick={handleSubmitAndStage} disabled={files.length === 0}>
+            Carregar {files.length > 0 ? `${files.length} Novo(s) para Revisão` : 'para Revisão'}
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
   );
 }
+
