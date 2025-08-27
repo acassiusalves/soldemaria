@@ -57,13 +57,42 @@ import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
 
 
+// utils: normaliza cabeçalhos p/ comparação robusta
+const normalizeHeader = (s: string) =>
+  s
+    .toLowerCase()
+    .normalize('NFD').replace(/\p{Diacritic}/gu, '')  // remove acentos
+    .replace(/[^\w\s]/g, '')                          // remove pontuação (., /, etc.)
+    .replace(/\s+/g, ' ')                             // colapsa espaços
+    .trim();
+
 // Mapeamento de chave para rótulo amigável
 const columnLabels: Record<string, string> = {
   data: 'Data',
   codigo: 'Código',
+  nomeCliente: 'Nome do Cliente',
+  final: 'Valor Final',
+  custoFrete: 'Frete',
+  imposto: 'Imposto',
+  embalagem: 'Embalagem',
+  comissao: 'Comissão',
+  // Novos da sua planilha:
+  tipo: 'Tipo',
+  vendedor: 'Vendedor',
+  cidade: 'Cidade',
+  origem: 'Origem',
+  fidelizacao: 'Fidelização',
+  logistica: 'Logística',
+  item: 'Item',
+  descricao: 'Descrição',
+  quantidade: 'Qtd.',
+  custoUnitario: 'Custo Unitário',
+  valorUnitario: 'Valor Unitário',
+  valorCredito: 'Valor Crédito',
+  valorDescontos: 'Valor Descontos',
+  // Se você ainda usar cartões/parcelas em outras planilhas, mantém:
   bandeira1: 'Bandeira',
   parcelas1: 'Parcelas',
-  final: 'Valor Final',
   valorParcela1: 'Valor Parcela 1',
   taxaCartao1: 'Taxa Cartão 1',
   modoPagamento2: 'Modo Pgto. 2',
@@ -71,34 +100,62 @@ const columnLabels: Record<string, string> = {
   bandeira2: 'Bandeira 2',
   valorParcela2: 'Valor Parcela 2',
   taxaCartao2: 'Taxa Cartão 2',
-  custoFrete: 'Frete',
-  imposto: 'Imposto',
-  embalagem: 'Embalagem',
-  comissao: 'Comissão',
-  nomeCliente: 'Nome do Cliente',
 };
 
 const getLabel = (key: string) => columnLabels[key] || key;
 
-const headerMapping: Record<string, string> = {
-  'Data da Venda': 'data',
-  'Código': 'codigo',
-  'Cliente': 'nomeCliente',
-  'Bandeira do Cartão': 'bandeira1',
-  'Nº de Parcelas': 'parcelas1',
-  'Valor Parcela': 'valorParcela1',
-  'Taxa do Cartão': 'taxaCartao1',
-  'Valor Final': 'final',
-  'Modo de Pagamento 2': 'modoPagamento2',
-  'Bandeira Cartão 2': 'bandeira2',
-  'Nº de Parcelas 2': 'parcelas2',
-  'Valor Parcela 2': 'valorParcela2',
-  'Taxa Cartão 2': 'taxaCartao2',
-  'Custo Frete': 'custoFrete',
-  'Imposto': 'imposto',
-  'Custo Embalagem': 'embalagem',
-  'Comissão': 'comissao',
+// Mapeia várias possibilidades de cabeçalhos para chaves do sistema
+const headerMappingNormalized: Record<string, string> = {
+  // datas / código / cliente
+  'data': 'data',
+  'data da venda': 'data',
+  'codigo': 'codigo',
+  'cliente': 'nomeCliente',
+
+  // valores
+  'valor final': 'final',
+  'valor entrega': 'custoFrete',
+  'frete': 'custoFrete',
+  'valor credito': 'valorCredito',
+  'valor descontos': 'valorDescontos',
+
+  // info de item
+  'item': 'item',
+  'descricao': 'descricao',
+  'qtd': 'quantidade',
+  'qtde': 'quantidade',
+  'quantidade': 'quantidade',
+  'custo unitario': 'custoUnitario',
+  'valor unitario': 'valorUnitario',
+
+  // meta
+  'tipo': 'tipo',
+  'vendedor': 'vendedor',
+  'cidade': 'cidade',
+  'origem': 'origem',
+  'fidelizacao': 'fidelizacao',
+  'logistica': 'logistica',
+
+  // campos de cartão/parcelas (se aparecerem em outras planilhas)
+  'bandeira do cartao': 'bandeira1',
+  'numero de parcelas': 'parcelas1',
+  'n de parcelas': 'parcelas1',
+  'no de parcelas': 'parcelas1',
+  'valor parcela': 'valorParcela1',
+  'taxa do cartao': 'taxaCartao1',
+  'modo de pagamento 2': 'modoPagamento2',
+  'bandeira cartao 2': 'bandeira2',
+  'n de parcelas 2': 'parcelas2',
+  'no de parcelas 2': 'parcelas2',
+  'valor parcela 2': 'valorParcela2',
+  'taxa cartao 2': 'taxaCartao2',
+  
+  // Variações comuns
+  'imposto': 'imposto',
+  'custo embalagem': 'embalagem',
+  'comissao': 'comissao',
 };
+
 
 const cleanNumericValue = (value: any): number | string => {
   if (typeof value === 'number') return value;
@@ -161,19 +218,20 @@ export default function VendasPage() {
   const handleDataUpload = async (raw_data: any[], fileNames: string[]) => {
     if (raw_data.length === 0) return;
 
-    const mappedData = raw_data.map(row => {
-        const newRow: any = {};
-        for (const rawHeader in row) {
-            const trimmedHeader = rawHeader.trim();
-            const systemKey = headerMapping[trimmedHeader];
-
-            if (systemKey) {
-                newRow[systemKey] = cleanNumericValue(row[rawHeader]);
-            } else {
-                console.warn(`🟡 Cabeçalho não mapeado (do arquivo): "${trimmedHeader}"`);
-            }
+    const mappedData = raw_data.map((row) => {
+      const newRow: any = {};
+      for (const rawHeader in row) {
+        const trimmedHeader = String(rawHeader ?? '').trim();
+        const normalized = normalizeHeader(trimmedHeader);
+        const systemKey = headerMappingNormalized[normalized];
+  
+        if (systemKey) {
+          newRow[systemKey] = cleanNumericValue(row[rawHeader]);
+        } else {
+          console.warn(`🟡 Cabeçalho não mapeado (arquivo -> normalizado): "${trimmedHeader}" -> "${normalized}" | valor amostra:`, row[rawHeader]);
         }
-        return newRow as VendaDetalhada;
+      }
+      return newRow as VendaDetalhada;
     });
 
     try {
@@ -186,7 +244,7 @@ export default function VendasPage() {
             if(typeof item.data === 'number') {
                 const excelEpoch = new Date(1899, 11, 30);
                 date = new Date(excelEpoch.getTime() + item.data * 24 * 60 * 60 * 1000);
-            } else if (typeof item.data === 'string') {
+            } else if (typeof item.data === 'string' && item.data.trim()) {
                 try {
                     let parsedDate = parseISO(item.data);
                     if (isNaN(parsedDate.getTime())) {
