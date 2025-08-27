@@ -1,4 +1,3 @@
-
 "use client";
 
 import * as React from "react";
@@ -260,21 +259,23 @@ export default function VendasPage() {
 
         let newSales: VendaDetalhada[] = [];
         snapshot.docChanges().forEach(change => {
-            const data = { ...change.doc.data(), id: change.doc.id } as VendaDetalhada;
-            if (change.type !== "removed") {
-                newSales.push(data);
+            if (change.type === "added") {
+              newSales.push({ ...change.doc.data(), id: change.doc.id } as VendaDetalhada);
             }
         });
-        
-        setSalesFromDb(currentSales => {
-            const salesMap = new Map(currentSales.map(s => [s.id, s]));
-            newSales.forEach(s => salesMap.set(s.id, s));
-            snapshot.docChanges().forEach(change => {
-                if (change.type === "removed") {
-                    salesMap.delete(change.doc.id);
-                }
+
+        if(newSales.length > 0) {
+            setSalesFromDb(currentSales => {
+                const salesMap = new Map(currentSales.map(s => [s.id, s]));
+                newSales.forEach(s => salesMap.set(s.id, s));
+                return Array.from(salesMap.values());
             });
-            return Array.from(salesMap.values());
+        }
+        
+        snapshot.docChanges().forEach(change => {
+            if (change.type === "removed") {
+                setSalesFromDb(currentSales => currentSales.filter(s => s.id !== change.doc.id));
+            }
         });
     });
     
@@ -640,6 +641,3 @@ export default function VendasPage() {
     </SidebarProvider>
   );
 }
-
-
-    

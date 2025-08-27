@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useCallback } from "react";
@@ -40,7 +39,7 @@ export function SupportDataDialog({ children, onDataUpload, uploadedFileNames, s
           if (!data) {
             throw new Error("Não foi possível ler o arquivo.");
           }
-          const workbook = XLSX.read(data, { type: "array", cellDates: true });
+          const workbook = XLSX.read(data, { type: "array" });
           const sheetName = workbook.SheetNames[0];
           const worksheet = workbook.Sheets[sheetName];
           const json = XLSX.utils.sheet_to_json(worksheet, {
@@ -202,4 +201,3 @@ export function SupportDataDialog({ children, onDataUpload, uploadedFileNames, s
     </Dialog>
   );
 }
-
