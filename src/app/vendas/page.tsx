@@ -109,6 +109,7 @@ const toDate = (value: unknown): Date | null => {
   return null;
 };
 
+
 // normaliza inclusive NBSP e acentos
 const normalizeHeader = (s: string) =>
   String(s)
@@ -279,6 +280,50 @@ const resolveSystemKey = (normalized: string): string | undefined => {
   return undefined;
 };
 
+// Normaliza o código para chave de comparação
+const normCode = (v: any) => {
+  if (v === null || v === undefined) return "";
+  const s = String(v).trim();
+  // tira .0 do Excel, zeros à esquerda irrelevantes, espaços, etc.
+  return s.replace(/\.0+$/, "");
+};
+
+// Celula vazia/inútil não deve sobrescrever
+const isEmptyCell = (v: any) => {
+  if (v === null || v === undefined) return true;
+  if (typeof v === "string") {
+    const s = v.replace(/\u00A0/g, " ").trim().toLowerCase();
+    return s === "" || s === "n/a" || s === "na" || s === "-" || s === "--";
+  }
+  // números NaN são vazios; 0 é válido!
+  if (typeof v === "number") return Number.isNaN(v);
+  return false;
+};
+
+// Merge que **preserva** o que já existe quando a planilha veio vazia
+const mergeNonEmpty = (existing: Record<string, any>, incoming: Record<string, any>) => {
+  const out: Record<string, any> = { ...existing };
+  for (const k of Object.keys(incoming)) {
+    const v = incoming[k];
+
+    // data: só entra se toDate for válida
+    if (k === "data") {
+      const d = toDate(v);
+      if (d) out.data = d;
+      continue;
+    }
+
+    // caso geral
+    if (!isEmptyCell(v)) out[k] = v;
+  }
+  return out;
+};
+
+// define se uma linha é "detalhe" (item) ou "cabeçalho" (pedido)
+const ITEM_KEYS = ["item","descricao","quantidade","custoUnitario","valorUnitario","valorCredito","valorDescontos"];
+const isDetailRow = (row: Record<string, any>) =>
+  ITEM_KEYS.some(k => !isEmptyCell(row[k]));
+
 const MotionCard = motion(Card);
 
 export default function VendasPage() {
@@ -361,68 +406,108 @@ export default function VendasPage() {
   
   const handleDataUpload = async (raw_data: any[], fileNames: string[]) => {
     if (raw_data.length === 0) return;
-    
-    const salesFromDbByCodigo = new Map(salesFromDb.map(s => [s.codigo, s]));
-    
+  
+    // 1) mapear planilha -> chaves do sistema
     const mappedData = raw_data.map((row) => {
       const newRow: any = {};
       for (const rawHeader in row) {
-        const trimmedHeader = String(rawHeader ?? '').trim();
+        const trimmedHeader = String(rawHeader ?? "").trim();
         const normalized = normalizeHeader(trimmedHeader);
         const systemKey = resolveSystemKey(normalized);
-  
         if (systemKey) {
           newRow[systemKey] = cleanNumericValue(row[rawHeader]);
         } else {
           console.warn(`🟡 Cabeçalho não mapeado: "${trimmedHeader}" -> "${normalized}"`);
         }
       }
+      // sempre normaliza o código
+      if (newRow.codigo !== undefined) newRow.codigo = normCode(newRow.codigo);
       return newRow;
     });
-
+  
     const uploadTimestamp = Date.now();
-    const allFileNames = fileNames.join(', ');
+    const allFileNames = fileNames.join(", ");
+  
+    // 2) índice do banco por código (normalizado)
+    const dbByCode = new Map(
+      salesFromDb
+        .filter(s => s.codigo != null)
+        .map(s => [normCode((s as any).codigo), s])
+    );
+  
+    // 3) para não fazer várias “atualizações” do mesmo pedido em sequencia,
+    //    acumulamos o merge por código primeiro
+    const stagedByCode = new Map<string, any>(); // cabeçalhos mesclados
+    const stagedNewRows: any[] = [];             // linhas novas (itens/detalhes)
+  
     let newItemsCount = 0;
     let updatedItemsCount = 0;
-    
-    const dataToStage = mappedData.map((item, index) => {
-        const existingSale = item.codigo ? salesFromDbByCodigo.get(item.codigo) : undefined;
-        
-        if (existingSale) {
-            // Merge data: new data overwrites existing
-            updatedItemsCount++;
-            return { 
-                ...existingSale, 
-                ...item,
-                sourceFile: allFileNames,
-                uploadTimestamp: new Date(uploadTimestamp) // Use JS Date for local state
-            };
-        } else {
-            // New sale
-            newItemsCount++;
-            const docId = `staged-${uploadTimestamp}-${index}`;
-            const salePayload: any = { 
-                ...item, 
-                id: docId, 
-                sourceFile: allFileNames,
-                uploadTimestamp: new Date(uploadTimestamp) // Use JS Date for local state
-            };
-            const saleDate = toDate(item.data);
-            if (saleDate) {
-                salePayload.data = saleDate;
-            } else {
-                delete salePayload.data;
-            }
-            return salePayload;
-        }
-    });
-    
+  
+    for (let i = 0; i < mappedData.length; i++) {
+      const row = mappedData[i];
+      const code = normCode(row.codigo);
+  
+      // se não tem código, vira entrada nova comum
+      if (!code) {
+        const docId = `staged-${uploadTimestamp}-${i}`;
+        const payload: any = {
+          ...row,
+          id: docId,
+          sourceFile: allFileNames,
+          uploadTimestamp: new Date(uploadTimestamp),
+        };
+        const d = toDate(row.data);
+        if (d) payload.data = d; else delete payload.data;
+        stagedNewRows.push(payload);
+        newItemsCount++;
+        continue;
+      }
+  
+      const fromDb = dbByCode.get(code);
+  
+      // Diferenciar detalhe x cabeçalho:
+      if (isDetailRow(row) || !fromDb) {
+        // detalhe (ou não existe no banco): cria nova linha
+        const docId = `staged-${uploadTimestamp}-${i}`;
+        const payload: any = {
+          ...row,
+          codigo: code,
+          id: docId,
+          sourceFile: allFileNames,
+          uploadTimestamp: new Date(uploadTimestamp),
+        };
+        const d = toDate(row.data);
+        if (d) payload.data = d; else delete payload.data;
+  
+        stagedNewRows.push(payload);
+        newItemsCount++;
+      } else {
+        // cabeçalho existente: mescla **sem sobrescrever com vazio**
+        const already = stagedByCode.get(code) ?? fromDb;
+        const merged = mergeNonEmpty(already as any, { ...row, codigo: code });
+  
+        // garante meta
+        merged.sourceFile = allFileNames;
+        merged.uploadTimestamp = new Date(uploadTimestamp);
+  
+        stagedByCode.set(code, merged);
+        updatedItemsCount++;
+      }
+    }
+  
+    // 4) monta o array final para staging:
+    const dataToStage = [
+      ...Array.from(stagedByCode.values()), // updates
+      ...stagedNewRows,                     // novos
+    ];
+  
     setStagedSales(prev => [...prev, ...dataToStage]);
     setStagedFileNames(prev => [...new Set([...prev, ...fileNames])]);
-
+  
+    // feedback
     toast({
-        title: "Dados Prontos para Revisão",
-        description: `${newItemsCount} novos registros e ${updatedItemsCount} atualizações carregados.`,
+      title: "Dados Prontos para Revisão",
+      description: `${newItemsCount} novos registros e ${updatedItemsCount} atualizações carregados.`,
     });
   };
 
@@ -446,7 +531,7 @@ export default function VendasPage() {
             const batch = writeBatch(db);
             
             chunk.forEach((item) => {
-                const isUpdate = !item.id.startsWith('staged-');
+                const isUpdate = !String(item.id).startsWith('staged-');
                 const docId = isUpdate ? item.id : `uploaded-${item.uploadTimestamp.getTime()}-${item.id.split('-').pop()}`;
                 const saleRef = doc(db, "vendas", docId);
                 const { id, ...payload } = item;
@@ -511,7 +596,7 @@ export default function VendasPage() {
   const handleRemoveUploadedFileName = async (fileName: string) => {
     // Handle removing from local stage first
     if(stagedFileNames.includes(fileName)) {
-      setStagedSales(prev => prev.filter(s => s.sourceFile !== fileName));
+      setStagedSales(prev => prev.filter(s => s.sourceFile?.split(', ').includes(fileName)));
       setStagedFileNames(prev => prev.filter(f => f !== fileName));
       toast({ title: "Removido da Fila", description: `Dados do arquivo ${fileName} não serão salvos.` });
       return;
