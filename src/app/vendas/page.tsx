@@ -5,6 +5,7 @@ import Link from "next/link";
 import { format, parse, parseISO, endOfDay, isValid } from "date-fns";
 import type { DateRange } from "react-day-picker";
 import {
+  AlertTriangle,
   Calendar as CalendarIcon,
   LayoutDashboard,
   LogOut,
@@ -13,10 +14,21 @@ import {
   ShoppingBag,
   Trash2,
 } from "lucide-react";
-import { collection, doc, onSnapshot, writeBatch, Timestamp, updateDoc, arrayRemove, query, where, getDocs } from "firebase/firestore";
+import { collection, doc, onSnapshot, writeBatch, Timestamp, updateDoc, arrayRemove, query, where, getDocs, getDocsFromServer } from "firebase/firestore";
 import { motion } from "framer-motion";
 
 import { cn } from "@/lib/utils";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
@@ -487,6 +499,48 @@ export default function VendasPage() {
     });
   };
 
+  const handleClearAllData = async () => {
+    try {
+        const salesQuery = query(collection(db, "vendas"));
+        const salesSnapshot = await getDocsFromServer(salesQuery);
+        
+        if (salesSnapshot.empty) {
+            toast({ title: "Banco já está limpo" });
+            return;
+        }
+
+        const chunks: any[] = [];
+        const docsToDelete = salesSnapshot.docs;
+        for (let i = 0; i < docsToDelete.length; i += 450) {
+            chunks.push(docsToDelete.slice(i, i + 450));
+        }
+
+        for (const chunk of chunks) {
+            const batch = writeBatch(db);
+            chunk.forEach((doc: any) => batch.delete(doc.ref));
+            await batch.commit();
+        }
+
+        const metaRef = doc(db, "metadata", "vendas");
+        await updateDoc(metaRef, { uploadedFileNames: [], columns: [] });
+
+        setSalesFromDb([]); // Clear local state immediately
+
+        toast({
+            title: "Limpeza Concluída!",
+            description: "Todos os dados de vendas foram apagados do banco de dados.",
+        });
+    } catch (error) {
+        console.error("Error clearing all data:", error);
+        toast({
+            title: "Erro na Limpeza",
+            description: "Não foi possível apagar todos os dados. Verifique o console.",
+            variant: "destructive",
+        });
+    }
+  };
+
+
   return (
     <SidebarProvider>
       <Sidebar>
@@ -605,6 +659,31 @@ export default function VendasPage() {
                       Salvar no Banco
                       {stagedSales.length > 0 ? ` (${stagedSales.length})` : ""}
                     </Button>
+                     {salesFromDb.length > 0 && uploadedFileNames.length === 0 && (
+                        <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                                <Button variant="destructive">
+                                    <AlertTriangle className="mr-2 h-4 w-4" />
+                                    Apagar Tudo
+                                </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                                <AlertDialogHeader>
+                                    <AlertDialogTitle>Você tem certeza absoluta?</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                        Esta ação não pode ser desfeita. Isso irá apagar permanentemente
+                                        TODOS os dados de vendas do seu banco de dados.
+                                    </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                    <AlertDialogAction onClick={handleClearAllData}>
+                                        Sim, apagar tudo
+                                    </AlertDialogAction>
+                                </AlertDialogFooter>
+                            </AlertDialogContent>
+                        </AlertDialog>
+                     )}
                  </div>
               </div>
             </CardHeader>
