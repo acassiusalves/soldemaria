@@ -86,10 +86,7 @@ export default function VendasPage() {
   const [uploadedFileNames, setUploadedFileNames] = React.useState<string[]>([]);
   const { toast } = useToast();
   
-  const [date, setDate] = React.useState<DateRange | undefined>({
-    from: new Date(2025, 5, 1), // June 1, 2025
-    to: addDays(new Date(2025, 7, 31), 0), // August 31, 2025
-  });
+  const [date, setDate] = React.useState<DateRange | undefined>(undefined);
 
   // Listen for real-time updates from Firestore
   React.useEffect(() => {
