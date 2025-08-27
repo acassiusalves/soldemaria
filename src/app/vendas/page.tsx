@@ -80,6 +80,41 @@ const columnLabels: Record<string, string> = {
 
 const getLabel = (key: string) => columnLabels[key] || key;
 
+const headerMapping: Record<string, string> = {
+  'Data da Venda': 'data',
+  'Código': 'codigo',
+  'Cliente': 'nomeCliente',
+  'Bandeira do Cartão': 'bandeira1',
+  'Nº de Parcelas': 'parcelas1',
+  'Valor Parcela': 'valorParcela1',
+  'Taxa do Cartão': 'taxaCartao1',
+  'Valor Final': 'final',
+  'Modo de Pagamento 2': 'modoPagamento2',
+  'Bandeira Cartão 2': 'bandeira2',
+  'Nº de Parcelas 2': 'parcelas2',
+  'Valor Parcela 2': 'valorParcela2',
+  'Taxa Cartão 2': 'taxaCartao2',
+  'Custo Frete': 'custoFrete',
+  'Imposto': 'imposto',
+  'Custo Embalagem': 'embalagem',
+  'Comissão': 'comissao',
+};
+
+const cleanNumericValue = (value: any): number | string => {
+  if (typeof value === 'number') return value;
+  if (typeof value !== 'string') return value;
+
+  const cleaned = value
+    .replace('R$', '')      // Remove "R$"
+    .replace(/\./g, '')     // Remove o ponto de milhar
+    .replace(',', '.')      // Troca a vírgula do decimal por ponto
+    .trim();                // Remove espaços
+
+  const num = parseFloat(cleaned);
+  return isNaN(num) ? value : num; // Se não for um número válido, retorna o original
+};
+
+
 export default function VendasPage() {
   const [sales, setSales] = React.useState<VendaDetalhada[]>([]);
   const [columns, setColumns] = React.useState<ColumnDef[]>([]);
@@ -123,15 +158,26 @@ export default function VendasPage() {
     });
   }, [date, sales]);
 
-  const handleDataUpload = async (data: VendaDetalhada[], fileNames: string[]) => {
-    if (data.length === 0) return;
+  const handleDataUpload = async (raw_data: any[], fileNames: string[]) => {
+    if (raw_data.length === 0) return;
+
+    const mappedData = raw_data.map(row => {
+        const newRow: any = {};
+        for (const rawHeader in row) {
+            const systemKey = headerMapping[rawHeader.trim()]; // .trim() para remover espaços extras
+            if (systemKey) {
+                newRow[systemKey] = cleanNumericValue(row[rawHeader]);
+            }
+        }
+        return newRow as VendaDetalhada;
+    });
 
     try {
         const batch = writeBatch(db);
 
         // Update sales data
-        data.forEach((item, index) => {
-            let date = new Date(); // Default to today
+        mappedData.forEach((item, index) => {
+            let date = new Date(); 
             
             if(typeof item.data === 'number') {
                 const excelEpoch = new Date(1899, 11, 30);
@@ -160,8 +206,8 @@ export default function VendasPage() {
 
         // Update metadata
         const newColumns = [...columns];
-        if (data.length > 0) {
-            const firstRow = data[0];
+        if (mappedData.length > 0) {
+            const firstRow = mappedData[0];
             const detectedColumns = Object.keys(firstRow).map(key => ({
                 id: key,
                 label: getLabel(key),
