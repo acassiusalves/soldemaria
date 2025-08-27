@@ -147,7 +147,7 @@ export function SupportDataDialog({ children, onDataUpload, uploadedFileNames }:
                                 <span className={isUploaded ? 'text-muted-foreground' : 'text-foreground'}>{name}</span>
                             </div>
                             {!isUploaded && (
-                                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => removeFile(name)}>
+                                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={(e) => { e.stopPropagation(); removeFile(name);}}>
                                     <X className="h-4 w-4" />
                                 </Button>
                             )}
