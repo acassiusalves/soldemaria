@@ -1,3 +1,4 @@
+
 "use client";
 
 import * as React from "react";
@@ -504,31 +505,15 @@ export default function VendasPage() {
       return;
     }
 
-    // Then handle removing from DB
     try {
-      const salesQuery = query(collection(db, "vendas"), where("sourceFile", "==", fileName));
-      const salesSnapshot = await getDocs(salesQuery);
-      
-      const chunks: any[] = [];
-      const docsToDelete = salesSnapshot.docs;
-      for (let i = 0; i < docsToDelete.length; i += 450) {
-          chunks.push(docsToDelete.slice(i, i + 450));
-      }
-
-      for (const chunk of chunks) {
-          const batch = writeBatch(db);
-          chunk.forEach(doc => batch.delete(doc.ref));
-          await batch.commit();
-      }
-      
       const metaRef = doc(db, "metadata", "vendas");
       await updateDoc(metaRef, { uploadedFileNames: arrayRemove(fileName) });
 
-      toast({ title: "Removido", description: `Dados do arquivo ${fileName} foram apagados.` });
+      toast({ title: "Removido do Histórico", description: `O arquivo ${fileName} foi removido da lista.` });
 
     } catch (e) {
       console.error("Erro ao remover do histórico:", e);
-      toast({ title: "Erro", description: "Não foi possível remover os dados.", variant: "destructive" });
+      toast({ title: "Erro", description: "Não foi possível remover o arquivo da lista.", variant: "destructive" });
     }
   };
 
@@ -789,3 +774,5 @@ export default function VendasPage() {
     </SidebarProvider>
   );
 }
+
+    
