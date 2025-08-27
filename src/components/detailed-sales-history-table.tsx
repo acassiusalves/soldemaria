@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useMemo } from "react";
@@ -212,3 +213,5 @@ export default function DetailedSalesHistoryTable({ data }: { data: VendaDetalha
     </Card>
   );
 }
+
+    

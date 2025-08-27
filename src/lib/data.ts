@@ -1,3 +1,4 @@
+
 export type Venda = {
   id: string;
   data: string; // YYYY-MM-DD
@@ -64,8 +65,8 @@ export type VendaDetalhada = {
   codigo: number;
   parcelas1: number;
   bandeira1: string;
-  valorParcela1: number;
-  taxaCartao1: number;
+  valorParcela1?: number;
+  taxaCartao1?: number;
   modoPagamento2?: string;
   parcelas2?: number;
   bandeira2?: string;
@@ -73,8 +74,8 @@ export type VendaDetalhada = {
   taxaCartao2?: number;
   custoFrete?: number;
   imposto?: number;
-  embalagem: number;
-  comissao: number;
+  embalagem?: number;
+  comissao?: number;
   final: number;
 };
 
@@ -93,3 +94,5 @@ export const detailedSalesData: VendaDetalhada[] = [
   { id: "11", data: "2025-07-06", codigo: 350842, parcelas1: 2, bandeira1: "Visa", valorParcela1: 180.00, taxaCartao1: 7.90, embalagem: 3.50, comissao: 2.70, final: 180.00 },
   { id: "12", data: "2025-07-07", codigo: 350843, parcelas1: 1, bandeira1: "Amex", valorParcela1: 500.00, taxaCartao1: 20.00, embalagem: 10.00, comissao: 7.50, final: 500.00 }
 ];
+
+    
