@@ -53,14 +53,15 @@ export function SupportDataDialog({ children, onDataUpload, uploadedFileNames }:
     });
   };
 
+  // [CORREÇÃO 1] - Lógica de onDrop corrigida para evitar "stale closures"
   const onDrop = useCallback((acceptedFiles: File[]) => {
-    setFiles(prev => {
+    setFiles(currentFiles => {
       const newFiles = acceptedFiles.filter(
-        af => ![...prev, ...files].some(f => f.name === af.name)
+        newFile => !currentFiles.some(existingFile => existingFile.name === newFile.name)
       );
-      return [...prev, ...newFiles];
+      return [...currentFiles, ...newFiles];
     });
-  }, [files]);
+  }, []); // A dependência deve ser vazia
 
   const { getRootProps, getInputProps, isDragActive, open: openFileDialog } = useDropzone({
     onDrop,
@@ -78,23 +79,22 @@ export function SupportDataDialog({ children, onDataUpload, uploadedFileNames }:
   }
 
   const handleSubmit = async () => {
-    if (files.length === 0) return;
-
-    const newFiles = files.filter(f => !uploadedFileNames.includes(f.name));
-    if (newFiles.length === 0) {
-      toast({
-        title: "Arquivos já processados",
-        description: "Todos os arquivos selecionados já foram carregados anteriormente.",
-      });
-      return;
+    if (files.length === 0) {
+        toast({
+            title: "Nenhum arquivo novo",
+            description: "Selecione novos arquivos para carregar.",
+            variant: "default",
+        });
+        return;
     }
 
+    // A verificação de arquivos já processados foi movida para a lógica de exibição
     try {
       const allData: any[] = [];
       const successfullyParsedFiles: string[] = [];
 
       await Promise.all(
-        newFiles.map(async (file) => {
+        files.map(async (file) => {
           const parsedData = await handleFileParse(file);
           allData.push(...parsedData);
           successfullyParsedFiles.push(file.name);
@@ -104,11 +104,8 @@ export function SupportDataDialog({ children, onDataUpload, uploadedFileNames }:
       onDataUpload(allData, successfullyParsedFiles);
       setIsOpen(false);
       setFiles([]);
-      toast({
-        title: "Sucesso!",
-        description: `${successfullyParsedFiles.length} arquivo(s) foram carregados e os dados adicionados à tabela.`,
-      });
-
+      // A notificação de sucesso já é feita na página principal
+      
     } catch (error) {
        toast({
           title: "Erro ao processar",
@@ -118,13 +115,23 @@ export function SupportDataDialog({ children, onDataUpload, uploadedFileNames }:
     }
   };
   
-  const allFiles = [...uploadedFileNames.map(name => ({name, isUploaded: true})), ...files.map(f => ({name: f.name, isUploaded: false}))];
-  const uniqueFiles = allFiles.filter((file, index, self) => index === self.findIndex(f => f.name === file.name));
+  // [CORREÇÃO 2] - Lógica de exibição corrigida para priorizar novos arquivos
+  const displayedFiles = React.useMemo(() => {
+    const newFilesMap = new Map(files.map(f => [f.name, { name: f.name, isUploaded: false }]));
+    
+    uploadedFileNames.forEach(name => {
+      if (!newFilesMap.has(name)) {
+        newFilesMap.set(name, { name, isUploaded: true });
+      }
+    });
+
+    return Array.from(newFilesMap.values());
+  }, [files, uploadedFileNames]);
 
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => {
-        if(!open) setFiles([]); // Clear selection on close
+        if(!open) setFiles([]); // Limpa a seleção ao fechar
         setIsOpen(open);
     }}>
       <DialogTrigger asChild>{children}</DialogTrigger>
@@ -138,16 +145,16 @@ export function SupportDataDialog({ children, onDataUpload, uploadedFileNames }:
         <div {...getRootProps({ className: `flex flex-col gap-4 py-4 border-2 border-dashed rounded-md transition-colors min-h-[200px] justify-center ${isDragActive ? "border-primary bg-primary/10" : "border-input"}` })}>
             <input {...getInputProps()} />
             
-            {uniqueFiles.length > 0 ? (
+            {displayedFiles.length > 0 ? (
                 <div className="flex flex-col gap-2 p-4">
-                    {uniqueFiles.map(({name, isUploaded}) => (
+                    {displayedFiles.map(({name, isUploaded}) => (
                         <div key={name} className="flex items-center justify-between p-2 rounded-md bg-muted/50 text-sm">
-                            <div className="flex items-center gap-2">
-                                {isUploaded ? <CheckCircle className="w-5 h-5 text-green-500" /> : <FileIcon className="w-5 h-5 text-muted-foreground" />}
-                                <span className={isUploaded ? 'text-muted-foreground' : 'text-foreground'}>{name}</span>
+                            <div className="flex items-center gap-2 overflow-hidden">
+                                {isUploaded ? <CheckCircle className="w-5 h-5 text-green-500 flex-shrink-0" /> : <FileIcon className="w-5 h-5 text-muted-foreground flex-shrink-0" />}
+                                <span className={`truncate ${isUploaded ? 'text-muted-foreground' : 'text-foreground'}`} title={name}>{name}</span>
                             </div>
                             {!isUploaded && (
-                                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={(e) => { e.stopPropagation(); removeFile(name);}}>
+                                <Button variant="ghost" size="icon" className="h-6 w-6 flex-shrink-0" onClick={(e) => { e.stopPropagation(); removeFile(name);}}>
                                     <X className="h-4 w-4" />
                                 </Button>
                             )}
@@ -162,9 +169,9 @@ export function SupportDataDialog({ children, onDataUpload, uploadedFileNames }:
                       </button>
                 </div>
             ) : (
-                 <div className="flex flex-col items-center justify-center text-center cursor-pointer" onClick={openFileDialog}>
+                 <div className="flex flex-col items-center justify-center text-center cursor-pointer p-4" onClick={openFileDialog}>
                     <UploadCloud className="w-12 h-12 text-muted-foreground" />
-                     {isDragActive ? (
+                      {isDragActive ? (
                       <p className="mt-2 text-primary">Solte os arquivos aqui...</p>
                     ) : (
                       <p className="mt-2 text-center text-muted-foreground">
