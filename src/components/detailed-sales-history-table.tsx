@@ -38,7 +38,6 @@ export default function DetailedSalesHistoryTable({ data }: { data: VendaDetalha
   const [sortKey, setSortKey] = useState<SortKey>("data");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [filter, setFilter] = useState('');
-  const [openRows, setOpenRows] = useState<Set<string>>(new Set());
 
   const filteredData = useMemo(() => {
     return data.filter(sale =>
@@ -79,18 +78,6 @@ export default function DetailedSalesHistoryTable({ data }: { data: VendaDetalha
       setSortDirection("asc");
     }
   };
-
-  const toggleRow = (id: string) => {
-    setOpenRows(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(id)) {
-        newSet.delete(id);
-      } else {
-        newSet.add(id);
-      }
-      return newSet;
-    });
-  };
   
   const SortableHeader = ({ tkey, label, className }: { tkey: SortKey; label: string, className?: string }) => (
     <TableHead className={className}>
@@ -129,12 +116,12 @@ export default function DetailedSalesHistoryTable({ data }: { data: VendaDetalha
             <TableBody>
               {paginatedData.length > 0 ? (
                 paginatedData.map((sale) => (
-                  <Collapsible asChild key={sale.id} open={openRows.has(sale.id)} onOpenChange={() => toggleRow(sale.id)}>
+                  <Collapsible asChild key={sale.id} tag="tbody">
                     <>
-                      <TableRow className="group data-[state=open]:bg-muted/50">
+                      <TableRow>
                         <TableCell>
                           <CollapsibleTrigger asChild>
-                            <Button variant="ghost" size="sm">
+                            <Button variant="ghost" size="sm" className="w-9 p-0">
                               <ChevronsUpDown className="h-4 w-4" />
                               <span className="sr-only">Expandir</span>
                             </Button>
@@ -151,9 +138,9 @@ export default function DetailedSalesHistoryTable({ data }: { data: VendaDetalha
                         <TableCell className="text-right font-semibold">{formatCurrency(sale.final)}</TableCell>
                       </TableRow>
                       <CollapsibleContent asChild>
-                        <tr>
+                        <TableRow>
                           <TableCell colSpan={6} className="p-0">
-                            <div className="grid grid-cols-4 gap-4 p-4 text-sm bg-background">
+                            <div className="grid grid-cols-4 gap-4 p-4 text-sm bg-muted/10">
                               <div className="space-y-1">
                                 <p className="font-semibold text-muted-foreground">Pagamento 1</p>
                                 <p>Valor Parcela: {formatCurrency(sale.valorParcela1)}</p>
@@ -179,7 +166,7 @@ export default function DetailedSalesHistoryTable({ data }: { data: VendaDetalha
                               </div>
                             </div>
                           </TableCell>
-                        </tr>
+                        </TableRow>
                       </CollapsibleContent>
                     </>
                   </Collapsible>
