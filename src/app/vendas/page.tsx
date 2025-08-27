@@ -107,10 +107,6 @@ export default function VendasPage() {
             </h1>
           </div>
           <div className="flex items-center gap-4">
-            <Button variant="outline">
-              <Settings className="mr-2 h-4 w-4" />
-              Dados de Apoio
-            </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="relative h-8 w-8 rounded-full">
@@ -147,10 +143,18 @@ export default function VendasPage() {
         <main className="flex-1 space-y-6 p-6">
           <Card>
             <CardHeader>
-              <CardTitle className="font-headline text-h3">Seleção de Período</CardTitle>
-              <CardDescription>
-                Filtre as vendas que você deseja analisar.
-              </CardDescription>
+              <div className="flex justify-between items-start">
+                <div>
+                  <CardTitle className="font-headline text-h3">Seleção de Período</CardTitle>
+                  <CardDescription>
+                    Filtre as vendas que você deseja analisar.
+                  </CardDescription>
+                </div>
+                <Button variant="outline">
+                  <Settings className="mr-2 h-4 w-4" />
+                  Dados de Apoio
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
               <Popover>
