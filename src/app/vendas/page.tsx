@@ -279,12 +279,7 @@ export const resolveSystemKey = (normalized: string): string => {
 };
 
 // Normaliza o código para chave de comparação
-const normCode = (v: any) => {
-  if (v === null || v === undefined) return "";
-  const s = String(v).trim();
-  // tira .0 do Excel, zeros à esquerda irrelevantes, espaços, etc.
-  return s.replace(/\.0+$/, "");
-};
+const normCode = (v: any) => String(v ?? "").trim().replace(/\.0+$/, "");
 
 // Celula vazia/inútil não deve sobrescrever
 const isEmptyCell = (v: any) => {
@@ -324,22 +319,7 @@ const isDetailRow = (row: Record<string, any>) =>
 
 const MotionCard = motion(Card);
 
-type ImportStats = {
-  associatedOrders: number;
-  mergedHeaders: number;
-  associatedDetailRows: number;
-  newCodes: number;
-  noCodeRows: number;
-  newRows: number;
-};
-
-type UploadPayload = {
-  rows: any[];
-  fileName: string;
-  mapping: Record<string, string>;
-  assoc: { fileColumn: string; systemKey: keyof VendaDetalhada };
-};
-
+type IncomingDataset = { rows: any[]; fileName: string; assocKey?: string };
 
 export default function VendasPage() {
   const [salesFromDb, setSalesFromDb] = React.useState<VendaDetalhada[]>([]);
@@ -352,7 +332,6 @@ export default function VendasPage() {
   const [date, setDate] = React.useState<DateRange | undefined>(undefined);
   const [isSaving, setIsSaving] = React.useState(false);
   const [saveProgress, setSaveProgress] = React.useState(0);
-  const [importStats, setImportStats] = React.useState<ImportStats | null>(null);
 
   // Listen for real-time updates from Firestore
   React.useEffect(() => {
@@ -420,84 +399,91 @@ export default function VendasPage() {
     });
   }, [date, allSales]);
   
-  const handleProcessAndStageData = (payloads: UploadPayload[]) => {
-    setImportStats(null); // Reset stats on new upload
+  const handleDataUpload = async (datasets: IncomingDataset[]) => {
+    if (!datasets || datasets.length === 0) return;
+
+    // índice do banco por código normalizado
+    const dbByCode = new Map(
+      salesFromDb
+        .filter(s => (s as any).codigo != null)
+        .map(s => [normCode((s as any).codigo), s])
+    );
+
     const uploadTimestamp = Date.now();
-  
-    const indexBy: Partial<Record<keyof VendaDetalhada, Map<string, VendaDetalhada>>> = {
-        codigo: new Map(salesFromDb.filter(s => s.codigo != null).map(s => [normCode((s as any).codigo), s])),
-    };
-  
-    let totalNew = 0;
-    let totalUpdates = 0;
-    let totalMatched = 0;
-    let totalUnmatched = 0;
-  
-    const stagedById = new Map<string, VendaDetalhada>();
-    const stagedRows: VendaDetalhada[] = [];
-  
-    for (const payload of payloads) {
-        const { rows, fileName, mapping, assoc } = payload;
-  
-        for (let i = 0; i < rows.length; i++) {
-            const raw = rows[i];
-    
-            const mapped: any = {};
-            for (const fileHeader in raw) {
-                const systemKey = mapping[fileHeader]; 
-                if (!systemKey) continue;
-                mapped[systemKey] = cleanNumericValue(raw[fileHeader]);
-            }
-    
-            const assocValueRaw = raw[assoc.fileColumn];
-            const assocValue = normCode(assocValueRaw);
-    
-            const index = indexBy[assoc.systemKey];
-            const match = assocValue && index ? index.get(assocValue) : undefined;
-    
-            if (match) {
-                totalMatched++;
-                const merged = mergeNonEmpty(match as any, mapped);
-                merged.sourceFile = fileName;
-                merged.uploadTimestamp = new Date(uploadTimestamp);
-    
-                stagedById.set((match as any).id, { ...(match as any), ...merged });
-            } else {
-                totalUnmatched++;
-                const docId = `staged-${uploadTimestamp}-${stagedRows.length}`;
-                const salePayload: any = {
-                    ...mapped,
-                    id: docId,
-                    sourceFile: fileName,
-                    uploadTimestamp: new Date(uploadTimestamp),
-                };
-    
-                if (assoc.systemKey === "codigo" && assocValue) {
-                    salePayload.codigo = assocValue;
-                }
-    
-                const d = toDate(mapped.data);
-                if (d) salePayload.data = d; else delete salePayload.data;
-    
-                stagedRows.push(salePayload);
-            }
+
+    // para evitar “duplo update” do mesmo doc, use Map por id
+    const stagedUpdates = new Map<string, any>();
+    const stagedInserts: any[] = [];
+
+    // contadores para notificação
+    let updated = 0;
+    let notFound = 0;
+    let skippedNoKey = 0;
+    let inserted = 0;
+
+    for (const ds of datasets) {
+      const key = ds.assocKey && ds.assocKey.trim() ? ds.assocKey : "codigo"; // fallback
+
+      for (let i = 0; i < ds.rows.length; i++) {
+        const row = ds.rows[i];
+
+        // 1) obtenha o “código” a partir da coluna marcada como chave
+        const rawKey = row[key];
+        const code = normCode(rawKey);
+        if (!code) { skippedNoKey++; continue; }
+
+        const fromDb = dbByCode.get(code);
+
+        if (fromDb) {
+          // 2) MERGE: preserve o que já existe quando o novo valor vier vazio
+          const incoming = { ...row };
+          // garanta que o próprio `codigo` fique preenchido p/ agrupamento
+          incoming.codigo = code;
+
+          const merged = mergeNonEmpty(fromDb as any, incoming);
+          merged.id = (fromDb as any).id;
+          merged.sourceFile = ds.fileName;
+          merged.uploadTimestamp = new Date(uploadTimestamp);
+
+          stagedUpdates.set(merged.id, merged);
+          updated++;
+        } else {
+          // 3) Não criar novos para planilhas de apoio: só conte “não encontrado”.
+          //    Se você quiser permitir upsert, troque este bloco por um insert.
+          notFound++;
+
+          // --- Exemplo de "permitir upsert" (opcional):
+          // const docId = `staged-${uploadTimestamp}-${inserted}`;
+          // const payload = { ...row, codigo: code, id: docId, sourceFile: ds.fileName,
+          //                   uploadTimestamp: new Date(uploadTimestamp) };
+          // const d = toDate(row.data); if (d) payload.data = d;
+          // stagedInserts.push(payload); inserted++;
         }
+      }
     }
-  
-    const updates = Array.from(stagedById.values());
-    const finalStage = [...updates, ...stagedRows];
-  
-    totalUpdates += updates.length;
-    totalNew += stagedRows.length;
-  
-    setStagedSales(prev => [...prev, ...finalStage]);
+
+    // monte o estágio final (updates únicos por id + eventuais inserts)
+    const stagedArray = [...Array.from(stagedUpdates.values()), ...stagedInserts];
+
+    setStagedSales(prev => [...prev, ...stagedArray]);
     setStagedFileNames(prev => [
-        ...new Set([...prev, ...payloads.map(p => p.fileName)])
+      ...new Set([...prev, ...datasets.map(d => d.fileName)])
     ]);
 
+    // 👇 duas notificações: 1) resumo da associação 2) pronto para revisão
     toast({
-      title: "Dados prontos para revisão",
-      description: `${totalNew} novos, ${totalUpdates} atualizados • associados: ${totalMatched} • não encontrados: ${totalUnmatched}.`,
+      title: "Associação concluída",
+      description: [
+        `${updated} pedido(s) atualizado(s)`,
+        `${notFound} não encontrado(s)`,
+        `${skippedNoKey} linha(s) ignoradas (sem chave)`,
+        inserted ? `${inserted} inserido(s)` : null,
+      ].filter(Boolean).join(" • "),
+    });
+
+    toast({
+      title: "Dados Prontos para Revisão",
+      description: `${stagedArray.length} registro(s) adicionados à revisão.`,
     });
   };
 
@@ -509,7 +495,6 @@ export default function VendasPage() {
     
     setIsSaving(true);
     setSaveProgress(0);
-    setImportStats(null); // Clear stats when saving starts
 
     try {
         const chunks = [];
@@ -613,7 +598,6 @@ export default function VendasPage() {
   const handleClearStagedData = () => {
     setStagedSales([]);
     setStagedFileNames([]);
-    setImportStats(null);
     toast({
       title: "Dados em revisão removidos",
     });
@@ -750,7 +734,7 @@ export default function VendasPage() {
                 </div>
                  <div className="flex items-center gap-2">
                     <SupportDataDialog 
-                      onProcessData={handleProcessAndStageData} 
+                      onProcessData={handleDataUpload}
                       uploadedFileNames={uploadedFileNames}
                       onRemoveUploadedFile={handleRemoveUploadedFileName}
                       stagedFileNames={stagedFileNames}
@@ -760,11 +744,6 @@ export default function VendasPage() {
                         Dados de Apoio
                       </Button>
                     </SupportDataDialog>
-                    {importStats && stagedSales.length > 0 && (
-                      <span className="rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground whitespace-nowrap">
-                        Associados: {importStats.associatedOrders} · Atualizados: {importStats.mergedHeaders} · Itens: {importStats.associatedDetailRows} · Novos: {importStats.newCodes}
-                      </span>
-                    )}
                      {stagedSales.length > 0 && (
                       <Button
                         onClick={handleClearStagedData}
