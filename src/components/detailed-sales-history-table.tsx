@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { ArrowUpDown, ChevronsUpDown, Columns } from "lucide-react";
@@ -29,7 +29,7 @@ import { Card, CardContent } from "./ui/card";
 
 const ITEMS_PER_PAGE = 10;
 
-type SortKey = keyof VendaDetalhada | null;
+type SortKey = keyof VendaDetalhada | string | null;
 type SortDirection = "asc" | "desc";
 
 const formatCurrency = (value?: number) => {
@@ -40,35 +40,39 @@ const formatCurrency = (value?: number) => {
   });
 };
 
-type ColumnDef = {
-  id: keyof VendaDetalhada;
+export type ColumnDef = {
+  id: string;
   label: string;
   className?: string;
   isSortable?: boolean;
 }
 
-const columns: ColumnDef[] = [
-    { id: "data", label: "Data", isSortable: true },
-    { id: "codigo", label: "Código", isSortable: true },
-    { id: "bandeira1", label: "Bandeira", isSortable: true },
-    { id: "parcelas1", label: "Parcelas", isSortable: true },
-    { id: "final", label: "Valor Final", className: "text-right", isSortable: true },
-];
+const defaultVisibleColumns = ["data", "codigo", "bandeira1", "parcelas1", "final"];
 
-export default function DetailedSalesHistoryTable({ data }: { data: VendaDetalhada[] }) {
+interface DetailedSalesHistoryTableProps {
+    data: VendaDetalhada[];
+    columns: ColumnDef[];
+}
+
+export default function DetailedSalesHistoryTable({ data, columns }: DetailedSalesHistoryTableProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const [sortKey, setSortKey] = useState<SortKey>("data");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [filter, setFilter] = useState('');
   const [openRows, setOpenRows] = useState<Set<string>>(new Set());
 
-  const [columnVisibility, setColumnVisibility] = useState<Record<string, boolean>>({
-    data: true,
-    codigo: true,
-    bandeira1: true,
-    parcelas1: true,
-    final: true,
-  });
+  const [columnVisibility, setColumnVisibility] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    // Initialize or update visibility when columns change
+    const initialVisibility = columns.reduce((acc, col) => {
+      // Show default columns or all if fewer than defaults
+      acc[col.id] = columns.length <= defaultVisibleColumns.length || defaultVisibleColumns.includes(col.id);
+      return acc;
+    }, {} as Record<string, boolean>);
+    setColumnVisibility(initialVisibility);
+  }, [columns]);
+
 
   const filteredData = useMemo(() => {
     return data.filter(sale =>
@@ -82,8 +86,8 @@ export default function DetailedSalesHistoryTable({ data }: { data: VendaDetalha
     if (!sortKey) return filteredData;
 
     return [...filteredData].sort((a, b) => {
-      const aValue = a[sortKey];
-      const bValue = b[sortKey];
+      const aValue = (a as any)[sortKey];
+      const bValue = (b as any)[sortKey];
 
       if (aValue === undefined || aValue === null) return 1;
       if (bValue === undefined || bValue === null) return -1;
@@ -131,6 +135,29 @@ export default function DetailedSalesHistoryTable({ data }: { data: VendaDetalha
     </TableHead>
   );
 
+  const renderCell = (sale: VendaDetalhada, columnId: string) => {
+    const value = (sale as any)[columnId];
+
+    if(columnId === 'data' && typeof value === 'string') {
+        try {
+            return format(parseISO(value), "dd/MM/yyyy", { locale: ptBR });
+        } catch (e) {
+            return value; // return original value if parsing fails
+        }
+    }
+    
+    if(typeof value === 'number' && ['final', 'valorParcela1', 'taxaCartao1', 'valorParcela2', 'taxaCartao2', 'custoFrete', 'imposto', 'embalagem', 'comissao'].includes(columnId)) {
+        return formatCurrency(value);
+    }
+    
+    return value;
+  }
+
+  const mainColumns = useMemo(() => columns.filter(c => defaultVisibleColumns.includes(c.id)), [columns]);
+  const detailColumns = useMemo(() => columns.filter(c => !defaultVisibleColumns.includes(c.id)), [columns]);
+  const detailGridCols = Math.min(4, detailColumns.length);
+
+
   return (
     <Card>
       <CardContent className="p-4">
@@ -151,7 +178,7 @@ export default function DetailedSalesHistoryTable({ data }: { data: VendaDetalha
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent>
-                <DropdownMenuLabel>Alternar Colunas</DropdownMenuLabel>
+                <DropdownMenuLabel>Alternar Colunas Visíveis</DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 {columns.map((column) => (
                     <DropdownMenuCheckboxItem
@@ -173,7 +200,7 @@ export default function DetailedSalesHistoryTable({ data }: { data: VendaDetalha
             <TableHeader>
               <TableRow>
                 <TableHead className="w-[50px]"></TableHead>
-                {columns.map(col => columnVisibility[col.id] && (
+                {mainColumns.map(col => columnVisibility[col.id] && (
                   col.isSortable ? (
                     <SortableHeader key={col.id} tkey={col.id} label={col.label} className={col.className} />
                   ) : (
@@ -192,43 +219,22 @@ export default function DetailedSalesHistoryTable({ data }: { data: VendaDetalha
                           <ChevronsUpDown className="h-4 w-4" />
                         </Button>
                       </TableCell>
-                      {columnVisibility.data && <TableCell>
-                        {format(parseISO(sale.data), "dd/MM/yyyy", { locale: ptBR })}
-                      </TableCell>}
-                      {columnVisibility.codigo && <TableCell className="font-medium">{sale.codigo}</TableCell>}
-                      {columnVisibility.bandeira1 && <TableCell>
-                        <Badge variant="outline">{sale.bandeira1}</Badge>
-                      </TableCell>}
-                      {columnVisibility.parcelas1 && <TableCell className="text-center">{sale.parcelas1}</TableCell>}
-                      {columnVisibility.final && <TableCell className="text-right font-semibold">{formatCurrency(sale.final)}</TableCell>}
+                      {mainColumns.map(col => columnVisibility[col.id] && (
+                        <TableCell key={col.id} className={col.id === 'final' ? 'text-right font-semibold' : ''}>
+                          {col.id === 'bandeira1' ? <Badge variant="outline">{(sale as any)[col.id]}</Badge> : renderCell(sale, col.id)}
+                        </TableCell>
+                      ))}
                     </TableRow>
                     {openRows.has(sale.id) && (
                       <TableRow>
-                        <TableCell colSpan={Object.values(columnVisibility).filter(Boolean).length + 1} className="p-0">
-                          <div className="grid grid-cols-4 gap-4 p-4 text-sm bg-muted/10">
-                            <div className="space-y-1">
-                                <p className="font-semibold text-muted-foreground">Pagamento 1</p>
-                                <p>Valor Parcela: {formatCurrency(sale.valorParcela1)}</p>
-                                <p>Taxa Cartão: {formatCurrency(sale.taxaCartao1)}</p>
-                            </div>
-                            <div className="space-y-1">
-                                <p className="font-semibold text-muted-foreground">Pagamento 2</p>
-                                <p>Modo: {sale.modoPagamento2 || "N/A"}</p>
-                                <p>Bandeira: {sale.bandeira2 || "N/A"}</p>
-                                <p>Parcelas: {sale.parcelas2 || "N/A"}</p>
-                                <p>Valor Parcela: {formatCurrency(sale.valorParcela2)}</p>
-                                <p>Taxa Cartão: {formatCurrency(sale.taxaCartao2)}</p>
-                            </div>
-                            <div className="space-y-1">
-                                <p className="font-semibold text-muted-foreground">Custos</p>
-                                <p>Frete: {formatCurrency(sale.custoFrete)}</p>
-                                <p>Imposto: {formatCurrency(sale.imposto)}</p>
-                                <p>Embalagem: {formatCurrency(sale.embalagem)}</p>
-                            </div>
-                            <div className="space-y-1">
-                                <p className="font-semibold text-muted-foreground">Resultado</p>
-                                <p>Comissão: {formatCurrency(sale.comissao)}</p>
-                            </div>
+                        <TableCell colSpan={Object.values(columnVisibility).filter(v => defaultVisibleColumns.includes(Object.keys(columnVisibility).find(k => columnVisibility[k] === v) || '')).length + 1} className="p-0">
+                          <div className={`grid grid-cols-${detailGridCols} gap-4 p-4 text-sm bg-muted/10`}>
+                            {detailColumns.map(col => (
+                              <div key={col.id} className="space-y-1">
+                                <p className="font-semibold text-muted-foreground">{col.label}</p>
+                                <p>{renderCell(sale, col.id) || "N/A"}</p>
+                              </div>
+                            ))}
                           </div>
                         </TableCell>
                       </TableRow>
@@ -237,7 +243,7 @@ export default function DetailedSalesHistoryTable({ data }: { data: VendaDetalha
                 ))
               ) : (
                 <TableRow>
-                  <TableCell colSpan={columns.length + 1} className="h-24 text-center">
+                  <TableCell colSpan={mainColumns.length + 1} className="h-24 text-center">
                     Nenhum resultado encontrado.
                   </TableCell>
                 </TableRow>
@@ -270,5 +276,3 @@ export default function DetailedSalesHistoryTable({ data }: { data: VendaDetalha
     </Card>
   );
 }
-
-    

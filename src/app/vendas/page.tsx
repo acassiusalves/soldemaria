@@ -48,12 +48,39 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { Logo } from "@/components/icons";
-import DetailedSalesHistoryTable from "@/components/detailed-sales-history-table";
+import DetailedSalesHistoryTable, { ColumnDef } from "@/components/detailed-sales-history-table";
 import { detailedSalesData, type VendaDetalhada } from "@/lib/data";
 import { SupportDataDialog } from "@/components/support-data-dialog";
 
+// Mapeamento de chave para rótulo amigável
+const columnLabels: Record<string, string> = {
+  data: 'Data',
+  codigo: 'Código',
+  bandeira1: 'Bandeira',
+  parcelas1: 'Parcelas',
+  final: 'Valor Final',
+  valorParcela1: 'Valor Parcela 1',
+  taxaCartao1: 'Taxa Cartão 1',
+  modoPagamento2: 'Modo Pgto. 2',
+  parcelas2: 'Parcelas 2',
+  bandeira2: 'Bandeira 2',
+  valorParcela2: 'Valor Parcela 2',
+  taxaCartao2: 'Taxa Cartão 2',
+  custoFrete: 'Frete',
+  imposto: 'Imposto',
+  embalagem: 'Embalagem',
+  comissao: 'Comissão',
+};
+
+const getLabel = (key: string) => columnLabels[key] || key;
+
 export default function VendasPage() {
   const [sales, setSales] = React.useState(detailedSalesData);
+  const [columns, setColumns] = React.useState<ColumnDef[]>(() => 
+    Object.keys(detailedSalesData[0] || {})
+      .map(key => ({ id: key, label: getLabel(key), isSortable: true }))
+  );
+  
   const [date, setDate] = React.useState<DateRange | undefined>({
     from: new Date(2025, 5, 1), // June 1, 2025
     to: addDays(new Date(2025, 7, 31), 0), // August 31, 2025
@@ -71,19 +98,25 @@ export default function VendasPage() {
   }, [date, sales]);
 
   const handleDataUpload = (data: VendaDetalhada[]) => {
+    if (data.length > 0) {
+      const firstRow = data[0];
+      const newColumns = Object.keys(firstRow).map(key => ({
+        id: key,
+        label: getLabel(key),
+        isSortable: true
+      }));
+      setColumns(newColumns);
+    }
+    
     const formattedData = data.map((item, index) => {
       let date = new Date().toISOString().split('T')[0]; // Default to today
       
-      // XLSX can return dates as numbers (Excel date serial number) or strings
       if(typeof item.data === 'number') {
-        // Formula to convert Excel serial number to JS Date
         const excelEpoch = new Date(1899, 11, 30);
         const jsDate = new Date(excelEpoch.getTime() + item.data * 24 * 60 * 60 * 1000);
         date = jsDate.toISOString().split('T')[0];
       } else if (typeof item.data === 'string') {
-        // Try to parse common date formats, e.g., DD/MM/YYYY
         try {
-          // It might already be in YYYY-MM-DD
           if (!isNaN(parseISO(item.data).getTime())) {
              date = item.data;
           } else {
@@ -99,7 +132,7 @@ export default function VendasPage() {
 
       return {
         ...item,
-        id: `uploaded-${new Date().getTime()}-${index}`, // Create a unique ID
+        id: `uploaded-${new Date().getTime()}-${index}`,
         data: date
       }
     });
@@ -235,11 +268,9 @@ export default function VendasPage() {
               </Popover>
             </CardContent>
           </Card>
-          <DetailedSalesHistoryTable data={filteredSales} />
+          <DetailedSalesHistoryTable data={filteredSales} columns={columns} />
         </main>
       </SidebarInset>
     </SidebarProvider>
   );
 }
-
-    
