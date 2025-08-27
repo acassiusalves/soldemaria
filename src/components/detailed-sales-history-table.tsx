@@ -4,7 +4,7 @@
 import React, { useState, useMemo } from "react";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { ArrowUpDown, ChevronsUpDown } from "lucide-react";
+import { ArrowUpDown, ChevronsUpDown, Columns } from "lucide-react";
 import { VendaDetalhada } from "@/lib/data";
 import {
   Table,
@@ -14,6 +14,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -32,12 +40,35 @@ const formatCurrency = (value?: number) => {
   });
 };
 
+type ColumnDef = {
+  id: keyof VendaDetalhada;
+  label: string;
+  className?: string;
+  isSortable?: boolean;
+}
+
+const columns: ColumnDef[] = [
+    { id: "data", label: "Data", isSortable: true },
+    { id: "codigo", label: "Código", isSortable: true },
+    { id: "bandeira1", label: "Bandeira", isSortable: true },
+    { id: "parcelas1", label: "Parcelas", isSortable: true },
+    { id: "final", label: "Valor Final", className: "text-right", isSortable: true },
+];
+
 export default function DetailedSalesHistoryTable({ data }: { data: VendaDetalhada[] }) {
   const [currentPage, setCurrentPage] = useState(1);
   const [sortKey, setSortKey] = useState<SortKey>("data");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [filter, setFilter] = useState('');
   const [openRows, setOpenRows] = useState<Set<string>>(new Set());
+
+  const [columnVisibility, setColumnVisibility] = useState<Record<string, boolean>>({
+    data: true,
+    codigo: true,
+    bandeira1: true,
+    parcelas1: true,
+    final: true,
+  });
 
   const filteredData = useMemo(() => {
     return data.filter(sale =>
@@ -105,12 +136,36 @@ export default function DetailedSalesHistoryTable({ data }: { data: VendaDetalha
       <CardContent className="p-4">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-h3 font-headline">Detalhes das Vendas</h2>
-          <div className="w-1/3">
+          <div className="flex items-center gap-2">
             <Input 
               placeholder="Filtrar registros..."
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
+              className="w-auto"
             />
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline">
+                  <Columns className="mr-2 h-4 w-4" />
+                  Exibir Colunas
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent>
+                <DropdownMenuLabel>Alternar Colunas</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {columns.map((column) => (
+                    <DropdownMenuCheckboxItem
+                        key={column.id}
+                        checked={columnVisibility[column.id]}
+                        onCheckedChange={(value) =>
+                            setColumnVisibility((prev) => ({ ...prev, [column.id]: !!value }))
+                        }
+                    >
+                        {column.label}
+                    </DropdownMenuCheckboxItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
         <div className="rounded-md border">
@@ -118,11 +173,13 @@ export default function DetailedSalesHistoryTable({ data }: { data: VendaDetalha
             <TableHeader>
               <TableRow>
                 <TableHead className="w-[50px]"></TableHead>
-                <SortableHeader tkey="data" label="Data" />
-                <SortableHeader tkey="codigo" label="Código" />
-                <SortableHeader tkey="bandeira1" label="Bandeira" />
-                <SortableHeader tkey="parcelas1" label="Parcelas" />
-                <SortableHeader tkey="final" label="Valor Final" className="text-right" />
+                {columns.map(col => columnVisibility[col.id] && (
+                  col.isSortable ? (
+                    <SortableHeader key={col.id} tkey={col.id} label={col.label} className={col.className} />
+                  ) : (
+                    <TableHead key={col.id} className={col.className}>{col.label}</TableHead>
+                  )
+                ))}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -135,19 +192,19 @@ export default function DetailedSalesHistoryTable({ data }: { data: VendaDetalha
                           <ChevronsUpDown className="h-4 w-4" />
                         </Button>
                       </TableCell>
-                      <TableCell>
+                      {columnVisibility.data && <TableCell>
                         {format(parseISO(sale.data), "dd/MM/yyyy", { locale: ptBR })}
-                      </TableCell>
-                      <TableCell className="font-medium">{sale.codigo}</TableCell>
-                      <TableCell>
+                      </TableCell>}
+                      {columnVisibility.codigo && <TableCell className="font-medium">{sale.codigo}</TableCell>}
+                      {columnVisibility.bandeira1 && <TableCell>
                         <Badge variant="outline">{sale.bandeira1}</Badge>
-                      </TableCell>
-                      <TableCell className="text-center">{sale.parcelas1}</TableCell>
-                      <TableCell className="text-right font-semibold">{formatCurrency(sale.final)}</TableCell>
+                      </TableCell>}
+                      {columnVisibility.parcelas1 && <TableCell className="text-center">{sale.parcelas1}</TableCell>}
+                      {columnVisibility.final && <TableCell className="text-right font-semibold">{formatCurrency(sale.final)}</TableCell>}
                     </TableRow>
                     {openRows.has(sale.id) && (
                       <TableRow>
-                        <TableCell colSpan={6} className="p-0">
+                        <TableCell colSpan={Object.values(columnVisibility).filter(Boolean).length + 1} className="p-0">
                           <div className="grid grid-cols-4 gap-4 p-4 text-sm bg-muted/10">
                             <div className="space-y-1">
                                 <p className="font-semibold text-muted-foreground">Pagamento 1</p>
@@ -180,7 +237,7 @@ export default function DetailedSalesHistoryTable({ data }: { data: VendaDetalha
                 ))
               ) : (
                 <TableRow>
-                  <TableCell colSpan={6} className="h-24 text-center">
+                  <TableCell colSpan={columns.length + 1} className="h-24 text-center">
                     Nenhum resultado encontrado.
                   </TableCell>
                 </TableRow>
