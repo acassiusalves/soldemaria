@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { addDays, format, parse, parseISO, endOfDay } from "date-fns";
+import { format, parse, parseISO, endOfDay, isValid } from "date-fns";
 import type { DateRange } from "react-day-picker";
 import {
   Calendar as CalendarIcon,
@@ -11,8 +11,8 @@ import {
   Settings,
   ShoppingBag,
 } from "lucide-react";
-import { collection, doc, onSnapshot, writeBatch, Timestamp, updateDoc, arrayRemove } from "firebase/firestore";
-
+import { collection, doc, onSnapshot, writeBatch, Timestamp, updateDoc, arrayRemove, query, where, getDocs } from "firebase/firestore";
+import { motion } from "framer-motion";
 
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -56,14 +56,28 @@ import { SupportDataDialog } from "@/components/support-data-dialog";
 import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
 
+// Helper to convert multiple date formats to a Date object or null
+const toDate = (value: unknown): Date | null => {
+  if (!value) return null;
+  if (value instanceof Date && isValid(value)) return value;
+  if (value instanceof Timestamp) return value.toDate();
+  if (typeof value === 'string') {
+    const isoDate = parseISO(value);
+    if (isValid(isoDate)) return isoDate;
+    const brDate = parse(value, 'dd/MM/yyyy', new Date());
+    if (isValid(brDate)) return brDate;
+  }
+  return null;
+};
 
-// utils: normaliza cabeçalhos p/ comparação robusta
+// utils: normaliza cabeçalhos p/ comparação robusta (remove NBSP, diacríticos, etc.)
 const normalizeHeader = (s: string) =>
   s
     .toLowerCase()
-    .normalize('NFD').replace(/\p{Diacritic}/gu, '')  // remove acentos
-    .replace(/[^\w\s]/g, '')                          // remove pontuação (., /, etc.)
-    .replace(/\s+/g, ' ')                             // colapsa espaços
+    .replace(/\u00A0/g, " ") // Replace non-breaking space with regular space
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\w\s]/g, '')
+    .replace(/\s+/g, ' ')
     .trim();
 
 // Mapeamento de chave para rótulo amigável
@@ -76,7 +90,6 @@ const columnLabels: Record<string, string> = {
   imposto: 'Imposto',
   embalagem: 'Embalagem',
   comissao: 'Comissão',
-  // Novos da sua planilha:
   tipo: 'Tipo',
   vendedor: 'Vendedor',
   cidade: 'Cidade',
@@ -90,7 +103,6 @@ const columnLabels: Record<string, string> = {
   valorUnitario: 'Valor Unitário',
   valorCredito: 'Valor Crédito',
   valorDescontos: 'Valor Descontos',
-  // Se você ainda usar cartões/parcelas em outras planilhas, mantém:
   bandeira1: 'Bandeira',
   parcelas1: 'Parcelas',
   valorParcela1: 'Valor Parcela 1',
@@ -104,73 +116,61 @@ const columnLabels: Record<string, string> = {
 
 const getLabel = (key: string) => columnLabels[key] || key;
 
-// Mapeia várias possibilidades de cabeçalhos para chaves do sistema
 const headerMappingNormalized: Record<string, string> = {
-  // datas / código / cliente
-  'data': 'data',
-  'data da venda': 'data',
-  'codigo': 'codigo',
-  'cliente': 'nomeCliente',
-
-  // valores
-  'valor final': 'final',
-  'valor entrega': 'custoFrete',
-  'frete': 'custoFrete',
-  'valor credito': 'valorCredito',
-  'valor descontos': 'valorDescontos',
-
-  // info de item
-  'item': 'item',
-  'descricao': 'descricao',
-  'qtd': 'quantidade',
-  'qtde': 'quantidade',
-  'quantidade': 'quantidade',
-  'custo unitario': 'custoUnitario',
-  'valor unitario': 'valorUnitario',
-
-  // meta
-  'tipo': 'tipo',
-  'vendedor': 'vendedor',
-  'cidade': 'cidade',
-  'origem': 'origem',
-  'fidelizacao': 'fidelizacao',
-  'logistica': 'logistica',
-
-  // campos de cartão/parcelas (se aparecerem em outras planilhas)
-  'bandeira do cartao': 'bandeira1',
-  'numero de parcelas': 'parcelas1',
-  'n de parcelas': 'parcelas1',
-  'no de parcelas': 'parcelas1',
-  'valor parcela': 'valorParcela1',
-  'taxa do cartao': 'taxaCartao1',
-  'modo de pagamento 2': 'modoPagamento2',
-  'bandeira cartao 2': 'bandeira2',
-  'n de parcelas 2': 'parcelas2',
-  'no de parcelas 2': 'parcelas2',
-  'valor parcela 2': 'valorParcela2',
-  'taxa cartao 2': 'taxaCartao2',
-  
-  // Variações comuns
-  'imposto': 'imposto',
-  'custo embalagem': 'embalagem',
-  'comissao': 'comissao',
+  'data': 'data', 'data da venda': 'data', 'data venda': 'data', 'data do recebimento': 'data', 'data recebimento': 'data', 'emissao': 'data',
+  'codigo': 'codigo', 'cod': 'codigo', 'cod.': 'codigo', 'documento': 'codigo', 'numero do documento': 'codigo', 'numero documento': 'codigo', 'nota fiscal': 'codigo', 'nota': 'codigo', 'nf': 'codigo', 'numero da nf': 'codigo', 'numero da venda': 'codigo', 'numero venda': 'codigo', 'n da venda': 'codigo', 'no da venda': 'codigo', 'numero do pedido': 'codigo', 'n do pedido': 'codigo', 'pedido': 'codigo',
+  'cliente': 'nomeCliente', 'nome do cliente': 'nomeCliente', 'nome cliente': 'nomeCliente', 'favorecido': 'nomeCliente', 'destinatario': 'nomeCliente', 'comprador': 'nomeCliente',
+  'vendedor': 'vendedor', 'vendedora': 'vendedor', 'colaborador': 'vendedor', 'colaboradora': 'vendedor', 'responsavel': 'vendedor',
+  'cidade': 'cidade', 'municipio': 'cidade', 'cidade/uf': 'cidade', 'cidade uf': 'cidade', 'municipio uf': 'cidade',
+  'origem': 'origem', 'origem do pedido': 'origem', 'canal': 'origem', 'canal de venda': 'origem',
+  'logistica': 'logistica', 'logistica/entrega': 'logistica', 'forma de entrega': 'logistica', 'entrega': 'logistica', 'transportadora': 'logistica', 'correios': 'logistica',
+  'tipo': 'tipo', 'tipo de recebimento': 'tipo', 'forma de pagamento': 'tipo', 'meio de pagamento': 'tipo',
+  'valor final': 'final', 'valor total': 'final', 'total': 'final', 'valor recebimento': 'final', 'valor recebido': 'final',
+  'valor entrega': 'custoFrete', 'frete': 'custoFrete',
+  'valor credito': 'valorCredito', 'credito': 'valorCredito',
+  'valor descontos': 'valorDescontos', 'descontos': 'valorDescontos', 'desconto': 'valorDescontos',
+  'item': 'item', 'descricao': 'descricao', 'qtd': 'quantidade', 'qtde': 'quantidade', 'quantidade': 'quantidade',
+  'custo unitario': 'custoUnitario', 'valor unitario': 'valorUnitario',
+  'imposto': 'imposto', 'custo embalagem': 'embalagem', 'embalagem': 'embalagem', 'comissao': 'comissao',
 };
 
+const resolveSystemKey = (normalized: string): string | undefined => {
+  if (headerMappingNormalized[normalized]) return headerMappingNormalized[normalized];
+  if (normalized.includes('data')) return 'data';
+  if (normalized.startsWith('cod') || (normalized.includes('numero') && (normalized.includes('venda') || normalized.includes('pedido') || normalized.includes('document')))) return 'codigo';
+  if (normalized.includes('cliente') || normalized.includes('favorecido') || normalized.includes('destinatario') || normalized.includes('comprador')) return 'nomeCliente';
+  if (normalized.includes('vended') || normalized.includes('colaborador') || normalized.includes('responsavel')) return 'vendedor';
+  if (normalized.includes('cidade') || normalized.includes('municipio')) return 'cidade';
+  if (normalized.includes('origem') || normalized.includes('canal')) return 'origem';
+  if (normalized.includes('logistica') || normalized.includes('entrega') || normalized.includes('transportadora') || normalized.includes('correios')) return 'logistica';
+  if (normalized.includes('tipo') || normalized.includes('forma de pagamento') || normalized.includes('meio de pagamento') || normalized.includes('recebimento')) return 'tipo';
+  if (normalized.includes('total') || (normalized.includes('valor') && (normalized.includes('final') || normalized.includes('recebid')))) return 'final';
+  if (normalized.includes('frete') || (normalized.includes('valor') && normalized.includes('entrega'))) return 'custoFrete';
+  if (normalized.includes('desconto')) return 'valorDescontos';
+  if (normalized.includes('credito')) return 'valorCredito';
+  if (normalized.includes('qtd') || normalized.includes('quantidade')) return 'quantidade';
+  if (normalized.includes('custo') && normalized.includes('unitario')) return 'custoUnitario';
+  if (normalized.includes('valor') && normalized.includes('unitario')) return 'valorUnitario';
+  return undefined;
+};
 
 const cleanNumericValue = (value: any): number | string => {
   if (typeof value === 'number') return value;
   if (typeof value !== 'string') return value;
 
   const cleaned = value
-    .replace('R$', '')      // Remove "R$"
-    .replace(/\./g, '')     // Remove o ponto de milhar
-    .replace(',', '.')      // Troca a vírgula do decimal por ponto
-    .trim();                // Remove espaços
+    .replace(/\u00A0/g, "") // Remove non-breaking spaces
+    .replace('R$', '')
+    .replace(/\((.+)\)/, '-$1') // Handle negative numbers in parentheses
+    .replace(/\./g, '')
+    .replace(',', '.')
+    .trim();
 
   const num = parseFloat(cleaned);
-  return isNaN(num) ? value : num; // Se não for um número válido, retorna o original
+  return isNaN(num) ? value : num;
 };
 
+const MotionCard = motion(Card);
 
 export default function VendasPage() {
   const [sales, setSales] = React.useState<VendaDetalhada[]>([]);
@@ -182,13 +182,33 @@ export default function VendasPage() {
 
   // Listen for real-time updates from Firestore
   React.useEffect(() => {
-    // Listen for sales data
-    const salesUnsub = onSnapshot(collection(db, "vendas"), (snapshot) => {
-        const salesData = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as VendaDetalhada));
-        setSales(salesData);
-    });
+    const q = query(collection(db, "vendas"));
+    const unsub = onSnapshot(q, (snapshot) => {
+        if (snapshot.metadata.hasPendingWrites) return;
 
-    // Listen for metadata (columns, uploaded files)
+        setSales(currentSales => {
+            let newSales = [...currentSales];
+            const changes = snapshot.docChanges();
+
+            changes.forEach(change => {
+                const data = { ...change.doc.data(), id: change.doc.id } as VendaDetalhada;
+                const index = newSales.findIndex(s => s.id === data.id);
+
+                if (change.type === "added") {
+                    if (index === -1) newSales.push(data);
+                }
+                if (change.type === "modified") {
+                    if (index !== -1) newSales[index] = data;
+                    else newSales.push(data); // Handle case where local state is out of sync
+                }
+                if (change.type === "removed") {
+                    if (index !== -1) newSales.splice(index, 1);
+                }
+            });
+            return newSales;
+        });
+    });
+    
     const metaUnsub = onSnapshot(doc(db, "metadata", "vendas"), (doc) => {
         if (doc.exists()) {
             const data = doc.data();
@@ -198,7 +218,7 @@ export default function VendasPage() {
     });
 
     return () => {
-        salesUnsub();
+        unsub();
         metaUnsub();
     };
   }, []);
@@ -209,81 +229,92 @@ export default function VendasPage() {
     const toDate = date.to ? endOfDay(date.to) : endOfDay(fromDate);
 
     return sales.filter((sale) => {
-      // Handle potential Timestamp from Firestore
-      const saleDate = sale.data instanceof Timestamp ? sale.data.toDate() : (typeof sale.data === 'string' ? parseISO(sale.data) : sale.data);
-      return saleDate >= fromDate && saleDate <= toDate;
+      const saleDate = toDate(sale.data);
+      return saleDate && saleDate >= fromDate && saleDate <= toDate;
     });
   }, [date, sales]);
-
+  
   const handleDataUpload = async (raw_data: any[], fileNames: string[]) => {
     if (raw_data.length === 0) return;
+    
+    console.log('>> Cabeçalhos brutos:', Object.keys(raw_data?.[0] ?? {}));
 
     const mappedData = raw_data.map((row) => {
       const newRow: any = {};
       for (const rawHeader in row) {
         const trimmedHeader = String(rawHeader ?? '').trim();
         const normalized = normalizeHeader(trimmedHeader);
-        const systemKey = headerMappingNormalized[normalized];
+        const systemKey = resolveSystemKey(normalized);
   
         if (systemKey) {
           newRow[systemKey] = cleanNumericValue(row[rawHeader]);
         } else {
-          console.warn(`🟡 Cabeçalho não mapeado (arquivo -> normalizado): "${trimmedHeader}" -> "${normalized}" | valor amostra:`, row[rawHeader]);
+          console.warn(`🟡 Cabeçalho não mapeado: "${trimmedHeader}" -> "${normalized}"`);
         }
       }
-      return newRow as VendaDetalhada;
+      return newRow;
     });
+    
+    const recognizedKeys = Array.from(new Set(mappedData.flatMap(r => Object.keys(r))));
+    const usefulKeys = recognizedKeys.filter(k => k !== 'data');
+
+    if (usefulKeys.length < 2) {
+      console.warn('⚠️ Poucas colunas reconhecidas:', recognizedKeys);
+      toast({
+        title: "Planilha não reconhecida",
+        description: `Encontrei poucas colunas úteis: ${recognizedKeys.join(', ') || '(nada)'}. Confira os cabeçalhos.`,
+        variant: "destructive",
+      });
+      return;
+    }
 
     try {
-        const batch = writeBatch(db);
+        const uploadTimestamp = Date.now();
+        const allFileNames = fileNames.join(', ');
+        
+        const chunks = [];
+        for (let i = 0; i < mappedData.length; i += 450) {
+            chunks.push(mappedData.slice(i, i + 450));
+        }
 
-        // Update sales data
-        mappedData.forEach((item, index) => {
-            let date = new Date(); 
-            
-            if(typeof item.data === 'number') {
-                const excelEpoch = new Date(1899, 11, 30);
-                date = new Date(excelEpoch.getTime() + item.data * 24 * 60 * 60 * 1000);
-            } else if (typeof item.data === 'string' && item.data.trim()) {
-                try {
-                    let parsedDate = parseISO(item.data);
-                    if (isNaN(parsedDate.getTime())) {
-                        parsedDate = parse(item.data, 'dd/MM/yyyy', new Date());
-                    }
-                    if(!isNaN(parsedDate.getTime())){
-                        date = parsedDate;
-                    }
-                } catch(e) {
-                    console.warn(`Could not parse date for row ${index}: ${item.data}`);
+        for (const chunk of chunks) {
+            const batch = writeBatch(db);
+            chunk.forEach((item, index) => {
+                const docId = `uploaded-${uploadTimestamp}-${index}`;
+                const saleRef = doc(db, "vendas", docId);
+                
+                const salePayload: any = { 
+                    ...item, 
+                    id: docId, 
+                    sourceFile: allFileNames,
+                    uploadTimestamp: Timestamp.fromMillis(uploadTimestamp)
+                };
+
+                const saleDate = toDate(item.data);
+                if (saleDate) {
+                    salePayload.data = Timestamp.fromDate(saleDate);
+                } else {
+                    delete salePayload.data;
                 }
-            } else if (item.data instanceof Date) {
-              date = item.data;
-            }
-            
-            const dateTimestamp = Timestamp.fromDate(date);
-            const docId = `uploaded-${new Date().getTime()}-${index}`;
-            const saleRef = doc(db, "vendas", docId);
-            batch.set(saleRef, { ...item, id: docId, data: dateTimestamp });
-        });
+                batch.set(saleRef, salePayload);
+            });
+            await batch.commit();
+        }
 
-        // Update metadata
         const allKeys = Array.from(new Set(mappedData.flatMap(row => Object.keys(row))));
-
         const detectedColumns: ColumnDef[] = allKeys.map(key => ({
             id: key,
             label: getLabel(key),
             isSortable: true
         }));
         
-        const newUploadedFileNames = [...uploadedFileNames, ...fileNames];
+        const newUploadedFileNames = [...new Set([...uploadedFileNames, ...fileNames])];
         const metaRef = doc(db, "metadata", "vendas");
-        batch.set(metaRef, { columns: detectedColumns, uploadedFileNames: newUploadedFileNames }, { merge: false });
-
-        await batch.commit();
+        await updateDoc(metaRef, { columns: detectedColumns, uploadedFileNames: newUploadedFileNames });
 
         toast({
             title: "Sucesso!",
-            description: "Os dados foram salvos no banco de dados compartilhado.",
+            description: "Os dados foram salvos no banco de dados.",
         });
 
     } catch (error) {
@@ -298,12 +329,29 @@ export default function VendasPage() {
 
   const handleRemoveUploadedFileName = async (fileName: string) => {
     try {
+      const salesQuery = query(collection(db, "vendas"), where("sourceFile", "==", fileName));
+      const salesSnapshot = await getDocs(salesQuery);
+      
+      const chunks: any[] = [];
+      const docsToDelete = salesSnapshot.docs;
+      for (let i = 0; i < docsToDelete.length; i += 450) {
+          chunks.push(docsToDelete.slice(i, i + 450));
+      }
+
+      for (const chunk of chunks) {
+          const batch = writeBatch(db);
+          chunk.forEach(doc => batch.delete(doc.ref));
+          await batch.commit();
+      }
+      
       const metaRef = doc(db, "metadata", "vendas");
       await updateDoc(metaRef, { uploadedFileNames: arrayRemove(fileName) });
-      setUploadedFileNames(prev => prev.filter(n => n !== fileName));
+
+      toast({ title: "Removido", description: `Dados do arquivo ${fileName} foram apagados.` });
+
     } catch (e) {
       console.error("Erro ao remover do histórico:", e);
-      toast({ title: "Erro", description: "Não foi possível remover do histórico.", variant: "destructive" });
+      toast({ title: "Erro", description: "Não foi possível remover os dados.", variant: "destructive" });
     }
   };
 
@@ -380,7 +428,12 @@ export default function VendasPage() {
         </header>
 
         <main className="flex-1 space-y-6 p-6">
-           <Card>
+           <MotionCard
+              className="rounded-2xl shadow hover:shadow-lg transition-shadow"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3 }}
+           >
             <CardHeader>
               <div className="flex justify-between items-start">
                 <div>
@@ -439,8 +492,14 @@ export default function VendasPage() {
                 </PopoverContent>
               </Popover>
             </CardContent>
-          </Card>
-          <DetailedSalesHistoryTable data={filteredSales} columns={columns} />
+          </MotionCard>
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3, delay: 0.1 }}
+          >
+            <DetailedSalesHistoryTable data={filteredSales} columns={columns} />
+          </motion.div>
         </main>
       </SidebarInset>
     </SidebarProvider>
