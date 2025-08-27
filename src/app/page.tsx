@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { addDays, format, parseISO } from "date-fns";
 import type { DateRange } from "react-day-picker";
 import {
@@ -112,16 +113,20 @@ export default function DashboardPage() {
         <SidebarContent>
           <SidebarMenu>
             <SidebarMenuItem>
-              <SidebarMenuButton isActive>
-                <LayoutDashboard />
-                Painel
-              </SidebarMenuButton>
+              <Link href="/">
+                <SidebarMenuButton isActive>
+                  <LayoutDashboard />
+                  Painel
+                </SidebarMenuButton>
+              </Link>
             </SidebarMenuItem>
             <SidebarMenuItem>
-              <SidebarMenuButton>
-                <History />
-                Histórico
-              </SidebarMenuButton>
+              <Link href="/vendas">
+                <SidebarMenuButton>
+                  <ShoppingBag />
+                  Vendas
+                </SidebarMenuButton>
+              </Link>
             </SidebarMenuItem>
           </SidebarMenu>
         </SidebarContent>
