@@ -267,26 +267,17 @@ export default function VendasPage() {
         });
 
         // Update metadata
-        const newColumns = [...columns];
-        if (mappedData.length > 0) {
-            const firstRow = mappedData[0];
-            const detectedColumns = Object.keys(firstRow).map(key => ({
-                id: key,
-                label: getLabel(key),
-                isSortable: true
-            }));
-            
-            detectedColumns.forEach(newCol => {
-                if (!newColumns.some(existingCol => existingCol.id === newCol.id)) {
-                    newColumns.push(newCol);
-                }
-            });
-        }
+        const allKeys = Array.from(new Set(mappedData.flatMap(row => Object.keys(row))));
+
+        const detectedColumns: ColumnDef[] = allKeys.map(key => ({
+            id: key,
+            label: getLabel(key),
+            isSortable: true
+        }));
         
         const newUploadedFileNames = [...uploadedFileNames, ...fileNames];
-
         const metaRef = doc(db, "metadata", "vendas");
-        batch.set(metaRef, { columns: newColumns, uploadedFileNames: newUploadedFileNames }, { merge: true });
+        batch.set(metaRef, { columns: detectedColumns, uploadedFileNames: newUploadedFileNames }, { merge: false });
 
         await batch.commit();
 

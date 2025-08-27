@@ -66,15 +66,22 @@ export default function DetailedSalesHistoryTable({ data, columns }: DetailedSal
 
   const [columnVisibility, setColumnVisibility] = useState<Record<string, boolean>>({});
 
+  const effectiveColumns = useMemo(() => {
+    return columns.filter(col =>
+      data.some(row => {
+        const v = (row as any)[col.id];
+        return v !== undefined && v !== null && String(v).trim() !== "";
+      })
+    );
+  }, [columns, data]);
+
   useEffect(() => {
-    // Initialize or update visibility when columns change
-    const initialVisibility = columns.reduce((acc, col) => {
-      // Show default columns or all if fewer than defaults
-      acc[col.id] = columns.length <= defaultVisibleColumns.length || defaultVisibleColumns.includes(col.id);
+    const initialVisibility = effectiveColumns.reduce((acc, col) => {
+      acc[col.id] = effectiveColumns.length <= defaultVisibleColumns.length || defaultVisibleColumns.includes(col.id);
       return acc;
     }, {} as Record<string, boolean>);
     setColumnVisibility(initialVisibility);
-  }, [columns]);
+  }, [effectiveColumns]);
 
 
   const filteredData = useMemo(() => {
@@ -155,22 +162,14 @@ export default function DetailedSalesHistoryTable({ data, columns }: DetailedSal
     return value || "N/A";
   }
   
-  const visibleMainColumns = useMemo(() => {
-    return columns.filter(col => columnVisibility[col.id]);
-  }, [columns, columnVisibility]);
-
-  const allColumns = useMemo(() => {
-      return columns.filter(c => columnVisibility[c.id]);
-  }, [columns, columnVisibility]);
-  
   const mainColumns = useMemo(() => {
-    const mainCols = defaultVisibleColumns.map(id => columns.find(c => c.id === id)).filter(Boolean) as ColumnDef[];
+    const mainCols = defaultVisibleColumns.map(id => effectiveColumns.find(c => c.id === id)).filter(Boolean) as ColumnDef[];
     return mainCols.filter(col => columnVisibility[col.id]);
-  }, [columns, columnVisibility]);
+  }, [effectiveColumns, columnVisibility]);
 
   const detailColumns = useMemo(() => {
-      return columns.filter(c => !defaultVisibleColumns.includes(c.id) && columnVisibility[c.id]);
-  }, [columns, columnVisibility]);
+      return effectiveColumns.filter(c => !defaultVisibleColumns.includes(c.id) && columnVisibility[c.id]);
+  }, [effectiveColumns, columnVisibility]);
 
   const detailGridCols = `grid-cols-${Math.min(4, detailColumns.length || 1)}`;
 
@@ -198,7 +197,7 @@ export default function DetailedSalesHistoryTable({ data, columns }: DetailedSal
                 <DropdownMenuLabel>Alternar Colunas Visíveis</DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <ScrollArea className="h-72">
-                  {columns.map((column) => (
+                  {effectiveColumns.map((column) => (
                       <DropdownMenuCheckboxItem
                           key={column.id}
                           className="capitalize"
