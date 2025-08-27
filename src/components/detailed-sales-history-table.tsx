@@ -129,9 +129,9 @@ export default function DetailedSalesHistoryTable({ data }: { data: VendaDetalha
             <TableBody>
               {paginatedData.length > 0 ? (
                 paginatedData.map((sale) => (
-                  <Collapsible asChild key={sale.id} className="group">
-                    <React.Fragment>
-                      <TableRow className="group-data-[state=open]:bg-muted/50">
+                  <Collapsible asChild key={sale.id} open={openRows.has(sale.id)} onOpenChange={() => toggleRow(sale.id)}>
+                    <>
+                      <TableRow className="group data-[state=open]:bg-muted/50">
                         <TableCell>
                           <CollapsibleTrigger asChild>
                             <Button variant="ghost" size="sm">
@@ -181,7 +181,7 @@ export default function DetailedSalesHistoryTable({ data }: { data: VendaDetalha
                           </TableCell>
                         </tr>
                       </CollapsibleContent>
-                    </React.Fragment>
+                    </>
                   </Collapsible>
                 ))
               ) : (
