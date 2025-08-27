@@ -94,13 +94,23 @@ export default function DetailedSalesHistoryTable({ data, columns }: DetailedSal
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
   const effectiveColumns = useMemo(() => {
-    return columns.filter(col =>
+    const allKeys = new Set(columns.map(c => c.id));
+    data.forEach(row => {
+        Object.keys(row).forEach(key => allKeys.add(key));
+    });
+
+    return Array.from(allKeys).map(id => {
+        const existingColumn = columns.find(c => c.id === id);
+        if (existingColumn) return existingColumn;
+        return { id, label: id, isSortable: true };
+    }).filter(col =>
       data.some(row => {
         const v = (row as any)[col.id];
         return v !== undefined && v !== null && String(v).trim() !== "";
       })
     );
   }, [columns, data]);
+
 
   const detailColumns = useMemo(() => {
     const detailKeys = ['item', 'descricao', 'quantidade', 'custoUnitario', 'valorUnitario', 'valorCredito', 'valorDescontos'];
@@ -113,19 +123,31 @@ export default function DetailedSalesHistoryTable({ data, columns }: DetailedSal
   }, [effectiveColumns, detailColumns]);
   
   useEffect(() => {
-    if (mainColumns.length === 0 && effectiveColumns.length > 0) return;
+    if (mainColumns.length === 0) return;
 
     const keys = mainColumns.map(c => c.id);
     const loaded = loadVisibility(keys);
     
     if (loaded) {
-      setColumnVisibility(loaded);
+      const mergedVisibility = { ...loaded };
+      // Ensure any new columns from staged data are at least visible by default if not in storage
+      keys.forEach(k => {
+        if (mergedVisibility[k] === undefined) {
+          mergedVisibility[k] = true; 
+        }
+      });
+      setColumnVisibility(mergedVisibility);
       return;
     }
     const initial: Record<string, boolean> = {};
-    keys.forEach((k, i) => { initial[k] = i < DEFAULT_MAIN_COUNT; });
+    const detailKeys = ['item', 'descricao', 'quantidade', 'custoUnitario', 'valorUnitario', 'valorCredito', 'valorDescontos'];
+    const defaultVisibleKeys = mainColumns.filter(c => !detailKeys.includes(c.id)).slice(0, DEFAULT_MAIN_COUNT).map(c => c.id);
+
+    keys.forEach((k) => { 
+        initial[k] = defaultVisibleKeys.includes(k);
+    });
     setColumnVisibility(initial);
-  }, [mainColumns, effectiveColumns]);
+  }, [mainColumns]);
 
 
   useEffect(() => {
@@ -137,6 +159,7 @@ export default function DetailedSalesHistoryTable({ data, columns }: DetailedSal
   const groupedData = useMemo(() => {
     const groups: Record<string, VendaDetalhada[]> = {};
     data.forEach(sale => {
+      if (!sale.codigo) return;
       if (!groups[sale.codigo]) {
         groups[sale.codigo] = [];
       }
@@ -159,10 +182,10 @@ export default function DetailedSalesHistoryTable({ data, columns }: DetailedSal
   }, [data]);
   
   const filteredData = useMemo(() => {
+    if(!filter) return groupedData;
     return groupedData.filter(group =>
        String(group.codigo).toLowerCase().includes(filter.toLowerCase()) ||
-       String(group.nomeCliente).toLowerCase().includes(filter.toLowerCase()) ||
-       filter === ''
+       String(group.nomeCliente).toLowerCase().includes(filter.toLowerCase())
     );
   }, [groupedData, filter]);
 
@@ -226,7 +249,10 @@ export default function DetailedSalesHistoryTable({ data, columns }: DetailedSal
     const value = (sale as any)[columnId];
 
     if (columnId === 'data' && value) {
-      const date = value.toDate ? value.toDate() : (typeof value === 'string' ? new Date(value) : value);
+      let date = value;
+      if(value.toDate) date = value.toDate();
+      else if (typeof value === 'string') date = new Date(value);
+
       if(date instanceof Date && !isNaN(date.getTime())) {
           return format(date, "dd/MM/yyyy", { locale: ptBR });
       }
