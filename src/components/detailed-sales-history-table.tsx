@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useMemo } from "react";
@@ -128,9 +129,9 @@ export default function DetailedSalesHistoryTable({ data }: { data: VendaDetalha
             <TableBody>
               {paginatedData.length > 0 ? (
                 paginatedData.map((sale) => (
-                  <Collapsible asChild key={sale.id}>
-                    <>
-                      <TableRow>
+                  <Collapsible asChild key={sale.id} className="group">
+                    <React.Fragment>
+                      <TableRow className="group-data-[state=open]:bg-muted/50">
                         <TableCell>
                           <CollapsibleTrigger asChild>
                             <Button variant="ghost" size="sm">
@@ -150,9 +151,9 @@ export default function DetailedSalesHistoryTable({ data }: { data: VendaDetalha
                         <TableCell className="text-right font-semibold">{formatCurrency(sale.final)}</TableCell>
                       </TableRow>
                       <CollapsibleContent asChild>
-                        <tr className="bg-muted/50 hover:bg-muted">
+                        <tr>
                           <TableCell colSpan={6} className="p-0">
-                            <div className="grid grid-cols-4 gap-4 p-4 text-sm">
+                            <div className="grid grid-cols-4 gap-4 p-4 text-sm bg-background">
                               <div className="space-y-1">
                                 <p className="font-semibold text-muted-foreground">Pagamento 1</p>
                                 <p>Valor Parcela: {formatCurrency(sale.valorParcela1)}</p>
@@ -180,7 +181,7 @@ export default function DetailedSalesHistoryTable({ data }: { data: VendaDetalha
                           </TableCell>
                         </tr>
                       </CollapsibleContent>
-                    </>
+                    </React.Fragment>
                   </Collapsible>
                 ))
               ) : (
