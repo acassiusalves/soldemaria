@@ -1,3 +1,4 @@
+
 "use client";
 
 import * as React from "react";
@@ -117,42 +118,109 @@ const columnLabels: Record<string, string> = {
 const getLabel = (key: string) => columnLabels[key] || key;
 
 const headerMappingNormalized: Record<string, string> = {
-  'data': 'data', 'data da venda': 'data', 'data venda': 'data', 'data do recebimento': 'data', 'data recebimento': 'data', 'emissao': 'data',
-  'codigo': 'codigo', 'cod': 'codigo', 'cod.': 'codigo', 'documento': 'codigo', 'numero do documento': 'codigo', 'numero documento': 'codigo', 'nota fiscal': 'codigo', 'nota': 'codigo', 'nf': 'codigo', 'numero da nf': 'codigo', 'numero da venda': 'codigo', 'numero venda': 'codigo', 'n da venda': 'codigo', 'no da venda': 'codigo', 'numero do pedido': 'codigo', 'n do pedido': 'codigo', 'pedido': 'codigo',
-  'cliente': 'nomeCliente', 'nome do cliente': 'nomeCliente', 'nome cliente': 'nomeCliente', 'favorecido': 'nomeCliente', 'destinatario': 'nomeCliente', 'comprador': 'nomeCliente',
-  'vendedor': 'vendedor', 'vendedora': 'vendedor', 'colaborador': 'vendedor', 'colaboradora': 'vendedor', 'responsavel': 'vendedor',
+  // Datas
+  'data': 'data',
+  'data da venda': 'data',
+  'data venda': 'data',
+  'data do recebimento': 'data',
+  'data recebimento': 'data',
+  'emissao': 'data',
+
+  // Código / Documento / Pedido / NF
+  'codigo': 'codigo',
+  'cod': 'codigo', 'cod.': 'codigo',
+  'documento': 'codigo', 'numero do documento': 'codigo', 'numero documento': 'codigo',
+  'nota fiscal': 'codigo', 'nota': 'codigo', 'nf': 'codigo', 'numero da nf': 'codigo',
+  'numero da venda': 'codigo', 'numero venda': 'codigo', 'n da venda': 'codigo', 'no da venda': 'codigo',
+  'numero do pedido': 'codigo', 'n do pedido': 'codigo', 'pedido': 'codigo',
+
+  // Cliente
+  'cliente': 'nomeCliente', 'nome do cliente': 'nomeCliente', 'nome cliente': 'nomeCliente',
+  'favorecido': 'nomeCliente', 'destinatario': 'nomeCliente', 'comprador': 'nomeCliente',
+
+  // Vendedor
+  'vendedor': 'vendedor', 'vendedora': 'vendedor', 'colaborador': 'vendedor',
+  'colaboradora': 'vendedor', 'responsavel': 'vendedor',
+
+  // Cidade
   'cidade': 'cidade', 'municipio': 'cidade', 'cidade/uf': 'cidade', 'cidade uf': 'cidade', 'municipio uf': 'cidade',
-  'origem': 'origem', 'origem do pedido': 'origem', 'canal': 'origem', 'canal de venda': 'origem',
-  'logistica': 'logistica', 'logistica/entrega': 'logistica', 'forma de entrega': 'logistica', 'entrega': 'logistica', 'transportadora': 'logistica', 'correios': 'logistica',
-  'tipo': 'tipo', 'tipo de recebimento': 'tipo', 'forma de pagamento': 'tipo', 'meio de pagamento': 'tipo',
-  'valor final': 'final', 'valor total': 'final', 'total': 'final', 'valor recebimento': 'final', 'valor recebido': 'final',
-  'valor entrega': 'custoFrete', 'frete': 'custoFrete',
-  'valor credito': 'valorCredito', 'credito': 'valorCredito',
-  'valor descontos': 'valorDescontos', 'descontos': 'valorDescontos', 'desconto': 'valorDescontos',
-  'item': 'item', 'descricao': 'descricao', 'qtd': 'quantidade', 'qtde': 'quantidade', 'quantidade': 'quantidade',
+
+  // Origem / Canal
+  'origem': 'origem', 'origem do pedido': 'origem', 'origem do cliente': 'origem',
+  'canal': 'origem', 'canal de venda': 'origem', 'marketplace': 'origem', 'plataforma': 'origem',
+
+  // Logística / Entrega
+  'logistica': 'logistica', 'logistica/entrega': 'logistica', 'forma de entrega': 'logistica',
+  'tipo de entrega': 'logistica', 'modalidade de entrega': 'logistica',
+  'entrega': 'logistica', 'envio': 'logistica', 'transportadora': 'logistica', 'correios': 'logistica',
+  'retirada': 'logistica', 'retirada na loja': 'logistica',
+
+  // Tipo / Pagamento
+  'tipo': 'tipo', 'tipo de venda': 'tipo', 'tipo de recebimento': 'tipo', 'tipo do pedido': 'tipo',
+  'forma de pagamento': 'tipo', 'meio de pagamento': 'tipo', 'forma pgto': 'tipo',
+  'condicao de pagamento': 'tipo', 'condicao pagamento': 'tipo', 'pagamento': 'tipo',
+
+  // Valores
+  'valor final': 'final', 'valor total': 'final', 'total': 'final',
+  'valor recebimento': 'final', 'valor recebido': 'final',
+
+  // Frete (custo)
+  'frete': 'custoFrete', 'valor do frete': 'custoFrete', 'valor frete': 'custoFrete',
+  'taxa de entrega': 'custoFrete', 'valor entrega': 'custoFrete', 'custo do frete': 'custoFrete',
+  'custo frete': 'custoFrete', 'frete rs': 'custoFrete',
+
+  // Itens (se existirem)
+  'item': 'item', 'descricao': 'descricao',
+  'qtd': 'quantidade', 'qtde': 'quantidade', 'quantidade': 'quantidade',
   'custo unitario': 'custoUnitario', 'valor unitario': 'valorUnitario',
-  'imposto': 'imposto', 'custo embalagem': 'embalagem', 'embalagem': 'embalagem', 'comissao': 'comissao',
+
+  // Outros custos
+  'imposto': 'imposto',
+  'custo embalagem': 'embalagem', 'embalagem': 'embalagem',
+  'comissao': 'comissao',
 };
 
 const resolveSystemKey = (normalized: string): string | undefined => {
   if (headerMappingNormalized[normalized]) return headerMappingNormalized[normalized];
+
+  // Fallbacks por conteúdo do nome
   if (normalized.includes('data')) return 'data';
-  if (normalized.startsWith('cod') || (normalized.includes('numero') && (normalized.includes('venda') || normalized.includes('pedido') || normalized.includes('document')))) return 'codigo';
-  if (normalized.includes('cliente') || normalized.includes('favorecido') || normalized.includes('destinatario') || normalized.includes('comprador')) return 'nomeCliente';
+
+  if (normalized.startsWith('cod') || (
+      normalized.includes('numero') && (
+        normalized.includes('venda') || normalized.includes('pedido') || normalized.includes('document')
+      ))) return 'codigo';
+
+  if (normalized.includes('cliente') || normalized.includes('favorecido') ||
+      normalized.includes('destinatario') || normalized.includes('comprador')) return 'nomeCliente';
+
   if (normalized.includes('vended') || normalized.includes('colaborador') || normalized.includes('responsavel')) return 'vendedor';
+
   if (normalized.includes('cidade') || normalized.includes('municipio')) return 'cidade';
-  if (normalized.includes('origem') || normalized.includes('canal')) return 'origem';
-  if (normalized.includes('logistica') || normalized.includes('entrega') || normalized.includes('transportadora') || normalized.includes('correios')) return 'logistica';
-  if (normalized.includes('tipo') || normalized.includes('forma de pagamento') || normalized.includes('meio de pagamento') || normalized.includes('recebimento')) return 'tipo';
+
+  if (normalized.includes('origem') || normalized.includes('canal') || normalized.includes('marketplace') || normalized.includes('plataforma')) return 'origem';
+
+  if (normalized.includes('logistica') || normalized.includes('entrega') || normalized.includes('envio') ||
+      normalized.includes('transportadora') || normalized.includes('correios') || normalized.includes('retirada')) return 'logistica';
+
+  if (normalized.includes('tipo') || normalized.includes('forma de pagamento') || normalized.includes('meio de pagamento') ||
+      normalized.includes('condicao de pagamento') || normalized.includes('pagamento') || normalized.includes('recebiment')) return 'tipo';
+
+  if (normalized.includes('frete') || (normalized.includes('taxa') && normalized.includes('entrega')) ||
+      (normalized.includes('valor') && (normalized.includes('frete') || normalized.includes('entrega')))) return 'custoFrete';
+
   if (normalized.includes('total') || (normalized.includes('valor') && (normalized.includes('final') || normalized.includes('recebid')))) return 'final';
-  if (normalized.includes('frete') || (normalized.includes('valor') && normalized.includes('entrega'))) return 'custoFrete';
+
   if (normalized.includes('desconto')) return 'valorDescontos';
   if (normalized.includes('credito')) return 'valorCredito';
+
   if (normalized.includes('qtd') || normalized.includes('quantidade')) return 'quantidade';
   if (normalized.includes('custo') && normalized.includes('unitario')) return 'custoUnitario';
   if (normalized.includes('valor') && normalized.includes('unitario')) return 'valorUnitario';
+
   return undefined;
 };
+
 
 const cleanNumericValue = (value: any): number | string => {
   if (typeof value === 'number') return value;
@@ -237,8 +305,6 @@ export default function VendasPage() {
   const handleDataUpload = async (raw_data: any[], fileNames: string[]) => {
     if (raw_data.length === 0) return;
     
-    console.log('>> Cabeçalhos brutos:', Object.keys(raw_data?.[0] ?? {}));
-
     const mappedData = raw_data.map((row) => {
       const newRow: any = {};
       for (const rawHeader in row) {
@@ -255,6 +321,21 @@ export default function VendasPage() {
       return newRow;
     });
     
+    // mostra quantas linhas ficaram com valor em cada chave mapeada
+    const counts: Record<string, number> = {};
+    for (const row of mappedData) {
+      for (const k of Object.keys(row)) {
+        const v = (row as any)[k];
+        if (v !== null && v !== undefined && (typeof v !== 'string' || v.trim() !== '')) {
+          counts[k] = (counts[k] ?? 0) + 1;
+        }
+      }
+    }
+    console.table(Object.entries(counts).map(([k, n]) => ({ campo: k, linhasComValor: n })));
+
+    // e também mostra os cabeçalhos brutos da planilha
+    console.log('>> Cabeçalhos brutos (linha 1):', Object.keys(raw_data?.[0] ?? {}));
+
     const recognizedKeys = Array.from(new Set(mappedData.flatMap(r => Object.keys(r))));
     const usefulKeys = recognizedKeys.filter(k => k !== 'data');
 
@@ -505,3 +586,6 @@ export default function VendasPage() {
     </SidebarProvider>
   );
 }
+
+
+    
