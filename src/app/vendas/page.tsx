@@ -300,16 +300,21 @@ export default function VendasPage() {
         if (snapshot.metadata.hasPendingWrites) return;
 
         let newSales: VendaDetalhada[] = [];
+        let modifiedSales: VendaDetalhada[] = [];
         snapshot.docChanges().forEach(change => {
             if (change.type === "added") {
               newSales.push({ ...change.doc.data(), id: change.doc.id } as VendaDetalhada);
             }
+            if (change.type === 'modified') {
+              modifiedSales.push({ ...change.doc.data(), id: change.doc.id } as VendaDetalhada);
+            }
         });
 
-        if(newSales.length > 0) {
+        if(newSales.length > 0 || modifiedSales.length > 0) {
             setSalesFromDb(currentSales => {
                 const salesMap = new Map(currentSales.map(s => [s.id, s]));
                 newSales.forEach(s => salesMap.set(s.id, s));
+                modifiedSales.forEach(s => salesMap.set(s.id, s));
                 return Array.from(salesMap.values());
             });
         }
@@ -335,7 +340,13 @@ export default function VendasPage() {
     };
   }, []);
   
-  const allSales = React.useMemo(() => [...salesFromDb, ...stagedSales], [salesFromDb, stagedSales]);
+  const allSales = React.useMemo(() => {
+    // Mescla salesFromDb e stagedSales, com stagedSales tendo prioridade
+    const salesMap = new Map(salesFromDb.map(s => [s.id, s]));
+    stagedSales.forEach(s => salesMap.set(s.id, s));
+    return Array.from(salesMap.values());
+  }, [salesFromDb, stagedSales]);
+
 
   const filteredSales = React.useMemo(() => {
     if (!date?.from) return allSales;
@@ -350,6 +361,8 @@ export default function VendasPage() {
   
   const handleDataUpload = async (raw_data: any[], fileNames: string[]) => {
     if (raw_data.length === 0) return;
+    
+    const salesFromDbByCodigo = new Map(salesFromDb.map(s => [s.codigo, s]));
     
     const mappedData = raw_data.map((row) => {
       const newRow: any = {};
@@ -366,58 +379,50 @@ export default function VendasPage() {
       }
       return newRow;
     });
-    
-    const counts: Record<string, number> = {};
-    for (const row of mappedData) {
-      for (const k of Object.keys(row)) {
-        const v = (row as any)[k];
-        if (v !== null && v !== undefined && (typeof v !== 'string' || v.trim() !== '')) {
-          counts[k] = (counts[k] ?? 0) + 1;
-        }
-      }
-    }
-    console.table(Object.entries(counts).map(([k, n]) => ({ campo: k, linhasComValor: n })));
-    console.log('>> Cabeçalhos brutos (linha 1):', Object.keys(raw_data?.[0] ?? {}));
 
-    const recognizedKeys = Array.from(new Set(mappedData.flatMap(r => Object.keys(r))));
-    const usefulKeys = recognizedKeys.filter(k => k !== 'data');
-
-    if (usefulKeys.length < 2) {
-      console.warn('⚠️ Poucas colunas reconhecidas:', recognizedKeys);
-      toast({
-        title: "Poucas colunas reconhecidas",
-        description: `Prosseguindo para revisão mesmo assim. Campos: ${recognizedKeys.join(', ') || '(nenhum)'}.`,
-      });
-    }
-    
     const uploadTimestamp = Date.now();
     const allFileNames = fileNames.join(', ');
+    let newItemsCount = 0;
+    let updatedItemsCount = 0;
     
     const dataToStage = mappedData.map((item, index) => {
-      const docId = `staged-${uploadTimestamp}-${index}`;
-      const salePayload: any = { 
-          ...item, 
-          id: docId, 
-          sourceFile: allFileNames,
-          uploadTimestamp: new Date(uploadTimestamp) // Use JS Date for local state
-      };
-      const saleDate = toDate(item.data);
-      if (saleDate) {
-          salePayload.data = saleDate;
-      } else {
-          delete salePayload.data;
-      }
-      return salePayload;
+        const existingSale = item.codigo ? salesFromDbByCodigo.get(item.codigo) : undefined;
+        
+        if (existingSale) {
+            // Merge data: new data overwrites existing
+            updatedItemsCount++;
+            return { 
+                ...existingSale, 
+                ...item,
+                sourceFile: allFileNames,
+                uploadTimestamp: new Date(uploadTimestamp) // Use JS Date for local state
+            };
+        } else {
+            // New sale
+            newItemsCount++;
+            const docId = `staged-${uploadTimestamp}-${index}`;
+            const salePayload: any = { 
+                ...item, 
+                id: docId, 
+                sourceFile: allFileNames,
+                uploadTimestamp: new Date(uploadTimestamp) // Use JS Date for local state
+            };
+            const saleDate = toDate(item.data);
+            if (saleDate) {
+                salePayload.data = saleDate;
+            } else {
+                delete salePayload.data;
+            }
+            return salePayload;
+        }
     });
     
-    console.log("[stage] linhas mapeadas:", mappedData.length);
-    console.log("[stage] linhas para staging:", dataToStage.length);
     setStagedSales(prev => [...prev, ...dataToStage]);
     setStagedFileNames(prev => [...new Set([...prev, ...fileNames])]);
 
     toast({
         title: "Dados Prontos para Revisão",
-        description: `${dataToStage.length} registros foram carregados e estão prontos para serem salvos no banco.`,
+        description: `${newItemsCount} novos registros e ${updatedItemsCount} atualizações carregados.`,
     });
   };
 
@@ -439,10 +444,12 @@ export default function VendasPage() {
         for (let i = 0; i < chunks.length; i++) {
             const chunk = chunks[i];
             const batch = writeBatch(db);
+            
             chunk.forEach((item) => {
-                const docId = `uploaded-${item.uploadTimestamp.getTime()}-${item.id.split('-').pop()}`;
+                const isUpdate = !item.id.startsWith('staged-');
+                const docId = isUpdate ? item.id : `uploaded-${item.uploadTimestamp.getTime()}-${item.id.split('-').pop()}`;
                 const saleRef = doc(db, "vendas", docId);
-                const { ...payload } = item;
+                const { id, ...payload } = item;
                 
                 // Convert dates back to Timestamps for Firestore
                 if (payload.data instanceof Date) {
@@ -451,9 +458,14 @@ export default function VendasPage() {
                  if (payload.uploadTimestamp instanceof Date) {
                   payload.uploadTimestamp = Timestamp.fromDate(payload.uploadTimestamp);
                 }
-
-                batch.set(saleRef, { ...payload, id: docId });
+                
+                if (isUpdate) {
+                    batch.update(saleRef, payload);
+                } else {
+                    batch.set(saleRef, { ...payload, id: docId });
+                }
             });
+            
             await batch.commit();
             setSaveProgress(((i + 1) / chunks.length) * 100);
         }
