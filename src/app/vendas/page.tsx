@@ -71,7 +71,6 @@ import { SupportDataDialog } from "@/components/support-data-dialog";
 import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
 import { Progress } from "@/components/ui/progress";
-import type { ColumnMapping } from "@/components/column-mapping";
 
 
 // Helper to convert multiple date formats to a Date object or null
@@ -874,3 +873,5 @@ export default function VendasPage() {
     </SidebarProvider>
   );
 }
+
+    

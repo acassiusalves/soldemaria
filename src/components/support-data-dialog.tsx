@@ -19,7 +19,14 @@ import { useToast } from "@/hooks/use-toast";
 import ColumnMapping, { type ColumnMapping as ColumnMappingType } from "@/components/column-mapping";
 import { resolveSystemKey } from "@/app/vendas/page";
 import { ScrollArea } from "./ui/scroll-area";
+import type { VendaDetalhada } from "@/lib/data";
 
+type UploadPayload = {
+  rows: any[];
+  fileName: string;
+  mapping: Record<string, string>;
+  assoc: { fileColumn: string; systemKey: keyof VendaDetalhada };
+};
 
 type FileWithData = {
     file: File;
@@ -31,7 +38,7 @@ type FileWithData = {
 
 interface SupportDataDialogProps {
   children: React.ReactNode;
-  onProcessData: (data: any[], fileName: string, mappings: ColumnMappingType[], associationKey: string) => void;
+  onProcessData: (payloads: UploadPayload[]) => void;
   uploadedFileNames: string[];
   stagedFileNames: string[];
   onRemoveUploadedFile: (fileName: string) => Promise<void> | void;
@@ -115,9 +122,23 @@ export function SupportDataDialog({ children, onProcessData, uploadedFileNames, 
         return;
     }
 
-    filesToProcess.forEach(f => {
-        onProcessData(f.data, f.file.name, f.mappings, f.associationKey);
+    const payloads: UploadPayload[] = filesToProcess.map(f => {
+      const activeMappings = f.mappings.filter(m => m.isActive);
+      const mapping = Object.fromEntries(activeMappings.map(m => [m.originalHeader, m.systemHeader]));
+      const assoc: UploadPayload['assoc'] = { 
+        fileColumn: f.associationKey, 
+        systemKey: "codigo" // For now, we hardcode association to 'codigo'
+      };
+
+      return {
+          rows: f.data,
+          fileName: f.file.name,
+          mapping,
+          assoc,
+      };
     });
+    
+    onProcessData(payloads);
     
     setIsOpen(false);
     setFilesToProcess([]);
@@ -207,3 +228,5 @@ export function SupportDataDialog({ children, onProcessData, uploadedFileNames, 
     </Dialog>
   );
 }
+
+    
