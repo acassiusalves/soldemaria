@@ -130,7 +130,7 @@ export default function DashboardPage() {
         <header className="flex items-center justify-between p-4 border-b">
           <div className="flex items-center gap-4">
             <SidebarTrigger className="md:hidden" />
-            <h1 className="text-2xl font-semibold font-headline text-foreground/90">
+            <h1 className="text-h2 font-bold font-headline text-foreground/90">
               Painel de Controle
             </h1>
           </div>
@@ -238,7 +238,7 @@ export default function DashboardPage() {
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
             <Card className="lg:col-span-2">
               <CardHeader>
-                <CardTitle className="font-headline">Visão Geral das Vendas</CardTitle>
+                <CardTitle className="font-headline text-h3">Visão Geral das Vendas</CardTitle>
                 <CardDescription>
                   Receita por mês no período selecionado.
                 </CardDescription>
@@ -252,7 +252,7 @@ export default function DashboardPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle className="font-headline">Histórico de Vendas</CardTitle>
+              <CardTitle className="font-headline text-h3">Histórico de Vendas</CardTitle>
               <CardDescription>
                 Uma lista detalhada das vendas recentes na sua loja.
               </CardDescription>

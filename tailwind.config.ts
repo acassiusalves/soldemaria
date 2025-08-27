@@ -14,6 +14,13 @@ export default {
         headline: ['Poppins', 'sans-serif'],
         code: ['monospace'],
       },
+      fontSize: {
+        'h1': ['3rem', '3.5rem'], // 48px/56px
+        'h2': ['2.25rem', '2.75rem'], // 36px/44px
+        'h3': ['1.75rem', '2.25rem'], // 28px/36px
+        'body': ['1rem', '1.5rem'], // 16px/24px
+        'body-lg': ['1.125rem', '1.75rem'], // 18px/28px
+      },
       colors: {
         background: 'hsl(var(--background))',
         foreground: 'hsl(var(--foreground))',
