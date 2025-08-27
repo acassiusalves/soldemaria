@@ -334,6 +334,14 @@ type ImportStats = {
   newRows: number;
 };
 
+type UploadPayload = {
+  rows: any[];
+  fileName: string;
+  mapping: Record<string, string>;
+  assoc: { fileColumn: string; systemKey: keyof VendaDetalhada };
+};
+
+
 export default function VendasPage() {
   const [salesFromDb, setSalesFromDb] = React.useState<VendaDetalhada[]>([]);
   const [stagedSales, setStagedSales] = React.useState<VendaDetalhada[]>([]);
@@ -413,120 +421,84 @@ export default function VendasPage() {
     });
   }, [date, allSales]);
   
-  const handleProcessAndStageData = (raw_data: any[], fileName: string, mappings: ColumnMapping[], associationKey: string) => {
+  const handleProcessAndStageData = (payloads: UploadPayload[]) => {
     setImportStats(null); // Reset stats on new upload
-
-    // 1) Mapeia os dados brutos usando as definições do usuário
-    const mappedData = raw_data.map((row) => {
-        const newRow: any = {};
-        for (const m of mappings) {
-            if (m.isActive && row[m.originalHeader] !== undefined) {
-                newRow[m.systemHeader] = cleanNumericValue(row[m.originalHeader]);
-            }
-        }
-        return newRow;
-    });
-
     const uploadTimestamp = Date.now();
-
-    // 2) Agrupa os dados do banco por chave de associação
-    const dbByCode = new Map<string, VendaDetalhada[]>();
-    salesFromDb.forEach(s => {
-        if((s as any)[associationKey] != null) {
-            const code = normCode((s as any)[associationKey]);
-            if (!dbByCode.has(code)) dbByCode.set(code, []);
-            dbByCode.get(code)!.push(s);
-        }
-    });
-
-    const stagedByCode = new Map<string, any>();
-    const stagedNewRows: any[] = [];
+  
+    const indexBy: Partial<Record<keyof VendaDetalhada, Map<string, VendaDetalhada>>> = {
+        codigo: new Map(salesFromDb.filter(s => s.codigo != null).map(s => [normCode((s as any).codigo), s])),
+    };
+  
+    let totalNew = 0;
+    let totalUpdates = 0;
+    let totalMatched = 0;
+    let totalUnmatched = 0;
+  
+    const stagedById = new Map<string, VendaDetalhada>();
+    const stagedRows: VendaDetalhada[] = [];
+  
+    for (const payload of payloads) {
+        const { rows, fileName, mapping, assoc } = payload;
+  
+        for (let i = 0; i < rows.length; i++) {
+            const raw = rows[i];
     
-    const mergedHeaderCodes = new Set<string>();
-    const associatedDetailCodes = new Set<string>();
-    let associatedDetailRows = 0;
-    const newCodeSet = new Set<string>();
-    let noCodeRows = 0;
-
-    for (let i = 0; i < mappedData.length; i++) {
-        const row = mappedData[i];
-        const code = normCode(row[associationKey]);
-
-        if (!code) {
-            noCodeRows++;
-            const docId = `staged-${uploadTimestamp}-nocode-${i}`;
-            const payload = { ...row, id: docId, sourceFile: fileName, uploadTimestamp: new Date(uploadTimestamp) };
-            if (payload.data) payload.data = toDate(payload.data) || payload.data;
-            stagedNewRows.push(payload);
-            continue;
-        }
-
-        const fromDbItems = dbByCode.get(code);
-        const isDetail = isDetailRow(row);
-
-        if (isDetail) {
-            if (fromDbItems) associatedDetailCodes.add(code);
-            associatedDetailRows++;
-            
-            const docId = `staged-${uploadTimestamp}-detail-${i}`;
-            const payload = { ...row, [associationKey]: code, id: docId, sourceFile: fileName, uploadTimestamp: new Date(uploadTimestamp) };
-            if (payload.data) payload.data = toDate(payload.data) || payload.data;
-            stagedNewRows.push(payload);
-
-        } else {
-            if (fromDbItems) {
-                const headerFromDb = fromDbItems.find(item => !isDetailRow(item)) || fromDbItems[0];
-                const alreadyStaged = stagedByCode.get(code);
-                const base = alreadyStaged || headerFromDb;
-                const merged = mergeNonEmpty(base, { ...row, [associationKey]: code });
-
+            const mapped: any = {};
+            for (const fileHeader in raw) {
+                const systemKey = mapping[fileHeader]; 
+                if (!systemKey) continue;
+                mapped[systemKey] = cleanNumericValue(raw[fileHeader]);
+            }
+    
+            const assocValueRaw = raw[assoc.fileColumn];
+            const assocValue = normCode(assocValueRaw);
+    
+            const index = indexBy[assoc.systemKey];
+            const match = assocValue && index ? index.get(assocValue) : undefined;
+    
+            if (match) {
+                totalMatched++;
+                const merged = mergeNonEmpty(match as any, mapped);
                 merged.sourceFile = fileName;
                 merged.uploadTimestamp = new Date(uploadTimestamp);
-                stagedByCode.set(code, merged);
-                mergedHeaderCodes.add(code);
+    
+                stagedById.set((match as any).id, { ...(match as any), ...merged });
             } else {
-                const docId = `staged-${uploadTimestamp}-newcode-${i}`;
-                const payload = { ...row, [associationKey]: code, id: docId, sourceFile: fileName, uploadTimestamp: new Date(uploadTimestamp) };
-                if (payload.data) payload.data = toDate(payload.data) || payload.data;
-                stagedNewRows.push(payload);
-                newCodeSet.add(code);
+                totalUnmatched++;
+                const docId = `staged-${uploadTimestamp}-${stagedRows.length}`;
+                const salePayload: any = {
+                    ...mapped,
+                    id: docId,
+                    sourceFile: fileName,
+                    uploadTimestamp: new Date(uploadTimestamp),
+                };
+    
+                if (assoc.systemKey === "codigo" && assocValue) {
+                    salePayload.codigo = assocValue;
+                }
+    
+                const d = toDate(mapped.data);
+                if (d) salePayload.data = d; else delete salePayload.data;
+    
+                stagedRows.push(salePayload);
             }
         }
     }
   
-    const dataToStage = [
-      ...Array.from(stagedByCode.values()),
-      ...stagedNewRows,
-    ];
+    const updates = Array.from(stagedById.values());
+    const finalStage = [...updates, ...stagedRows];
   
-    setStagedSales(prev => [...prev, ...dataToStage]);
-    setStagedFileNames(prev => [...new Set([...prev, fileName])]);
+    totalUpdates += updates.length;
+    totalNew += stagedRows.length;
   
-    const associatedOrders = new Set<string>([ ...mergedHeaderCodes, ...associatedDetailCodes ]).size;
-
-    const stats: ImportStats = {
-      associatedOrders,
-      mergedHeaders: mergedHeaderCodes.size,
-      associatedDetailRows,
-      newCodes: newCodeSet.size,
-      noCodeRows,
-      newRows: dataToStage.length,
-    };
-
-    setImportStats(stats);
-    console.log("📊 Import stats:", stats);
-
-    const parts = [
-      stats.associatedOrders ? `${stats.associatedOrders} pedido(s) associados` : null,
-      stats.mergedHeaders ? `${stats.mergedHeaders} cabeçalho(s) atualizado(s)` : null,
-      stats.associatedDetailRows ? `${stats.associatedDetailRows} item(ns) associado(s)` : null,
-      stats.newCodes ? `${stats.newCodes} código(s) novo(s)` : null,
-      stats.noCodeRows ? `${stats.noCodeRows} linha(s) sem código` : null,
-    ].filter(Boolean);
+    setStagedSales(prev => [...prev, ...finalStage]);
+    setStagedFileNames(prev => [
+        ...new Set([...prev, ...payloads.map(p => p.fileName)])
+    ]);
 
     toast({
       title: "Dados prontos para revisão",
-      description: parts.join(" · ") || `${stats.newRows} registro(s) carregado(s).`,
+      description: `${totalNew} novos, ${totalUpdates} atualizados • associados: ${totalMatched} • não encontrados: ${totalUnmatched}.`,
     });
   };
 
