@@ -1,4 +1,3 @@
-
 "use client";
 
 import * as React from "react";
@@ -326,6 +325,15 @@ const isDetailRow = (row: Record<string, any>) =>
 
 const MotionCard = motion(Card);
 
+type ImportStats = {
+  associatedOrders: number;
+  mergedHeaders: number;
+  associatedDetailRows: number;
+  newCodes: number;
+  noCodeRows: number;
+  newRows: number;
+};
+
 export default function VendasPage() {
   const [salesFromDb, setSalesFromDb] = React.useState<VendaDetalhada[]>([]);
   const [stagedSales, setStagedSales] = React.useState<VendaDetalhada[]>([]);
@@ -337,6 +345,7 @@ export default function VendasPage() {
   const [date, setDate] = React.useState<DateRange | undefined>(undefined);
   const [isSaving, setIsSaving] = React.useState(false);
   const [saveProgress, setSaveProgress] = React.useState(0);
+  const [importStats, setImportStats] = React.useState<ImportStats | null>(null);
 
   // Listen for real-time updates from Firestore
   React.useEffect(() => {
@@ -407,6 +416,7 @@ export default function VendasPage() {
   const handleDataUpload = async (raw_data: any[], fileNames: string[]) => {
     if (raw_data.length === 0) return;
   
+    setImportStats(null); // Reset stats on new upload
     // 1) mapear planilha -> chaves do sistema
     const mappedData = raw_data.map((row) => {
       const newRow: any = {};
@@ -429,70 +439,69 @@ export default function VendasPage() {
     const allFileNames = fileNames.join(", ");
   
     // 2) índice do banco por código (normalizado)
-    const dbByCode = new Map(
-      salesFromDb
-        .filter(s => s.codigo != null)
-        .map(s => [normCode((s as any).codigo), s])
-    );
+    const dbByCode = new Map<string, VendaDetalhada[]>();
+    salesFromDb.forEach(s => {
+        if(s.codigo != null) {
+            const code = normCode((s as any).codigo);
+            if (!dbByCode.has(code)) dbByCode.set(code, []);
+            dbByCode.get(code)!.push(s);
+        }
+    });
+
+    const stagedByCode = new Map<string, any>(); 
+    const stagedNewRows: any[] = [];
   
-    // 3) para não fazer várias “atualizações” do mesmo pedido em sequencia,
-    //    acumulamos o merge por código primeiro
-    const stagedByCode = new Map<string, any>(); // cabeçalhos mesclados
-    const stagedNewRows: any[] = [];             // linhas novas (itens/detalhes)
-  
-    let newItemsCount = 0;
-    let updatedItemsCount = 0;
-  
+    const mergedHeaderCodes = new Set<string>();
+    const associatedDetailCodes = new Set<string>();
+    let associatedDetailRows = 0;
+    const newCodeSet = new Set<string>();
+    let noCodeRows = 0;
+
     for (let i = 0; i < mappedData.length; i++) {
-      const row = mappedData[i];
-      const code = normCode(row.codigo);
-  
-      // se não tem código, vira entrada nova comum
-      if (!code) {
-        const docId = `staged-${uploadTimestamp}-${i}`;
-        const payload: any = {
-          ...row,
-          id: docId,
-          sourceFile: allFileNames,
-          uploadTimestamp: new Date(uploadTimestamp),
-        };
-        const d = toDate(row.data);
-        if (d) payload.data = d; else delete payload.data;
-        stagedNewRows.push(payload);
-        newItemsCount++;
-        continue;
-      }
-  
-      const fromDb = dbByCode.get(code);
-  
-      // Diferenciar detalhe x cabeçalho:
-      if (isDetailRow(row) || !fromDb) {
-        // detalhe (ou não existe no banco): cria nova linha
-        const docId = `staged-${uploadTimestamp}-${i}`;
-        const payload: any = {
-          ...row,
-          codigo: code,
-          id: docId,
-          sourceFile: allFileNames,
-          uploadTimestamp: new Date(uploadTimestamp),
-        };
-        const d = toDate(row.data);
-        if (d) payload.data = d; else delete payload.data;
-  
-        stagedNewRows.push(payload);
-        newItemsCount++;
-      } else {
-        // cabeçalho existente: mescla **sem sobrescrever com vazio**
-        const already = stagedByCode.get(code) ?? fromDb;
-        const merged = mergeNonEmpty(already as any, { ...row, codigo: code });
-  
-        // garante meta
-        merged.sourceFile = allFileNames;
-        merged.uploadTimestamp = new Date(uploadTimestamp);
-  
-        stagedByCode.set(code, merged);
-        updatedItemsCount++;
-      }
+        const row = mappedData[i];
+        const code = normCode(row.codigo);
+
+        if (!code) {
+            noCodeRows++;
+            const docId = `staged-${uploadTimestamp}-nocode-${i}`;
+            const payload = { ...row, id: docId, sourceFile: allFileNames, uploadTimestamp: new Date(uploadTimestamp) };
+            if (payload.data) payload.data = toDate(payload.data) || payload.data;
+            stagedNewRows.push(payload);
+            continue;
+        }
+
+        const fromDbItems = dbByCode.get(code);
+        const isDetail = isDetailRow(row);
+
+        if (isDetail) { // É uma linha de item/detalhe
+            if (fromDbItems) associatedDetailCodes.add(code);
+            associatedDetailRows++;
+            
+            const docId = `staged-${uploadTimestamp}-detail-${i}`;
+            const payload = { ...row, codigo: code, id: docId, sourceFile: allFileNames, uploadTimestamp: new Date(uploadTimestamp) };
+            if (payload.data) payload.data = toDate(payload.data) || payload.data;
+            stagedNewRows.push(payload);
+
+        } else { // É uma linha de cabeçalho
+            if (fromDbItems) { // Existe no banco, então é um merge
+                const headerFromDb = fromDbItems.find(item => !isDetailRow(item)) || fromDbItems[0];
+                const alreadyStaged = stagedByCode.get(code);
+                const base = alreadyStaged || headerFromDb;
+                const merged = mergeNonEmpty(base, { ...row, codigo: code });
+
+                merged.sourceFile = allFileNames;
+                merged.uploadTimestamp = new Date(uploadTimestamp);
+                stagedByCode.set(code, merged);
+                mergedHeaderCodes.add(code);
+
+            } else { // Não existe no banco, é um código novo
+                const docId = `staged-${uploadTimestamp}-newcode-${i}`;
+                const payload = { ...row, codigo: code, id: docId, sourceFile: allFileNames, uploadTimestamp: new Date(uploadTimestamp) };
+                if (payload.data) payload.data = toDate(payload.data) || payload.data;
+                stagedNewRows.push(payload);
+                newCodeSet.add(code);
+            }
+        }
     }
   
     // 4) monta o array final para staging:
@@ -504,10 +513,35 @@ export default function VendasPage() {
     setStagedSales(prev => [...prev, ...dataToStage]);
     setStagedFileNames(prev => [...new Set([...prev, ...fileNames])]);
   
-    // feedback
+    // consolida estatísticas
+    const associatedOrders = new Set<string>([
+      ...mergedHeaderCodes,
+      ...associatedDetailCodes,
+    ]).size;
+
+    const stats: ImportStats = {
+      associatedOrders,
+      mergedHeaders: mergedHeaderCodes.size,
+      associatedDetailRows,
+      newCodes: newCodeSet.size,
+      noCodeRows,
+      newRows: dataToStage.length,
+    };
+
+    setImportStats(stats);
+    console.log("📊 Import stats:", stats);
+
+    const parts = [
+      stats.associatedOrders ? `${stats.associatedOrders} pedido(s) associados` : null,
+      stats.mergedHeaders ? `${stats.mergedHeaders} cabeçalho(s) atualizado(s)` : null,
+      stats.associatedDetailRows ? `${stats.associatedDetailRows} item(ns) associado(s)` : null,
+      stats.newCodes ? `${stats.newCodes} código(s) novo(s)` : null,
+      stats.noCodeRows ? `${stats.noCodeRows} linha(s) sem código` : null,
+    ].filter(Boolean);
+
     toast({
-      title: "Dados Prontos para Revisão",
-      description: `${newItemsCount} novos registros e ${updatedItemsCount} atualizações carregados.`,
+      title: "Dados prontos para revisão",
+      description: parts.join(" · ") || `${stats.newRows} registro(s) carregado(s).`,
     });
   };
 
@@ -519,6 +553,7 @@ export default function VendasPage() {
     
     setIsSaving(true);
     setSaveProgress(0);
+    setImportStats(null); // Clear stats when saving starts
 
     try {
         const chunks = [];
@@ -532,7 +567,7 @@ export default function VendasPage() {
             
             chunk.forEach((item) => {
                 const isUpdate = !String(item.id).startsWith('staged-');
-                const docId = isUpdate ? item.id : `uploaded-${item.uploadTimestamp.getTime()}-${item.id.split('-').pop()}`;
+                const docId = isUpdate ? item.id : doc(collection(db, "vendas")).id;
                 const saleRef = doc(db, "vendas", docId);
                 const { id, ...payload } = item;
                 
@@ -555,20 +590,26 @@ export default function VendasPage() {
             setSaveProgress(((i + 1) / chunks.length) * 100);
         }
 
-        const allKeys = Array.from(new Set(stagedSales.flatMap(row => Object.keys(row))));
-        if (!allKeys.includes("data") && stagedSales.some(r => r.data)) {
-          allKeys.push("data");
+        const allKeys = new Set<string>();
+        stagedSales.forEach(row => Object.keys(row).forEach(key => allKeys.add(key)));
+        salesFromDb.forEach(row => Object.keys(row).forEach(key => allKeys.add(key)));
+
+        if (!allKeys.has("data") && stagedSales.some(r => r.data)) {
+          allKeys.add("data");
         }
 
-        const detectedColumns: ColumnDef[] = allKeys.map(key => ({
-            id: key,
-            label: getLabel(key),
-            isSortable: true
-        }));
-        
+        const currentColumns = new Map(columns.map(c => [c.id, c]));
+        allKeys.forEach(key => {
+            if (!currentColumns.has(key)) {
+                currentColumns.set(key, { id: key, label: getLabel(key), isSortable: true });
+            }
+        });
+
+        const newColumns = Array.from(currentColumns.values());
+
         const newUploadedFileNames = [...new Set([...uploadedFileNames, ...stagedFileNames])];
         const metaRef = doc(db, "metadata", "vendas");
-        await updateDoc(metaRef, { columns: detectedColumns, uploadedFileNames: newUploadedFileNames });
+        await updateDoc(metaRef, { columns: newColumns, uploadedFileNames: newUploadedFileNames });
 
         setStagedSales([]);
         setStagedFileNames([]);
@@ -587,7 +628,6 @@ export default function VendasPage() {
         });
     } finally {
         setIsSaving(false);
-        // Reset progress after a short delay
         setTimeout(() => setSaveProgress(0), 1000);
     }
   };
@@ -617,6 +657,7 @@ export default function VendasPage() {
   const handleClearStagedData = () => {
     setStagedSales([]);
     setStagedFileNames([]);
+    setImportStats(null);
     toast({
       title: "Dados em revisão removidos",
     });
@@ -763,6 +804,11 @@ export default function VendasPage() {
                         Dados de Apoio
                       </Button>
                     </SupportDataDialog>
+                    {importStats && stagedSales.length > 0 && (
+                      <span className="rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground whitespace-nowrap">
+                        Associados: {importStats.associatedOrders} · Atualizados: {importStats.mergedHeaders} · Itens: {importStats.associatedDetailRows} · Novos: {importStats.newCodes}
+                      </span>
+                    )}
                      {stagedSales.length > 0 && (
                       <Button
                         onClick={handleClearStagedData}
@@ -871,5 +917,3 @@ export default function VendasPage() {
     </SidebarProvider>
   );
 }
-
-    
