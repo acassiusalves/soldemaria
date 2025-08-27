@@ -61,7 +61,7 @@ export const salesData: Venda[] = [
 
 export type VendaDetalhada = {
   id: string;
-  data: string; // YYYY-MM-DD
+  data: any; // Allow different date types during upload
   codigo: number;
   parcelas1: number;
   bandeira1: string;
@@ -77,22 +77,5 @@ export type VendaDetalhada = {
   embalagem?: number;
   comissao?: number;
   final: number;
+  nomeCliente?: string;
 };
-
-export const detailedSalesData: VendaDetalhada[] = [
-  { id: "1", data: "2025-06-30", codigo: 350826, parcelas1: 1, bandeira1: "Mastercard", valorParcela1: 119.90, taxaCartao1: 4.29, embalagem: 2.16, comissao: 1.80, final: 119.90 },
-  { id: "2", data: "2025-06-30", codigo: 350827, parcelas1: 2, bandeira1: "Mastercard", valorParcela1: 99.90, taxaCartao1: 5.22, embalagem: 2.16, comissao: 1.50, final: 99.90 },
-  { id: "3", data: "2025-06-30", codigo: 350834, parcelas1: 1, bandeira1: "Stone", valorParcela1: 89.90, taxaCartao1: 0.00, embalagem: 2.16, comissao: 1.35, final: 89.90 },
-  // Adding more mock data based on the pattern
-  { id: "4", data: "2025-07-01", codigo: 350835, parcelas1: 3, bandeira1: "Visa", valorParcela1: 150.00, taxaCartao1: 6.50, embalagem: 3.00, comissao: 2.25, final: 150.00 },
-  { id: "5", data: "2025-07-01", codigo: 350836, parcelas1: 1, bandeira1: "Elo", valorParcela1: 75.50, taxaCartao1: 2.10, embalagem: 1.50, comissao: 1.13, final: 75.50 },
-  { id: "6", data: "2025-07-02", codigo: 350837, parcelas1: 4, bandeira1: "Mastercard", valorParcela1: 220.00, taxaCartao1: 10.80, embalagem: 4.00, comissao: 3.30, final: 220.00 },
-  { id: "7", data: "2025-07-03", codigo: 350838, parcelas1: 2, bandeira1: "Stone", valorParcela1: 130.00, taxaCartao1: 0.00, embalagem: 2.50, comissao: 1.95, final: 130.00 },
-  { id: "8", data: "2025-07-03", codigo: 350839, parcelas1: 1, bandeira1: "Visa", valorParcela1: 95.00, taxaCartao1: 3.50, embalagem: 2.00, comissao: 1.42, final: 95.00 },
-  { id: "9", data: "2025-07-04", codigo: 350840, parcelas1: 6, bandeira1: "Hipercard", valorParcela1: 350.00, taxaCartao1: 15.00, embalagem: 5.00, comissao: 5.25, final: 350.00 },
-  { id: "10", data: "2025-07-05", codigo: 350841, parcelas1: 1, bandeira1: "Mastercard", valorParcela1: 110.00, taxaCartao1: 4.10, embalagem: 2.10, comissao: 1.65, final: 110.00 },
-  { id: "11", data: "2025-07-06", codigo: 350842, parcelas1: 2, bandeira1: "Visa", valorParcela1: 180.00, taxaCartao1: 7.90, embalagem: 3.50, comissao: 2.70, final: 180.00 },
-  { id: "12", data: "2025-07-07", codigo: 350843, parcelas1: 1, bandeira1: "Amex", valorParcela1: 500.00, taxaCartao1: 20.00, embalagem: 10.00, comissao: 7.50, final: 500.00 }
-];
-
-    
