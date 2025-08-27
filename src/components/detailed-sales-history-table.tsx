@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
-import { format } from "date-fns";
+import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { ArrowUpDown, Columns, ChevronRight } from "lucide-react";
 import { VendaDetalhada } from "@/lib/data";
@@ -39,22 +39,16 @@ type SortDirection = "asc" | "desc";
 
 type VendaAgrupada = {
   id: string; // Usaremos o ID do primeiro item do grupo
-  codigo: number;
+  codigo: string;
   items: VendaDetalhada[];
   // O primeiro item do grupo será a "referência" para dados comuns
   data: any; 
   nomeCliente?: string;
   vendedor?: string;
   cidade?: string;
+  origem?: string;
+  logistica?: string;
   final: number; // Soma dos finais
-};
-
-const formatCurrency = (value?: number) => {
-  if (value === undefined || value === null) return "N/A";
-  return value.toLocaleString("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  });
 };
 
 export type ColumnDef = {
@@ -133,12 +127,16 @@ export default function DetailedSalesHistoryTable({ data, columns }: DetailedSal
       // Ensure any new columns from staged data are at least visible by default if not in storage
       keys.forEach(k => {
         if (mergedVisibility[k] === undefined) {
-          mergedVisibility[k] = true; 
+          // Find if this key was part of the initial defaults
+          const detailKeys = ['item', 'descricao', 'quantidade', 'custoUnitario', 'valorUnitario', 'valorCredito', 'valorDescontos'];
+          const defaultVisibleKeys = mainColumns.filter(c => !detailKeys.includes(c.id)).slice(0, DEFAULT_MAIN_COUNT).map(c => c.id);
+          mergedVisibility[k] = defaultVisibleKeys.includes(k); 
         }
       });
       setColumnVisibility(mergedVisibility);
       return;
     }
+
     const initial: Record<string, boolean> = {};
     const detailKeys = ['item', 'descricao', 'quantidade', 'custoUnitario', 'valorUnitario', 'valorCredito', 'valorDescontos'];
     const defaultVisibleKeys = mainColumns.filter(c => !detailKeys.includes(c.id)).slice(0, DEFAULT_MAIN_COUNT).map(c => c.id);
@@ -166,17 +164,27 @@ export default function DetailedSalesHistoryTable({ data, columns }: DetailedSal
       groups[sale.codigo].push(sale);
     });
 
+    const notEmpty = (v: any) =>
+      v !== undefined && v !== null && (typeof v !== "string" || v.trim() !== "");
+
     return Object.values(groups).map((items): VendaAgrupada => {
       const firstItem = items[0];
+      
+      const findFirstValid = (key: keyof VendaDetalhada) =>
+        items.find(i => notEmpty((i as any)[key]))?.[key];
+
       return {
-        id: firstItem.id, // ID único para a linha agrupada
-        codigo: firstItem.codigo,
-        items: items,
-        data: firstItem.data,
-        nomeCliente: firstItem.nomeCliente,
-        vendedor: firstItem.vendedor,
-        cidade: firstItem.cidade,
-        final: items.reduce((sum, item) => sum + (item.final || 0), 0)
+        ...firstItem,
+        id: firstItem.id,
+        items,
+        codigo: (findFirstValid("codigo") ?? (firstItem as any).codigo ?? "").toString(),
+        data: findFirstValid("data") ?? (firstItem as any).data,
+        nomeCliente: findFirstValid("nomeCliente") as any,
+        vendedor: findFirstValid("vendedor") as any,
+        cidade: findFirstValid("cidade") as any,
+        origem: findFirstValid("origem") as any,
+        logistica: findFirstValid("logistica") as any,
+        final: items.reduce((s, it) => s + (Number((it as any).final) || 0), 0),
       };
     });
   }, [data]);
@@ -245,31 +253,66 @@ export default function DetailedSalesHistoryTable({ data, columns }: DetailedSal
     </TableHead>
   );
 
-  const renderCell = (sale: VendaAgrupada, columnId: string) => {
-    const value = (sale as any)[columnId];
+  const renderCell = (row: any, columnId: string) => {
+    let value = row[columnId];
 
-    if (columnId === 'data' && value) {
-      let date = value;
-      if(value.toDate) date = value.toDate();
-      else if (typeof value === 'string') date = new Date(value);
+    if (value === null || value === undefined || (typeof value === "string" && value.trim() === "")) {
+      return "N/A";
+    }
 
-      if(date instanceof Date && !isNaN(date.getTime())) {
-          return format(date, "dd/MM/yyyy", { locale: ptBR });
+    // converte "0", "0,00", "1.234,56" -> número
+    const toNumber = (x: any) => {
+      if (typeof x === "number") return x;
+      if (typeof x === "string") {
+        const cleaned = x.replace(/\u00A0/g, "").replace(/[^0-9,.-]/g, "").replace(/\./g, "").replace(",", ".");
+        const n = Number(cleaned);
+        if (!Number.isNaN(n)) return n;
+      }
+      return null;
+    };
+
+    if (["final","custoFrete","imposto","embalagem","comissao","custoUnitario","valorUnitario","valorCredito","valorDescontos"]
+        .includes(columnId)) {
+      const n = toNumber(value);
+      if (n !== null) {
+        return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
       }
     }
-    
-    if(typeof value === 'number' && ['final', 'custoFrete', 'imposto', 'embalagem', 'comissao', 'custoUnitario', 'valorUnitario', 'valorCredito', 'valorDescontos'].includes(columnId)) {
-        return formatCurrency(value);
+
+    if (columnId === "data") {
+      const d = value?.toDate ? value.toDate() : (typeof value === 'string' ? parseISO(value) : value);
+      return d instanceof Date && !isNaN(d.getTime()) ? format(d, "dd/MM/yyyy", { locale: ptBR }) : "N/A";
     }
-    
-    return value ?? "N/A";
-  }
+
+    return String(value);
+  };
   
   const renderDetailCell = (sale: VendaDetalhada, columnId: string) => {
     const value = (sale as any)[columnId];
+    
+    // converte "0", "0,00", "1.234,56" -> número
+    const toNumber = (x: any) => {
+      if (typeof x === "number") return x;
+      if (typeof x === "string") {
+        const cleaned = x.replace(/\u00A0/g, "").replace(/[^0-9,.-]/g, "").replace(/\./g, "").replace(",", ".");
+        const n = Number(cleaned);
+        if (!Number.isNaN(n)) return n;
+      }
+      return null;
+    };
+
     if(typeof value === 'number' && ['final', 'custoUnitario', 'valorUnitario', 'valorCredito', 'valorDescontos'].includes(columnId)) {
-      return formatCurrency(value);
+      return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
     }
+
+    if (["final","custoFrete","imposto","embalagem","comissao","custoUnitario","valorUnitario","valorCredito","valorDescontos"]
+        .includes(columnId)) {
+      const n = toNumber(value);
+      if (n !== null) {
+        return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+      }
+    }
+    
     return value ?? "N/A";
   }
 

@@ -84,14 +84,14 @@ const toDate = (value: unknown): Date | null => {
   return null;
 };
 
-// utils: normaliza cabeçalhos p/ comparação robusta (remove NBSP, diacríticos, etc.)
+// normaliza inclusive NBSP e acentos
 const normalizeHeader = (s: string) =>
-  s
+  String(s)
     .toLowerCase()
-    .replace(/\u00A0/g, " ") // Replace non-breaking space with regular space
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^\w\s]/g, '')
-    .replace(/\s+/g, ' ')
+    .replace(/\u00A0/g, " ")                  // NBSP → espaço normal
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // tira acentos
+    .replace(/[^\w\s]/g, "")                  // tira pontuação
+    .replace(/\s+/g, " ")
     .trim();
 
 // Mapeamento de chave para rótulo amigável
@@ -130,109 +130,65 @@ const columnLabels: Record<string, string> = {
 
 const getLabel = (key: string) => columnLabels[key] || key;
 
+// mapeamento "direto" por cabeçalho normalizado
 const headerMappingNormalized: Record<string, string> = {
-  // Datas
-  'data': 'data',
-  'data da venda': 'data',
-  'data venda': 'data',
-  'data do recebimento': 'data',
-  'data recebimento': 'data',
-  'emissao': 'data',
+  // datas
+  "data": "data", "data da venda": "data", "data venda": "data",
+  "data do recebimento": "data", "data recebimento": "data", "emissao": "data",
 
-  // Código / Documento / Pedido / NF
-  'codigo': 'codigo',
-  'cod': 'codigo', 'cod.': 'codigo',
-  'documento': 'codigo', 'numero do documento': 'codigo', 'numero documento': 'codigo',
-  'nota fiscal': 'codigo', 'nota': 'codigo', 'nf': 'codigo', 'numero da nf': 'codigo',
-  'numero da venda': 'codigo', 'numero venda': 'codigo', 'n da venda': 'codigo', 'no da venda': 'codigo',
-  'numero do pedido': 'codigo', 'n do pedido': 'codigo', 'pedido': 'codigo',
+  // código / documento / pedido / nf
+  "codigo": "codigo", "cod": "codigo", "cod.": "codigo",
+  "documento": "codigo", "numero do documento": "codigo", "numero documento": "codigo",
+  "nota fiscal": "codigo", "nota": "codigo", "nf": "codigo", "numero da nf": "codigo",
+  "numero da venda": "codigo", "numero venda": "codigo", "n da venda": "codigo",
+  "no da venda": "codigo", "numero do pedido": "codigo", "n do pedido": "codigo", "pedido": "codigo",
 
-  // Cliente
-  'cliente': 'nomeCliente', 'nome do cliente': 'nomeCliente', 'nome cliente': 'nomeCliente',
-  'favorecido': 'nomeCliente', 'destinatario': 'nomeCliente', 'comprador': 'nomeCliente',
+  // cliente
+  "cliente": "nomeCliente", "nome do cliente": "nomeCliente", "nome cliente": "nomeCliente",
+  "favorecido": "nomeCliente", "destinatario": "nomeCliente", "comprador": "nomeCliente",
 
-  // Vendedor
-  'vendedor': 'vendedor', 'vendedora': 'vendedor', 'colaborador': 'vendedor',
-  'colaboradora': 'vendedor', 'responsavel': 'vendedor',
+  // vendedor
+  "vendedor": "vendedor", "vendedora": "vendedor",
+  "colaborador": "vendedor", "colaboradora": "vendedor", "responsavel": "vendedor",
 
-  // Cidade
-  'cidade': 'cidade', 'municipio': 'cidade', 'cidade/uf': 'cidade', 'cidade uf': 'cidade', 'municipio uf': 'cidade',
+  // cidade
+  "cidade": "cidade", "municipio": "cidade", "cidade uf": "cidade", "municipio uf": "cidade",
 
-  // Origem / Canal
-  'origem': 'origem', 'origem do pedido': 'origem', 'origem do cliente': 'origem',
-  'canal': 'origem', 'canal de venda': 'origem', 'marketplace': 'origem', 'plataforma': 'origem',
+  // origem / canal
+  "origem": "origem", "origem do pedido": "origem", "origem do cliente": "origem",
+  "canal": "origem", "canal de venda": "origem", "marketplace": "origem", "plataforma": "origem",
 
-  // Logística / Entrega
-  'logistica': 'logistica', 'logistica/entrega': 'logistica', 'forma de entrega': 'logistica',
-  'tipo de entrega': 'logistica', 'modalidade de entrega': 'logistica',
-  'entrega': 'logistica', 'envio': 'logistica', 'transportadora': 'logistica', 'correios': 'logistica',
-  'retirada': 'logistica', 'retirada na loja': 'logistica',
+  // logística / entrega
+  "logistica": "logistica", "logistica entrega": "logistica",
+  "forma de entrega": "logistica", "tipo de entrega": "logistica", "modalidade de entrega": "logistica",
+  "entrega": "logistica", "envio": "logistica", "transportadora": "logistica", "correios": "logistica",
+  "retirada": "logistica", "retirada na loja": "logistica",
 
-  // Tipo / Pagamento
-  'tipo': 'tipo', 'tipo de venda': 'tipo', 'tipo de recebimento': 'tipo', 'tipo do pedido': 'tipo',
-  'forma de pagamento': 'tipo', 'meio de pagamento': 'tipo', 'forma pgto': 'tipo',
-  'condicao de pagamento': 'tipo', 'condicao pagamento': 'tipo', 'pagamento': 'tipo',
+  // tipo / pagamento
+  "tipo": "tipo", "tipo de venda": "tipo", "tipo de recebimento": "tipo", "tipo do pedido": "tipo",
+  "forma de pagamento": "tipo", "meio de pagamento": "tipo", "forma pgto": "tipo",
+  "condicao de pagamento": "tipo", "condicao pagamento": "tipo", "pagamento": "tipo",
 
-  // Valores
-  'valor final': 'final', 'valor total': 'final', 'total': 'final',
-  'valor recebimento': 'final', 'valor recebido': 'final',
+  // valores
+  "valor final": "final", "valor total": "final", "total": "final",
+  "valor recebimento": "final", "valor recebido": "final",
 
-  // Frete (custo)
-  'frete': 'custoFrete', 'valor do frete': 'custoFrete', 'valor frete': 'custoFrete',
-  'taxa de entrega': 'custoFrete', 'valor entrega': 'custoFrete', 'custo do frete': 'custoFrete',
-  'custo frete': 'custoFrete', 'frete rs': 'custoFrete',
+  // frete (custo)
+  "frete": "custoFrete", "valor do frete": "custoFrete", "valor frete": "custoFrete",
+  "taxa de entrega": "custoFrete", "valor entrega": "custoFrete",
+  "custo do frete": "custoFrete", "custo frete": "custoFrete", "frete rs": "custoFrete",
 
-  // Itens (se existirem)
-  'item': 'item',
-  'descricao': 'descricao',
-  'qtd': 'quantidade', 'qtde': 'quantidade', 'quantidade': 'quantidade',
-  'custo unitario': 'custoUnitario', 'valor unitario': 'valorUnitario',
+  // itens
+  "item": "item", "descricao": "descricao",
+  "qtd": "quantidade", "qtde": "quantidade", "quantidade": "quantidade",
+  "custo unitario": "custoUnitario", "valor unitario": "valorUnitario",
 
-  // Outros custos
-  'imposto': 'imposto',
-  'custo embalagem': 'embalagem', 'embalagem': 'embalagem',
-  'comissao': 'comissao',
-};
+  // outros custos
+  "imposto": "imposto", "custo embalagem": "embalagem", "embalagem": "embalagem",
+  "comissao": "comissao",
 
-const resolveSystemKey = (normalized: string): string | undefined => {
-  if (headerMappingNormalized[normalized]) return headerMappingNormalized[normalized];
-
-  // Fallbacks por conteúdo do nome
-  if (normalized.includes('data')) return 'data';
-
-  if (normalized.startsWith('cod') || (
-      normalized.includes('numero') && (
-        normalized.includes('venda') || normalized.includes('pedido') || normalized.includes('document')
-      ))) return 'codigo';
-
-  if (normalized.includes('cliente') || normalized.includes('favorecido') ||
-      normalized.includes('destinatario') || normalized.includes('comprador')) return 'nomeCliente';
-
-  if (normalized.includes('vended') || normalized.includes('colaborador') || normalized.includes('responsavel')) return 'vendedor';
-
-  if (normalized.includes('cidade') || normalized.includes('municipio')) return 'cidade';
-
-  if (normalized.includes('origem') || normalized.includes('canal') || normalized.includes('marketplace') || normalized.includes('plataforma')) return 'origem';
-
-  if (normalized.includes('logistica') || normalized.includes('entrega') || normalized.includes('envio') ||
-      normalized.includes('transportadora') || normalized.includes('correios') || normalized.includes('retirada')) return 'logistica';
-
-  if (normalized.includes('tipo') || normalized.includes('forma de pagamento') || normalized.includes('meio de pagamento') ||
-      normalized.includes('condicao de pagamento') || normalized.includes('pagamento') || normalized.includes('recebiment')) return 'tipo';
-
-  if (normalized.includes('frete') || (normalized.includes('taxa') && normalized.includes('entrega')) ||
-      (normalized.includes('valor') && (normalized.includes('frete') || normalized.includes('entrega')))) return 'custoFrete';
-
-  if (normalized.includes('total') || (normalized.includes('valor') && (normalized.includes('final') || normalized.includes('recebid')))) return 'final';
-
-  if (normalized.includes('desconto')) return 'valorDescontos';
-  if (normalized.includes('credito')) return 'valorCredito';
-
-  if (normalized.includes('qtd') || normalized.includes('quantidade')) return 'quantidade';
-  if (normalized.includes('custo') && normalized.includes('unitario')) return 'custoUnitario';
-  if (normalized.includes('valor') && normalized.includes('unitario')) return 'valorUnitario';
-
-  return undefined;
+  // faltava na sua base:
+  "fidelizacao": "fidelizacao"
 };
 
 
@@ -250,6 +206,42 @@ const cleanNumericValue = (value: any): number | string => {
 
   const num = parseFloat(cleaned);
   return isNaN(num) ? value : num;
+};
+
+// fallback por conteúdo (cobre variações ou espaços invisíveis)
+const resolveSystemKey = (normalized: string): string | undefined => {
+  if (headerMappingNormalized[normalized]) return headerMappingNormalized[normalized];
+
+  const n = normalized;
+  if (n.includes("data")) return "data";
+  if (n.startsWith("cod") || (n.includes("numero") && (n.includes("venda") || n.includes("pedido") || n.includes("document"))))
+    return "codigo";
+  if (n.includes("cliente") || n.includes("favorecido") || n.includes("destinatario") || n.includes("comprador"))
+    return "nomeCliente";
+  if (n.includes("vended") || n.includes("colaborador") || n.includes("responsavel"))
+    return "vendedor";
+  if (n.includes("cidade") || n.includes("municipio"))
+    return "cidade";
+  if (n.includes("origem") || n.includes("canal") || n.includes("marketplace") || n.includes("plataforma"))
+    return "origem";
+  if (n.includes("logistica") || n.includes("entrega") || n.includes("envio") ||
+      n.includes("transportadora") || n.includes("correios") || n.includes("retirada"))
+    return "logistica";
+  if (n.includes("tipo") || n.includes("forma de pagamento") || n.includes("meio de pagamento") ||
+      n.includes("condicao de pagamento") || n.includes("pagamento") || n.includes("recebiment"))
+    return "tipo";
+  if (n.includes("frete") || (n.includes("taxa") && n.includes("entrega")) ||
+      (n.includes("valor") && (n.includes("frete") || n.includes("entrega"))))
+    return "custoFrete";
+  if (n.includes("total") || (n.includes("valor") && (n.includes("final") || n.includes("recebid"))))
+    return "final";
+  if (n.includes("desconto")) return "valorDescontos";
+  if (n.includes("credito")) return "valorCredito";
+  if (n.includes("fidel")) return "fidelizacao";
+  if (n.includes("qtd") || n.includes("quantidade")) return "quantidade";
+  if (n.includes("custo") && n.includes("unitario")) return "custoUnitario";
+  if (n.includes("valor") && n.includes("unitario")) return "valorUnitario";
+  return undefined;
 };
 
 const MotionCard = motion(Card);
