@@ -15,16 +15,16 @@ import { Button } from "@/components/ui/button";
 import { UploadCloud, File as FileIcon, CheckCircle, X, PlusCircle } from "lucide-react";
 import { useDropzone } from "react-dropzone";
 import * as XLSX from "xlsx";
-import { VendaDetalhada } from "@/lib/data";
 import { useToast } from "@/hooks/use-toast";
 
 interface SupportDataDialogProps {
   children: React.ReactNode;
   onDataUpload: (data: any[], fileNames: string[]) => void;
   uploadedFileNames: string[];
+  onRemoveUploadedFile?: (fileName: string) => Promise<void> | void;
 }
 
-export function SupportDataDialog({ children, onDataUpload, uploadedFileNames }: SupportDataDialogProps) {
+export function SupportDataDialog({ children, onDataUpload, uploadedFileNames, onRemoveUploadedFile }: SupportDataDialogProps) {
   const [files, setFiles] = useState<File[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const { toast } = useToast();
@@ -53,15 +53,13 @@ export function SupportDataDialog({ children, onDataUpload, uploadedFileNames }:
     });
   };
 
-  // [CORREÇÃO 1] - Lógica de onDrop corrigida para evitar "stale closures"
   const onDrop = useCallback((acceptedFiles: File[]) => {
-    setFiles(currentFiles => {
-      const newFiles = acceptedFiles.filter(
-        newFile => !currentFiles.some(existingFile => existingFile.name === newFile.name)
-      );
-      return [...currentFiles, ...newFiles];
+    setFiles(prev => {
+      const existing = new Set(prev.map(f => f.name));
+      const uniqueNewFiles = acceptedFiles.filter(f => !existing.has(f.name));
+      return [...prev, ...uniqueNewFiles];
     });
-  }, []); // A dependência deve ser vazia
+  }, []);
 
   const { getRootProps, getInputProps, isDragActive, open: openFileDialog } = useDropzone({
     onDrop,
@@ -88,7 +86,6 @@ export function SupportDataDialog({ children, onDataUpload, uploadedFileNames }:
         return;
     }
 
-    // A verificação de arquivos já processados foi movida para a lógica de exibição
     try {
       const allData: any[] = [];
       const successfullyParsedFiles: string[] = [];
@@ -104,7 +101,6 @@ export function SupportDataDialog({ children, onDataUpload, uploadedFileNames }:
       onDataUpload(allData, successfullyParsedFiles);
       setIsOpen(false);
       setFiles([]);
-      // A notificação de sucesso já é feita na página principal
       
     } catch (error) {
        toast({
@@ -115,23 +111,17 @@ export function SupportDataDialog({ children, onDataUpload, uploadedFileNames }:
     }
   };
   
-  // [CORREÇÃO 2] - Lógica de exibição corrigida para priorizar novos arquivos
-  const displayedFiles = React.useMemo(() => {
-    const newFilesMap = new Map(files.map(f => [f.name, { name: f.name, isUploaded: false }]));
-    
-    uploadedFileNames.forEach(name => {
-      if (!newFilesMap.has(name)) {
-        newFilesMap.set(name, { name, isUploaded: true });
-      }
-    });
-
-    return Array.from(newFilesMap.values());
-  }, [files, uploadedFileNames]);
-
+  const allFiles = [
+    ...uploadedFileNames.map(name => ({ name, isUploaded: true })),
+    ...files.map(f => ({ name: f.name, isUploaded: false })),
+  ];
+  const uniqueFiles = allFiles.filter(
+    (file, i, self) => i === self.findIndex(f => f.name === file.name)
+  );
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => {
-        if(!open) setFiles([]); // Limpa a seleção ao fechar
+        if(!open) setFiles([]); 
         setIsOpen(open);
     }}>
       <DialogTrigger asChild>{children}</DialogTrigger>
@@ -145,19 +135,33 @@ export function SupportDataDialog({ children, onDataUpload, uploadedFileNames }:
         <div {...getRootProps({ className: `flex flex-col gap-4 py-4 border-2 border-dashed rounded-md transition-colors min-h-[200px] justify-center ${isDragActive ? "border-primary bg-primary/10" : "border-input"}` })}>
             <input {...getInputProps()} />
             
-            {displayedFiles.length > 0 ? (
+            {uniqueFiles.length > 0 ? (
                 <div className="flex flex-col gap-2 p-4">
-                    {displayedFiles.map(({name, isUploaded}) => (
+                    {uniqueFiles.map(({name, isUploaded}) => (
                         <div key={name} className="flex items-center justify-between p-2 rounded-md bg-muted/50 text-sm">
                             <div className="flex items-center gap-2 overflow-hidden">
                                 {isUploaded ? <CheckCircle className="w-5 h-5 text-green-500 flex-shrink-0" /> : <FileIcon className="w-5 h-5 text-muted-foreground flex-shrink-0" />}
                                 <span className={`truncate ${isUploaded ? 'text-muted-foreground' : 'text-foreground'}`} title={name}>{name}</span>
                             </div>
-                            {!isUploaded && (
-                                <Button variant="ghost" size="icon" className="h-6 w-6 flex-shrink-0" onClick={(e) => { e.stopPropagation(); removeFile(name);}}>
-                                    <X className="h-4 w-4" />
-                                </Button>
-                            )}
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6 flex-shrink-0"
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  if (isUploaded) {
+                                    if (onRemoveUploadedFile) {
+                                      await onRemoveUploadedFile(name);
+                                      toast({ title: "Removido", description: `Arquivo ${name} removido do histórico.` });
+                                    }
+                                  } else {
+                                    removeFile(name);
+                                  }
+                                }}
+                                aria-label="Remover arquivo"
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
                         </div>
                     ))}
                      <button

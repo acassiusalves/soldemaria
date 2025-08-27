@@ -11,7 +11,7 @@ import {
   Settings,
   ShoppingBag,
 } from "lucide-react";
-import { collection, doc, onSnapshot, writeBatch, Timestamp } from "firebase/firestore";
+import { collection, doc, onSnapshot, writeBatch, Timestamp, updateDoc, arrayRemove } from "firebase/firestore";
 
 
 import { cn } from "@/lib/utils";
@@ -296,6 +296,17 @@ export default function VendasPage() {
     }
   };
 
+  const handleRemoveUploadedFileName = async (fileName: string) => {
+    try {
+      const metaRef = doc(db, "metadata", "vendas");
+      await updateDoc(metaRef, { uploadedFileNames: arrayRemove(fileName) });
+      setUploadedFileNames(prev => prev.filter(n => n !== fileName));
+    } catch (e) {
+      console.error("Erro ao remover do histórico:", e);
+      toast({ title: "Erro", description: "Não foi possível remover do histórico.", variant: "destructive" });
+    }
+  };
+
   return (
     <SidebarProvider>
       <Sidebar>
@@ -378,7 +389,11 @@ export default function VendasPage() {
                     Filtre as vendas que você deseja analisar.
                   </CardDescription>
                 </div>
-                <SupportDataDialog onDataUpload={handleDataUpload} uploadedFileNames={uploadedFileNames}>
+                <SupportDataDialog 
+                  onDataUpload={handleDataUpload} 
+                  uploadedFileNames={uploadedFileNames}
+                  onRemoveUploadedFile={handleRemoveUploadedFileName}
+                >
                    <Button variant="outline">
                     <Settings className="mr-2 h-4 w-4" />
                     Dados de Apoio
