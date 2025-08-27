@@ -113,8 +113,11 @@ export default function DetailedSalesHistoryTable({ data, columns }: DetailedSal
   }, [effectiveColumns, detailColumns]);
   
   useEffect(() => {
+    if (mainColumns.length === 0 && effectiveColumns.length > 0) return;
+
     const keys = mainColumns.map(c => c.id);
     const loaded = loadVisibility(keys);
+    
     if (loaded) {
       setColumnVisibility(loaded);
       return;
@@ -122,7 +125,8 @@ export default function DetailedSalesHistoryTable({ data, columns }: DetailedSal
     const initial: Record<string, boolean> = {};
     keys.forEach((k, i) => { initial[k] = i < DEFAULT_MAIN_COUNT; });
     setColumnVisibility(initial);
-  }, [mainColumns]);
+  }, [mainColumns, effectiveColumns]);
+
 
   useEffect(() => {
     if (Object.keys(columnVisibility).length > 0) {
