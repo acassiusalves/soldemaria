@@ -26,6 +26,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "./ui/card";
+import { ScrollArea } from "./ui/scroll-area";
 
 const ITEMS_PER_PAGE = 10;
 
@@ -180,17 +181,20 @@ export default function DetailedSalesHistoryTable({ data, columns }: DetailedSal
               <DropdownMenuContent>
                 <DropdownMenuLabel>Alternar Colunas Visíveis</DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                {columns.map((column) => (
-                    <DropdownMenuCheckboxItem
-                        key={column.id}
-                        checked={columnVisibility[column.id]}
-                        onCheckedChange={(value) =>
-                            setColumnVisibility((prev) => ({ ...prev, [column.id]: !!value }))
-                        }
-                    >
-                        {column.label}
-                    </DropdownMenuCheckboxItem>
-                ))}
+                <ScrollArea className="h-72">
+                  {columns.map((column) => (
+                      <DropdownMenuCheckboxItem
+                          key={column.id}
+                          className="capitalize"
+                          checked={columnVisibility[column.id]}
+                          onCheckedChange={(value) =>
+                              setColumnVisibility((prev) => ({ ...prev, [column.id]: !!value }))
+                          }
+                      >
+                          {column.label}
+                      </DropdownMenuCheckboxItem>
+                  ))}
+                </ScrollArea>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
