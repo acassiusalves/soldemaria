@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import Image from "next/image";
 import Link from "next/link";
 import {
   LayoutDashboard,
@@ -32,6 +31,8 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { Logo } from "@/components/icons";
+import DetailedSalesHistoryTable from "@/components/detailed-sales-history-table";
+import { detailedSalesData } from "@/lib/data";
 
 export default function VendasPage() {
   return (
@@ -107,9 +108,7 @@ export default function VendasPage() {
         </header>
 
         <main className="flex-1 space-y-6 p-6">
-          <div className="flex items-center justify-center h-full">
-            <p className="text-muted-foreground">Conteúdo da página de vendas.</p>
-          </div>
+          <DetailedSalesHistoryTable data={detailedSalesData} />
         </main>
       </SidebarInset>
     </SidebarProvider>
