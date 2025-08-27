@@ -151,12 +151,18 @@ export default function DetailedSalesHistoryTable({ data, columns }: DetailedSal
         return formatCurrency(value);
     }
     
-    return value;
+    return value || "N/A";
   }
+  
+  const visibleMainColumns = useMemo(() => {
+    return columns.filter(col => defaultVisibleColumns.includes(col.id) && columnVisibility[col.id]);
+  }, [columns, columnVisibility]);
 
-  const mainColumns = useMemo(() => columns.filter(c => defaultVisibleColumns.includes(c.id)), [columns]);
-  const detailColumns = useMemo(() => columns.filter(c => !defaultVisibleColumns.includes(c.id)), [columns]);
-  const detailGridCols = Math.min(4, detailColumns.length);
+  const detailColumns = useMemo(() => {
+      return columns.filter(c => !defaultVisibleColumns.includes(c.id));
+  }, [columns]);
+  
+  const detailGridCols = `grid-cols-${Math.min(4, detailColumns.length || 1)}`;
 
 
   return (
@@ -186,7 +192,7 @@ export default function DetailedSalesHistoryTable({ data, columns }: DetailedSal
                       <DropdownMenuCheckboxItem
                           key={column.id}
                           className="capitalize"
-                          checked={columnVisibility[column.id]}
+                          checked={columnVisibility[column.id] ?? false}
                           onCheckedChange={(value) =>
                               setColumnVisibility((prev) => ({ ...prev, [column.id]: !!value }))
                           }
@@ -204,7 +210,7 @@ export default function DetailedSalesHistoryTable({ data, columns }: DetailedSal
             <TableHeader>
               <TableRow>
                 <TableHead className="w-[50px]"></TableHead>
-                {mainColumns.map(col => columnVisibility[col.id] && (
+                {visibleMainColumns.map(col => (
                   col.isSortable ? (
                     <SortableHeader key={col.id} tkey={col.id} label={col.label} className={col.className} />
                   ) : (
@@ -223,7 +229,7 @@ export default function DetailedSalesHistoryTable({ data, columns }: DetailedSal
                           <ChevronsUpDown className="h-4 w-4" />
                         </Button>
                       </TableCell>
-                      {mainColumns.map(col => columnVisibility[col.id] && (
+                      {visibleMainColumns.map(col => (
                         <TableCell key={col.id} className={col.id === 'final' ? 'text-right font-semibold' : ''}>
                           {col.id === 'bandeira1' ? <Badge variant="outline">{(sale as any)[col.id]}</Badge> : renderCell(sale, col.id)}
                         </TableCell>
@@ -231,12 +237,12 @@ export default function DetailedSalesHistoryTable({ data, columns }: DetailedSal
                     </TableRow>
                     {openRows.has(sale.id) && (
                       <TableRow>
-                        <TableCell colSpan={Object.values(columnVisibility).filter(v => defaultVisibleColumns.includes(Object.keys(columnVisibility).find(k => columnVisibility[k] === v) || '')).length + 1} className="p-0">
-                          <div className={`grid grid-cols-${detailGridCols} gap-4 p-4 text-sm bg-muted/10`}>
+                        <TableCell colSpan={visibleMainColumns.length + 1} className="p-0">
+                          <div className={`grid ${detailGridCols} gap-4 p-4 text-sm bg-muted/10`}>
                             {detailColumns.map(col => (
                               <div key={col.id} className="space-y-1">
                                 <p className="font-semibold text-muted-foreground">{col.label}</p>
-                                <p>{renderCell(sale, col.id) || "N/A"}</p>
+                                <p>{renderCell(sale, col.id)}</p>
                               </div>
                             ))}
                           </div>
@@ -247,7 +253,7 @@ export default function DetailedSalesHistoryTable({ data, columns }: DetailedSal
                 ))
               ) : (
                 <TableRow>
-                  <TableCell colSpan={mainColumns.length + 1} className="h-24 text-center">
+                  <TableCell colSpan={visibleMainColumns.length + 1} className="h-24 text-center">
                     Nenhum resultado encontrado.
                   </TableCell>
                 </TableRow>
