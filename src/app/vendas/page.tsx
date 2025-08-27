@@ -11,6 +11,7 @@ import {
   Save,
   Settings,
   ShoppingBag,
+  Trash2,
 } from "lucide-react";
 import { collection, doc, onSnapshot, writeBatch, Timestamp, updateDoc, arrayRemove, query, where, getDocs } from "firebase/firestore";
 import { motion } from "framer-motion";
@@ -478,6 +479,14 @@ export default function VendasPage() {
     }
   };
 
+  const handleClearStagedData = () => {
+    setStagedSales([]);
+    setStagedFileNames([]);
+    toast({
+      title: "Dados em revisão removidos",
+    });
+  };
+
   return (
     <SidebarProvider>
       <Sidebar>
@@ -577,6 +586,15 @@ export default function VendasPage() {
                         Dados de Apoio
                       </Button>
                     </SupportDataDialog>
+                     {stagedSales.length > 0 && (
+                      <Button
+                        onClick={handleClearStagedData}
+                        variant="destructive"
+                      >
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        Limpar Revisão
+                      </Button>
+                    )}
                     <Button
                       onClick={handleSaveChangesToDb}
                       disabled={stagedSales.length === 0}
