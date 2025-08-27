@@ -82,7 +82,7 @@ export default function InsightsGenerator({ data }: InsightsGeneratorProps) {
         )}
       </CardContent>
       <CardFooter>
-        <Button onClick={handleGenerateInsights} disabled={isPending} className="w-full bg-accent hover:bg-accent/90 text-accent-foreground">
+        <Button onClick={handleGenerateInsights} disabled={isPending} className="w-full">
           {isPending ? "Gerando..." : "Gerar Insights"}
         </Button>
       </CardFooter>

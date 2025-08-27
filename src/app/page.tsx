@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Image from "next/image";
-import { addDays, format } from "date-fns";
+import { addDays, format, parseISO } from "date-fns";
 import type { DateRange } from "react-day-picker";
 import {
   ArrowDownRight,
@@ -76,7 +76,7 @@ export default function DashboardPage() {
     const toDate = date.to ?? fromDate;
 
     return salesData.filter((sale) => {
-      const saleDate = new Date(sale.data);
+      const saleDate = parseISO(sale.data);
       return saleDate >= fromDate && saleDate <= toDate;
     });
   }, [date]);
