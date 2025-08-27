@@ -71,6 +71,8 @@ import { SupportDataDialog } from "@/components/support-data-dialog";
 import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
 import { Progress } from "@/components/ui/progress";
+import type { ColumnMapping } from "@/components/column-mapping";
+
 
 // Helper to convert multiple date formats to a Date object or null
 const toDate = (value: unknown): Date | null => {
@@ -110,7 +112,7 @@ const toDate = (value: unknown): Date | null => {
 
 
 // normaliza inclusive NBSP e acentos
-const normalizeHeader = (s: string) =>
+export const normalizeHeader = (s: string) =>
   String(s)
     .toLowerCase()
     .replace(/\u00A0/g, " ")                  // NBSP → espaço normal
@@ -244,12 +246,12 @@ const cleanNumericValue = (value: any): number | string => {
 
 
 // fallback por conteúdo (cobre variações ou espaços invisíveis)
-const resolveSystemKey = (normalized: string): string | undefined => {
+export const resolveSystemKey = (normalized: string): string => {
   if (headerMappingNormalized[normalized]) return headerMappingNormalized[normalized];
 
   const n = normalized;
   if (n.includes("data")) return "data";
-  if (n.startsWith("cod") || (n.includes("numero") && (n.includes("venda") || n.includes("pedido") || n.includes("document"))))
+  if (n.startsWith("cod") || n.includes("pedido") || n.includes("document"))
     return "codigo";
   if (n.includes("cliente") || n.includes("favorecido") || n.includes("destinatario") || n.includes("comprador"))
     return "nomeCliente";
@@ -262,11 +264,9 @@ const resolveSystemKey = (normalized: string): string | undefined => {
   if (n.includes("logistica") || n.includes("entrega") || n.includes("envio") ||
       n.includes("transportadora") || n.includes("correios") || n.includes("retirada"))
     return "logistica";
-  if (n.includes("tipo") || n.includes("forma de pagamento") || n.includes("meio de pagamento") ||
-      n.includes("condicao de pagamento") || n.includes("pagamento") || n.includes("recebiment"))
+  if (n.includes("tipo") || n.includes("pagamento") || n.includes("recebiment"))
     return "tipo";
-  if (n.includes("frete") || (n.includes("taxa") && n.includes("entrega")) ||
-      (n.includes("valor") && (n.includes("frete") || n.includes("entrega"))))
+  if (n.includes("frete") || (n.includes("taxa") && n.includes("entrega")))
     return "custoFrete";
   if (n.includes("total") || (n.includes("valor") && (n.includes("final") || n.includes("recebid"))))
     return "final";
@@ -276,7 +276,7 @@ const resolveSystemKey = (normalized: string): string | undefined => {
   if (n.includes("qtd") || n.includes("quantidade")) return "quantidade";
   if (n.includes("custo") && n.includes("unitario")) return "custoUnitario";
   if (n.includes("valor") && n.includes("unitario")) return "valorUnitario";
-  return undefined;
+  return normalized.replace(/\s/g, '_'); // Fallback to snake_case
 };
 
 // Normaliza o código para chave de comparação
@@ -413,44 +413,35 @@ export default function VendasPage() {
     });
   }, [date, allSales]);
   
-  const handleDataUpload = async (raw_data: any[], fileNames: string[]) => {
-    if (raw_data.length === 0) return;
-  
+  const handleProcessAndStageData = (raw_data: any[], fileName: string, mappings: ColumnMapping[], associationKey: string) => {
     setImportStats(null); // Reset stats on new upload
-    // 1) mapear planilha -> chaves do sistema
+
+    // 1) Mapeia os dados brutos usando as definições do usuário
     const mappedData = raw_data.map((row) => {
-      const newRow: any = {};
-      for (const rawHeader in row) {
-        const trimmedHeader = String(rawHeader ?? "").trim();
-        const normalized = normalizeHeader(trimmedHeader);
-        const systemKey = resolveSystemKey(normalized);
-        if (systemKey) {
-          newRow[systemKey] = cleanNumericValue(row[rawHeader]);
-        } else {
-          console.warn(`🟡 Cabeçalho não mapeado: "${trimmedHeader}" -> "${normalized}"`);
+        const newRow: any = {};
+        for (const m of mappings) {
+            if (m.isActive && row[m.originalHeader] !== undefined) {
+                newRow[m.systemHeader] = cleanNumericValue(row[m.originalHeader]);
+            }
         }
-      }
-      // sempre normaliza o código
-      if (newRow.codigo !== undefined) newRow.codigo = normCode(newRow.codigo);
-      return newRow;
+        return newRow;
     });
-  
+
     const uploadTimestamp = Date.now();
-    const allFileNames = fileNames.join(", ");
-  
-    // 2) índice do banco por código (normalizado)
+
+    // 2) Agrupa os dados do banco por chave de associação
     const dbByCode = new Map<string, VendaDetalhada[]>();
     salesFromDb.forEach(s => {
-        if(s.codigo != null) {
-            const code = normCode((s as any).codigo);
+        if((s as any)[associationKey] != null) {
+            const code = normCode((s as any)[associationKey]);
             if (!dbByCode.has(code)) dbByCode.set(code, []);
             dbByCode.get(code)!.push(s);
         }
     });
 
-    const stagedByCode = new Map<string, any>(); 
+    const stagedByCode = new Map<string, any>();
     const stagedNewRows: any[] = [];
-  
+    
     const mergedHeaderCodes = new Set<string>();
     const associatedDetailCodes = new Set<string>();
     let associatedDetailRows = 0;
@@ -459,12 +450,12 @@ export default function VendasPage() {
 
     for (let i = 0; i < mappedData.length; i++) {
         const row = mappedData[i];
-        const code = normCode(row.codigo);
+        const code = normCode(row[associationKey]);
 
         if (!code) {
             noCodeRows++;
             const docId = `staged-${uploadTimestamp}-nocode-${i}`;
-            const payload = { ...row, id: docId, sourceFile: allFileNames, uploadTimestamp: new Date(uploadTimestamp) };
+            const payload = { ...row, id: docId, sourceFile: fileName, uploadTimestamp: new Date(uploadTimestamp) };
             if (payload.data) payload.data = toDate(payload.data) || payload.data;
             stagedNewRows.push(payload);
             continue;
@@ -473,30 +464,29 @@ export default function VendasPage() {
         const fromDbItems = dbByCode.get(code);
         const isDetail = isDetailRow(row);
 
-        if (isDetail) { // É uma linha de item/detalhe
+        if (isDetail) {
             if (fromDbItems) associatedDetailCodes.add(code);
             associatedDetailRows++;
             
             const docId = `staged-${uploadTimestamp}-detail-${i}`;
-            const payload = { ...row, codigo: code, id: docId, sourceFile: allFileNames, uploadTimestamp: new Date(uploadTimestamp) };
+            const payload = { ...row, [associationKey]: code, id: docId, sourceFile: fileName, uploadTimestamp: new Date(uploadTimestamp) };
             if (payload.data) payload.data = toDate(payload.data) || payload.data;
             stagedNewRows.push(payload);
 
-        } else { // É uma linha de cabeçalho
-            if (fromDbItems) { // Existe no banco, então é um merge
+        } else {
+            if (fromDbItems) {
                 const headerFromDb = fromDbItems.find(item => !isDetailRow(item)) || fromDbItems[0];
                 const alreadyStaged = stagedByCode.get(code);
                 const base = alreadyStaged || headerFromDb;
-                const merged = mergeNonEmpty(base, { ...row, codigo: code });
+                const merged = mergeNonEmpty(base, { ...row, [associationKey]: code });
 
-                merged.sourceFile = allFileNames;
+                merged.sourceFile = fileName;
                 merged.uploadTimestamp = new Date(uploadTimestamp);
                 stagedByCode.set(code, merged);
                 mergedHeaderCodes.add(code);
-
-            } else { // Não existe no banco, é um código novo
+            } else {
                 const docId = `staged-${uploadTimestamp}-newcode-${i}`;
-                const payload = { ...row, codigo: code, id: docId, sourceFile: allFileNames, uploadTimestamp: new Date(uploadTimestamp) };
+                const payload = { ...row, [associationKey]: code, id: docId, sourceFile: fileName, uploadTimestamp: new Date(uploadTimestamp) };
                 if (payload.data) payload.data = toDate(payload.data) || payload.data;
                 stagedNewRows.push(payload);
                 newCodeSet.add(code);
@@ -504,20 +494,15 @@ export default function VendasPage() {
         }
     }
   
-    // 4) monta o array final para staging:
     const dataToStage = [
-      ...Array.from(stagedByCode.values()), // updates
-      ...stagedNewRows,                     // novos
+      ...Array.from(stagedByCode.values()),
+      ...stagedNewRows,
     ];
   
     setStagedSales(prev => [...prev, ...dataToStage]);
-    setStagedFileNames(prev => [...new Set([...prev, ...fileNames])]);
+    setStagedFileNames(prev => [...new Set([...prev, fileName])]);
   
-    // consolida estatísticas
-    const associatedOrders = new Set<string>([
-      ...mergedHeaderCodes,
-      ...associatedDetailCodes,
-    ]).size;
+    const associatedOrders = new Set<string>([ ...mergedHeaderCodes, ...associatedDetailCodes ]).size;
 
     const stats: ImportStats = {
       associatedOrders,
@@ -794,7 +779,7 @@ export default function VendasPage() {
                 </div>
                  <div className="flex items-center gap-2">
                     <SupportDataDialog 
-                      onDataUpload={handleDataUpload} 
+                      onProcessData={handleProcessAndStageData} 
                       uploadedFileNames={uploadedFileNames}
                       onRemoveUploadedFile={handleRemoveUploadedFileName}
                       stagedFileNames={stagedFileNames}

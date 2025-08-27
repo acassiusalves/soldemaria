@@ -12,42 +12,51 @@ import {
   DialogClose,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { UploadCloud, File as FileIcon, CheckCircle, X, PlusCircle, History } from "lucide-react";
+import { UploadCloud, File as FileIcon, PlusCircle, Trash2 } from "lucide-react";
 import { useDropzone } from "react-dropzone";
 import * as XLSX from "xlsx";
 import { useToast } from "@/hooks/use-toast";
+import ColumnMapping, { type ColumnMapping as ColumnMappingType } from "@/components/column-mapping";
+import { resolveSystemKey } from "@/app/vendas/page";
+import { ScrollArea } from "./ui/scroll-area";
+
+
+type FileWithData = {
+    file: File;
+    data: any[];
+    headers: string[];
+    mappings: ColumnMappingType[];
+    associationKey: string;
+}
 
 interface SupportDataDialogProps {
   children: React.ReactNode;
-  onDataUpload: (data: any[], fileNames: string[]) => void;
+  onProcessData: (data: any[], fileName: string, mappings: ColumnMappingType[], associationKey: string) => void;
   uploadedFileNames: string[];
   stagedFileNames: string[];
   onRemoveUploadedFile: (fileName: string) => Promise<void> | void;
 }
 
-export function SupportDataDialog({ children, onDataUpload, uploadedFileNames, stagedFileNames, onRemoveUploadedFile }: SupportDataDialogProps) {
-  const [files, setFiles] = useState<File[]>([]);
+export function SupportDataDialog({ children, onProcessData, uploadedFileNames, stagedFileNames, onRemoveUploadedFile }: SupportDataDialogProps) {
+  const [filesToProcess, setFilesToProcess] = useState<FileWithData[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const { toast } = useToast();
 
-  const handleFileParse = (file: File): Promise<any[]> => {
+  const handleFileParse = (file: File): Promise<{data: any[], headers: string[]}> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = (e) => {
         try {
           const data = e.target?.result;
-          if (!data) {
-            throw new Error("Não foi possível ler o arquivo.");
-          }
+          if (!data) throw new Error("Não foi possível ler o arquivo.");
+          
           const workbook = XLSX.read(data, { type: "array" });
           const sheetName = workbook.SheetNames[0];
           const worksheet = workbook.Sheets[sheetName];
-          const json = XLSX.utils.sheet_to_json(worksheet, {
-            defval: "",
-            raw: false,
-            dateNF: "yyyy-mm-dd"
-          });
-          resolve(json);
+          const json = XLSX.utils.sheet_to_json(worksheet, { defval: "", raw: false, dateNF: "yyyy-mm-dd" });
+          const headers: string[] = XLSX.utils.sheet_to_json(worksheet, { header: 1 })[0] as string[];
+          
+          resolve({data: json, headers: headers.filter(h => h) });
         } catch (error) {
           console.error("Erro ao processar o arquivo:", error);
           reject(error);
@@ -58,14 +67,28 @@ export function SupportDataDialog({ children, onDataUpload, uploadedFileNames, s
     });
   };
 
-  const onDrop = useCallback((acceptedFiles: File[]) => {
-    setFiles(prev => {
-      const newAndUniqueFiles = acceptedFiles.filter(
-        newFile => !prev.some(existingFile => existingFile.name === newFile.name) && !uploadedFileNames.includes(newFile.name) && !stagedFileNames.includes(newFile.name)
-      );
-      return [...prev, ...newAndUniqueFiles];
-    });
-  }, [uploadedFileNames, stagedFileNames]);
+  const onDrop = useCallback(async (acceptedFiles: File[]) => {
+    for(const file of acceptedFiles) {
+        if (filesToProcess.some(f => f.file.name === file.name) || uploadedFileNames.includes(file.name) || stagedFileNames.includes(file.name)) {
+            toast({ title: "Arquivo duplicado", description: `O arquivo ${file.name} já foi carregado.`, variant: "default" });
+            continue;
+        }
+
+        try {
+            const { data, headers } = await handleFileParse(file);
+            const initialMappings = headers.map(h => ({
+                originalHeader: h,
+                systemHeader: resolveSystemKey(h),
+                isActive: true,
+            }));
+            const initialAssociationKey = initialMappings.find(m => m.systemHeader === 'codigo')?.originalHeader || headers[0];
+
+            setFilesToProcess(prev => [...prev, { file, data, headers, mappings: initialMappings, associationKey: initialAssociationKey }]);
+        } catch(e) {
+            toast({ title: "Erro ao ler arquivo", description: `Não foi possível processar ${file.name}.`, variant: "destructive" });
+        }
+    }
+  }, [filesToProcess, uploadedFileNames, stagedFileNames, toast]);
 
   const { getRootProps, getInputProps, isDragActive, open: openFileDialog } = useDropzone({
     onDrop,
@@ -79,11 +102,11 @@ export function SupportDataDialog({ children, onDataUpload, uploadedFileNames, s
   });
   
   const removeFile = (fileName: string) => {
-    setFiles(prev => prev.filter(f => f.name !== fileName));
+    setFilesToProcess(prev => prev.filter(f => f.file.name !== fileName));
   }
 
-  const handleSubmitAndStage = async () => {
-    if (files.length === 0) {
+  const handleProcessAllFiles = () => {
+    if (filesToProcess.length === 0) {
         toast({
             title: "Nenhum arquivo novo",
             description: "Selecione novos arquivos para carregar.",
@@ -92,109 +115,92 @@ export function SupportDataDialog({ children, onDataUpload, uploadedFileNames, s
         return;
     }
 
-    try {
-      const allData: any[] = [];
-      const successfullyParsedFiles: string[] = [];
-
-      await Promise.all(
-        files.map(async (file) => {
-          const parsedData = await handleFileParse(file);
-          allData.push(...parsedData);
-          successfullyParsedFiles.push(file.name);
-        })
-      );
-      
-      onDataUpload(allData, successfullyParsedFiles);
-      setIsOpen(false);
-      setFiles([]);
-      
-    } catch (error) {
-       toast({
-          title: "Erro ao processar",
-          description: "Não foi possível ler os dados de uma das planilhas. Verifique o formato do arquivo.",
-          variant: "destructive",
-        });
-    }
+    filesToProcess.forEach(f => {
+        onProcessData(f.data, f.file.name, f.mappings, f.associationKey);
+    });
+    
+    setIsOpen(false);
+    setFilesToProcess([]);
   };
   
-  const displayedStagedFiles = stagedFileNames.map(name => ({ name, isUploaded: false, isStaged: true }));
-  const displayedUploadedFiles = uploadedFileNames.map(name => ({ name, isUploaded: true, isStaged: false }));
-  const displayedNewFiles = files.map(f => ({ name: f.name, isUploaded: false, isStaged: false }));
-
-  const allFiles = [...displayedUploadedFiles, ...displayedStagedFiles, ...displayedNewFiles];
-  const uniqueFiles = allFiles.filter(
-    (file, i, self) => i === self.findIndex(f => f.name === file.name)
-  );
+  const updateFileMapping = (fileName: string, newMappings: ColumnMappingType[]) => {
+    setFilesToProcess(prev => prev.map(f => f.file.name === fileName ? {...f, mappings: newMappings} : f));
+  }
+  
+  const updateAssociationKey = (fileName: string, newKey: string) => {
+    setFilesToProcess(prev => prev.map(f => f.file.name === fileName ? {...f, associationKey: newKey} : f));
+  }
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => {
-        if(!open) setFiles([]); 
+        if(!open) setFilesToProcess([]); 
         setIsOpen(open);
     }}>
       <DialogTrigger asChild>{children}</DialogTrigger>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="max-w-3xl">
         <DialogHeader>
-          <DialogTitle>Importar Dados de Apoio</DialogTitle>
+          <DialogTitle>Importar e Mapear Dados de Apoio</DialogTitle>
           <DialogDescription>
-            Selecione planilhas para análise. Elas serão pré-carregadas para sua revisão antes de salvar no banco.
+            Arraste ou selecione planilhas. Mapeie as colunas e defina a chave de associação antes de adicionar para revisão.
           </DialogDescription>
         </DialogHeader>
-        <div {...getRootProps({ className: `flex flex-col gap-4 py-4 border-2 border-dashed rounded-md transition-colors min-h-[200px] justify-center ${isDragActive ? "border-primary bg-primary/10" : "border-input"}` })}>
-            <input {...getInputProps()} />
-            
-            {uniqueFiles.length > 0 ? (
-                <div className="flex flex-col gap-2 p-4">
-                    {uniqueFiles.map(({name, isUploaded, isStaged}) => (
-                        <div key={name} className="flex items-center justify-between p-2 rounded-md bg-muted/50 text-sm">
-                            <div className="flex items-center gap-2 overflow-hidden">
-                                {isUploaded ? <CheckCircle className="w-5 h-5 text-green-500 flex-shrink-0" title="Salvo no banco" /> : (isStaged ? <History className="w-5 h-5 text-blue-500 flex-shrink-0" title="Aguardando salvar" /> : <FileIcon className="w-5 h-5 text-muted-foreground flex-shrink-0" />)}
-                                <span className={`truncate ${isUploaded ? 'text-muted-foreground' : 'text-foreground'}`} title={name}>{name}</span>
-                            </div>
-                             <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-6 w-6 flex-shrink-0"
-                                onClick={async (e) => {
-                                  e.stopPropagation();
-                                  if (isUploaded || isStaged) {
-                                    await onRemoveUploadedFile(name);
-                                  } else {
-                                    removeFile(name);
-                                  }
-                                }}
-                                aria-label="Remover arquivo"
-                              >
-                                <X className="h-4 w-4" />
-                              </Button>
-                        </div>
-                    ))}
-                     <button
-                        onClick={openFileDialog}
-                        className="flex items-center justify-center gap-2 p-2 mt-2 text-sm text-primary border border-dashed border-primary/50 rounded-md hover:bg-primary/10 transition-colors"
-                      >
-                        <PlusCircle className="h-4 w-4" />
-                        Adicionar mais arquivos
-                      </button>
-                </div>
-            ) : (
-                 <div className="flex flex-col items-center justify-center text-center cursor-pointer p-4" onClick={openFileDialog}>
-                    <UploadCloud className="w-12 h-12 text-muted-foreground" />
-                      {isDragActive ? (
-                      <p className="mt-2 text-primary">Solte os arquivos aqui...</p>
-                    ) : (
-                      <p className="mt-2 text-center text-muted-foreground">
-                        Arraste e solte os arquivos aqui, ou clique para selecionar.
-                      </p>
-                    )}
-                </div>
-            )}
+
+        <div className="flex flex-col gap-4 py-4">
+            {/* Dropzone Area */}
+             <div {...getRootProps({ className: `flex flex-col gap-4 py-4 border-2 border-dashed rounded-md transition-colors min-h-[150px] justify-center items-center cursor-pointer ${isDragActive ? "border-primary bg-primary/10" : "border-input"}` })} onClick={openFileDialog}>
+                <input {...getInputProps()} />
+                <UploadCloud className="w-12 h-12 text-muted-foreground" />
+                {isDragActive ? (
+                    <p className="text-primary">Solte os arquivos aqui...</p>
+                ) : (
+                    <p className="text-center text-muted-foreground">
+                    Arraste e solte ou clique para selecionar arquivos.
+                    </p>
+                )}
+            </div>
+
+            {/* Files Area */}
+            <ScrollArea className="h-[400px] pr-4">
+              <div className="space-y-4">
+                {filesToProcess.map((f, i) => (
+                    <ColumnMapping
+                        key={f.file.name}
+                        fileName={f.file.name}
+                        mappings={f.mappings}
+                        associationKey={f.associationKey}
+                        onMappingsChange={(m) => updateFileMapping(f.file.name, m)}
+                        onAssociationKeyChange={(k) => updateAssociationKey(f.file.name, k)}
+                        onRemoveFile={() => removeFile(f.file.name)}
+                    />
+                ))}
+
+                 {uploadedFileNames.length > 0 && (
+                    <div className="space-y-2 pt-4">
+                        <h4 className="font-semibold text-sm text-muted-foreground">Histórico de Arquivos</h4>
+                        {uploadedFileNames.map(name => (
+                             <div key={name} className="flex items-center justify-between p-2 rounded-md bg-muted/50 text-sm">
+                                <div className="flex items-center gap-2 overflow-hidden">
+                                    <FileIcon className="w-5 h-5 text-muted-foreground flex-shrink-0" />
+                                    <span className="truncate text-muted-foreground" title={name}>{name}</span>
+                                </div>
+                                <Button variant="ghost" size="icon" className="h-6 w-6 flex-shrink-0" onClick={() => onRemoveUploadedFile(name)}>
+                                    <Trash2 className="h-4 w-4" />
+                                </Button>
+                             </div>
+                        ))}
+                    </div>
+                )}
+              </div>
+            </ScrollArea>
         </div>
+        
         <DialogFooter>
           <DialogClose asChild>
             <Button variant="outline">Cancelar</Button>
           </DialogClose>
-          <Button onClick={handleSubmitAndStage} disabled={files.length === 0}>
-            Carregar {files.length > 0 ? `${files.length} Novo(s) para Revisão` : 'para Revisão'}
+          <Button onClick={handleProcessAllFiles} disabled={filesToProcess.length === 0}>
+             <PlusCircle className="mr-2 h-4 w-4" />
+            Adicionar {filesToProcess.length > 0 ? `${filesToProcess.length} Arquivo(s) à Revisão` : 'à Revisão'}
           </Button>
         </DialogFooter>
       </DialogContent>
