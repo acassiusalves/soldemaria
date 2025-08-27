@@ -1,3 +1,4 @@
+
 "use client";
 
 import * as React from "react";
@@ -341,11 +342,9 @@ export default function VendasPage() {
     if (usefulKeys.length < 2) {
       console.warn('⚠️ Poucas colunas reconhecidas:', recognizedKeys);
       toast({
-        title: "Planilha não reconhecida",
-        description: `Encontrei poucas colunas úteis: ${recognizedKeys.join(', ') || '(nada)'}. Confira os cabeçalhos.`,
-        variant: "destructive",
+        title: "Poucas colunas reconhecidas",
+        description: `Prosseguindo para revisão mesmo assim. Campos: ${recognizedKeys.join(', ') || '(nenhum)'}.`,
       });
-      return;
     }
     
     const uploadTimestamp = Date.now();
@@ -368,6 +367,8 @@ export default function VendasPage() {
       return salePayload;
     });
     
+    console.log("[stage] linhas mapeadas:", mappedData.length);
+    console.log("[stage] linhas para staging:", dataToStage.length);
     setStagedSales(prev => [...prev, ...dataToStage]);
     setStagedFileNames(prev => [...new Set([...prev, ...fileNames])]);
 
@@ -575,12 +576,16 @@ export default function VendasPage() {
                         Dados de Apoio
                       </Button>
                     </SupportDataDialog>
-                    {stagedSales.length > 0 && (
-                       <Button onClick={handleSaveChangesToDb}>
-                          <Save className="mr-2 h-4 w-4" />
-                          Salvar no Banco
-                       </Button>
-                    )}
+                    <Button
+                      onClick={handleSaveChangesToDb}
+                      disabled={stagedSales.length === 0}
+                      variant={stagedSales.length === 0 ? "outline" : "default"}
+                      title={stagedSales.length === 0 ? "Carregue planilhas para habilitar" : "Salvar dados no Firestore"}
+                    >
+                      <Save className="mr-2 h-4 w-4" />
+                      Salvar no Banco
+                      {stagedSales.length > 0 ? ` (${stagedSales.length})` : ""}
+                    </Button>
                  </div>
               </div>
             </CardHeader>
@@ -635,3 +640,6 @@ export default function VendasPage() {
     </SidebarProvider>
   );
 }
+
+
+    
