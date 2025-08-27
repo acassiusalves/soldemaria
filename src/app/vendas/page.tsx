@@ -107,6 +107,10 @@ export default function VendasPage() {
             </h1>
           </div>
           <div className="flex items-center gap-4">
+            <Button variant="outline">
+              <Settings className="mr-2 h-4 w-4" />
+              Dados de Apoio
+            </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="relative h-8 w-8 rounded-full">
