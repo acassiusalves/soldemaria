@@ -1,3 +1,4 @@
+
 "use client";
 
 import * as React from "react";
@@ -161,25 +162,16 @@ export default function VendasPage() {
   const handleDataUpload = async (raw_data: any[], fileNames: string[]) => {
     if (raw_data.length === 0) return;
 
-    // --- INÍCIO DO CÓDIGO DE DIAGNÓSTICO ---
-    if (raw_data.length > 0) {
-      const headersFromFile = Object.keys(raw_data[0]);
-      const headersFromMapping = Object.keys(headerMapping);
-      
-      console.log("🕵️‍♂️ DIAGNÓSTICO DE CABEÇALHOS 🕵️‍♂️");
-      console.log("---------------------------------------");
-      console.log("Cabeçalhos lidos do Arquivo:", headersFromFile);
-      console.log("Cabeçalhos definidos no Mapeamento:", headersFromMapping);
-      console.log("---------------------------------------");
-    }
-    // --- FIM DO CÓDIGO DE DIAGNÓSTICO ---
-
     const mappedData = raw_data.map(row => {
         const newRow: any = {};
         for (const rawHeader in row) {
-            const systemKey = headerMapping[rawHeader.trim()]; // .trim() para remover espaços extras
+            const trimmedHeader = rawHeader.trim();
+            const systemKey = headerMapping[trimmedHeader];
+
             if (systemKey) {
                 newRow[systemKey] = cleanNumericValue(row[rawHeader]);
+            } else {
+                console.warn(`🟡 Cabeçalho não mapeado (do arquivo): "${trimmedHeader}"`);
             }
         }
         return newRow as VendaDetalhada;
