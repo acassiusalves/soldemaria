@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
-import { format, parseISO } from "date-fns";
+import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { ArrowUpDown, ChevronsUpDown, Columns } from "lucide-react";
 import { VendaDetalhada } from "@/lib/data";
@@ -27,6 +27,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "./ui/card";
 import { ScrollArea } from "./ui/scroll-area";
+import type { Timestamp } from "firebase/firestore";
 
 const ITEMS_PER_PAGE = 10;
 
@@ -48,7 +49,8 @@ export type ColumnDef = {
   isSortable?: boolean;
 }
 
-const defaultVisibleColumns = ["data", "codigo", "bandeira1", "parcelas1", "final"];
+const defaultVisibleColumns = ["data", "codigo", "nomeCliente", "final", "vendedor"];
+
 
 interface DetailedSalesHistoryTableProps {
     data: VendaDetalhada[];
@@ -77,9 +79,12 @@ export default function DetailedSalesHistoryTable({ data, columns }: DetailedSal
 
   const filteredData = useMemo(() => {
     return data.filter(sale =>
-      Object.values(sale).some(value =>
-        String(value).toLowerCase().includes(filter.toLowerCase())
-      )
+      Object.entries(sale).some(([key, value]) => {
+         if (key === 'codigo' || key === 'nomeCliente') {
+            return String(value).toLowerCase().includes(filter.toLowerCase())
+         }
+         return false
+      }) || filter === ''
     );
   }, [data, filter]);
 
@@ -139,15 +144,11 @@ export default function DetailedSalesHistoryTable({ data, columns }: DetailedSal
   const renderCell = (sale: VendaDetalhada, columnId: string) => {
     const value = (sale as any)[columnId];
 
-    if(columnId === 'data' && typeof value === 'string') {
-        try {
-            return format(parseISO(value), "dd/MM/yyyy", { locale: ptBR });
-        } catch (e) {
-            return value; // return original value if parsing fails
-        }
+    if (columnId === 'data' && value && typeof value.toDate === 'function') {
+        return format((value as Timestamp).toDate(), "dd/MM/yyyy", { locale: ptBR });
     }
     
-    if(typeof value === 'number' && ['final', 'valorParcela1', 'taxaCartao1', 'valorParcela2', 'taxaCartao2', 'custoFrete', 'imposto', 'embalagem', 'comissao'].includes(columnId)) {
+    if(typeof value === 'number' && ['final', 'valorParcela1', 'taxaCartao1', 'valorParcela2', 'taxaCartao2', 'custoFrete', 'imposto', 'embalagem', 'comissao', 'custoUnitario', 'valorUnitario', 'valorCredito', 'valorDescontos'].includes(columnId)) {
         return formatCurrency(value);
     }
     
@@ -155,13 +156,22 @@ export default function DetailedSalesHistoryTable({ data, columns }: DetailedSal
   }
   
   const visibleMainColumns = useMemo(() => {
-    return columns.filter(col => defaultVisibleColumns.includes(col.id) && columnVisibility[col.id]);
+    return columns.filter(col => columnVisibility[col.id]);
+  }, [columns, columnVisibility]);
+
+  const allColumns = useMemo(() => {
+      return columns.filter(c => columnVisibility[c.id]);
+  }, [columns, columnVisibility]);
+  
+  const mainColumns = useMemo(() => {
+    const mainCols = defaultVisibleColumns.map(id => columns.find(c => c.id === id)).filter(Boolean) as ColumnDef[];
+    return mainCols.filter(col => columnVisibility[col.id]);
   }, [columns, columnVisibility]);
 
   const detailColumns = useMemo(() => {
-      return columns.filter(c => !defaultVisibleColumns.includes(c.id));
-  }, [columns]);
-  
+      return columns.filter(c => !defaultVisibleColumns.includes(c.id) && columnVisibility[c.id]);
+  }, [columns, columnVisibility]);
+
   const detailGridCols = `grid-cols-${Math.min(4, detailColumns.length || 1)}`;
 
 
@@ -172,7 +182,7 @@ export default function DetailedSalesHistoryTable({ data, columns }: DetailedSal
           <h2 className="text-h3 font-headline">Detalhes das Vendas</h2>
           <div className="flex items-center gap-2">
             <Input 
-              placeholder="Filtrar registros..."
+              placeholder="Filtrar por Código ou Cliente..."
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
               className="w-auto"
@@ -210,7 +220,7 @@ export default function DetailedSalesHistoryTable({ data, columns }: DetailedSal
             <TableHeader>
               <TableRow>
                 <TableHead className="w-[50px]"></TableHead>
-                {visibleMainColumns.map(col => (
+                {mainColumns.map(col => (
                   col.isSortable ? (
                     <SortableHeader key={col.id} tkey={col.id} label={col.label} className={col.className} />
                   ) : (
@@ -229,7 +239,7 @@ export default function DetailedSalesHistoryTable({ data, columns }: DetailedSal
                           <ChevronsUpDown className="h-4 w-4" />
                         </Button>
                       </TableCell>
-                      {visibleMainColumns.map(col => (
+                      {mainColumns.map(col => (
                         <TableCell key={col.id} className={col.id === 'final' ? 'text-right font-semibold' : ''}>
                           {col.id === 'bandeira1' ? <Badge variant="outline">{(sale as any)[col.id]}</Badge> : renderCell(sale, col.id)}
                         </TableCell>
@@ -237,7 +247,7 @@ export default function DetailedSalesHistoryTable({ data, columns }: DetailedSal
                     </TableRow>
                     {openRows.has(sale.id) && (
                       <TableRow>
-                        <TableCell colSpan={visibleMainColumns.length + 1} className="p-0">
+                        <TableCell colSpan={mainColumns.length + 1} className="p-0">
                           <div className={`grid ${detailGridCols} gap-4 p-4 text-sm bg-muted/10`}>
                             {detailColumns.map(col => (
                               <div key={col.id} className="space-y-1">
@@ -253,7 +263,7 @@ export default function DetailedSalesHistoryTable({ data, columns }: DetailedSal
                 ))
               ) : (
                 <TableRow>
-                  <TableCell colSpan={visibleMainColumns.length + 1} className="h-24 text-center">
+                  <TableCell colSpan={mainColumns.length + 1} className="h-24 text-center">
                     Nenhum resultado encontrado.
                   </TableCell>
                 </TableRow>
