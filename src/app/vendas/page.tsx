@@ -13,6 +13,7 @@ import {
   Settings,
   ShoppingBag,
   Trash2,
+  Loader2,
 } from "lucide-react";
 import { collection, doc, onSnapshot, writeBatch, Timestamp, updateDoc, arrayRemove, query, where, getDocs, getDocsFromServer } from "firebase/firestore";
 import { motion } from "framer-motion";
@@ -69,6 +70,7 @@ import type { VendaDetalhada } from "@/lib/data";
 import { SupportDataDialog } from "@/components/support-data-dialog";
 import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
+import { Progress } from "@/components/ui/progress";
 
 // Helper to convert multiple date formats to a Date object or null
 const toDate = (value: unknown): Date | null => {
@@ -287,6 +289,8 @@ export default function VendasPage() {
   const { toast } = useToast();
   
   const [date, setDate] = React.useState<DateRange | undefined>(undefined);
+  const [isSaving, setIsSaving] = React.useState(false);
+  const [saveProgress, setSaveProgress] = React.useState(0);
 
   // Listen for real-time updates from Firestore
   React.useEffect(() => {
@@ -421,6 +425,9 @@ export default function VendasPage() {
       toast({ title: "Nenhum dado novo para salvar", variant: "default" });
       return;
     }
+    
+    setIsSaving(true);
+    setSaveProgress(0);
 
     try {
         const chunks = [];
@@ -428,7 +435,8 @@ export default function VendasPage() {
             chunks.push(stagedSales.slice(i, i + 450));
         }
 
-        for (const chunk of chunks) {
+        for (let i = 0; i < chunks.length; i++) {
+            const chunk = chunks[i];
             const batch = writeBatch(db);
             chunk.forEach((item) => {
                 const docId = `uploaded-${item.uploadTimestamp.getTime()}-${item.id.split('-').pop()}`;
@@ -446,6 +454,7 @@ export default function VendasPage() {
                 batch.set(saleRef, { ...payload, id: docId });
             });
             await batch.commit();
+            setSaveProgress(((i + 1) / chunks.length) * 100);
         }
 
         const allKeys = Array.from(new Set(stagedSales.flatMap(row => Object.keys(row))));
@@ -478,6 +487,10 @@ export default function VendasPage() {
             description: "Houve um problema ao salvar os dados. Tente novamente.",
             variant: "destructive",
         });
+    } finally {
+        setIsSaving(false);
+        // Reset progress after a short delay
+        setTimeout(() => setSaveProgress(0), 1000);
     }
   };
 
@@ -672,6 +685,7 @@ export default function VendasPage() {
                       <Button
                         onClick={handleClearStagedData}
                         variant="destructive"
+                        disabled={isSaving}
                       >
                         <Trash2 className="mr-2 h-4 w-4" />
                         Limpar Revisão
@@ -679,13 +693,16 @@ export default function VendasPage() {
                     )}
                     <Button
                       onClick={handleSaveChangesToDb}
-                      disabled={stagedSales.length === 0}
+                      disabled={stagedSales.length === 0 || isSaving}
                       variant={stagedSales.length === 0 ? "outline" : "default"}
                       title={stagedSales.length === 0 ? "Carregue planilhas para habilitar" : "Salvar dados no Firestore"}
                     >
-                      <Save className="mr-2 h-4 w-4" />
-                      Salvar no Banco
-                      {stagedSales.length > 0 ? ` (${stagedSales.length})` : ""}
+                      {isSaving ? (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                          <Save className="mr-2 h-4 w-4" />
+                      )}
+                      {isSaving ? "Salvando..." : `Salvar no Banco ${stagedSales.length > 0 ? `(${stagedSales.length})` : ""}`}
                     </Button>
                      {salesFromDb.length > 0 && uploadedFileNames.length === 0 && (
                         <AlertDialog>
@@ -753,6 +770,12 @@ export default function VendasPage() {
                 </PopoverContent>
               </Popover>
             </CardContent>
+            {isSaving && (
+                <div className="px-6 pb-4">
+                    <Progress value={saveProgress} className="w-full" />
+                    <p className="text-sm text-muted-foreground mt-2 text-center">Salvando {stagedSales.length} registros. Isso pode levar um momento...</p>
+                </div>
+            )}
           </MotionCard>
           <motion.div
             initial={{ opacity: 0, y: 20 }}
