@@ -4,7 +4,7 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { ArrowUpDown, Columns } from "lucide-react";
+import { ArrowUpDown, Columns, ChevronRight } from "lucide-react";
 import { VendaDetalhada } from "@/lib/data";
 import {
   Table,
@@ -28,13 +28,26 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "./ui/card";
 import { ScrollArea } from "./ui/scroll-area";
 import type { Timestamp } from "firebase/firestore";
+import { cn } from "@/lib/utils";
 
 const ITEMS_PER_PAGE = 10;
-const DEFAULT_MAIN_COUNT = 5; // Quantas colunas ficam ligadas por padrão
+const DEFAULT_MAIN_COUNT = 8; 
 const STORAGE_KEY = 'vendas_columns_visibility';
 
 type SortKey = keyof VendaDetalhada | string | null;
 type SortDirection = "asc" | "desc";
+
+type VendaAgrupada = {
+  id: string; // Usaremos o ID do primeiro item do grupo
+  codigo: number;
+  items: VendaDetalhada[];
+  // O primeiro item do grupo será a "referência" para dados comuns
+  data: any; 
+  nomeCliente?: string;
+  vendedor?: string;
+  cidade?: string;
+  final: number; // Soma dos finais
+};
 
 const formatCurrency = (value?: number) => {
   if (value === undefined || value === null) return "N/A";
@@ -56,7 +69,6 @@ function loadVisibility(keys: string[]): Record<string, boolean> | null {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
     const saved = JSON.parse(raw) as Record<string, boolean>;
-    // Garante que só chaves atuais sejam consideradas
     const view: Record<string, boolean> = {};
     keys.forEach(k => { view[k] = saved[k] ?? false; });
     return view;
@@ -79,6 +91,7 @@ export default function DetailedSalesHistoryTable({ data, columns }: DetailedSal
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [filter, setFilter] = useState('');
   const [columnVisibility, setColumnVisibility] = useState<Record<string, boolean>>({});
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
   const effectiveColumns = useMemo(() => {
     return columns.filter(col =>
@@ -89,37 +102,65 @@ export default function DetailedSalesHistoryTable({ data, columns }: DetailedSal
     );
   }, [columns, data]);
 
-  // Efeito para carregar visibilidade do localStorage ou definir um padrão
+  const detailColumns = useMemo(() => {
+    const detailKeys = ['item', 'descricao', 'quantidade', 'custoUnitario', 'valorUnitario', 'valorCredito', 'valorDescontos'];
+    return effectiveColumns.filter(c => detailKeys.includes(c.id));
+  }, [effectiveColumns]);
+
+  const mainColumns = useMemo(() => {
+    const detailKeys = detailColumns.map(c => c.id);
+    return effectiveColumns.filter(c => !detailKeys.includes(c.id));
+  }, [effectiveColumns, detailColumns]);
+  
   useEffect(() => {
-    const keys = effectiveColumns.map(c => c.id);
+    const keys = mainColumns.map(c => c.id);
     const loaded = loadVisibility(keys);
     if (loaded) {
       setColumnVisibility(loaded);
       return;
     }
-    // Se não houver nada salvo, liga as primeiras N colunas
     const initial: Record<string, boolean> = {};
     keys.forEach((k, i) => { initial[k] = i < DEFAULT_MAIN_COUNT; });
     setColumnVisibility(initial);
-  }, [effectiveColumns]);
+  }, [mainColumns]);
 
-  // Efeito para salvar a visibilidade no localStorage sempre que mudar
   useEffect(() => {
     if (Object.keys(columnVisibility).length > 0) {
       saveVisibility(columnVisibility);
     }
   }, [columnVisibility]);
 
+  const groupedData = useMemo(() => {
+    const groups: Record<string, VendaDetalhada[]> = {};
+    data.forEach(sale => {
+      if (!groups[sale.codigo]) {
+        groups[sale.codigo] = [];
+      }
+      groups[sale.codigo].push(sale);
+    });
+
+    return Object.values(groups).map((items): VendaAgrupada => {
+      const firstItem = items[0];
+      return {
+        id: firstItem.id, // ID único para a linha agrupada
+        codigo: firstItem.codigo,
+        items: items,
+        data: firstItem.data,
+        nomeCliente: firstItem.nomeCliente,
+        vendedor: firstItem.vendedor,
+        cidade: firstItem.cidade,
+        final: items.reduce((sum, item) => sum + (item.final || 0), 0)
+      };
+    });
+  }, [data]);
+  
   const filteredData = useMemo(() => {
-    return data.filter(sale =>
-      Object.entries(sale).some(([key, value]) => {
-         if (key === 'codigo' || key === 'nomeCliente') {
-            return String(value).toLowerCase().includes(filter.toLowerCase())
-         }
-         return false
-      }) || filter === ''
+    return groupedData.filter(group =>
+       String(group.codigo).toLowerCase().includes(filter.toLowerCase()) ||
+       String(group.nomeCliente).toLowerCase().includes(filter.toLowerCase()) ||
+       filter === ''
     );
-  }, [data, filter]);
+  }, [groupedData, filter]);
 
   const sortedData = useMemo(() => {
     if (!sortKey) return filteredData;
@@ -131,7 +172,6 @@ export default function DetailedSalesHistoryTable({ data, columns }: DetailedSal
       if (aValue === undefined || aValue === null) return 1;
       if (bValue === undefined || bValue === null) return -1;
       
-      // Converte Timestamp para Date para ordenação correta
       const valA = aValue.toDate ? aValue.toDate() : aValue;
       const valB = bValue.toDate ? bValue.toDate() : bValue;
 
@@ -157,6 +197,18 @@ export default function DetailedSalesHistoryTable({ data, columns }: DetailedSal
     }
   };
   
+  const toggleRowExpansion = (rowId: string) => {
+    setExpandedRows(prev => {
+        const newSet = new Set(prev);
+        if (newSet.has(rowId)) {
+            newSet.delete(rowId);
+        } else {
+            newSet.add(rowId);
+        }
+        return newSet;
+    });
+  };
+
   const SortableHeader = ({ tkey, label, className }: { tkey: SortKey; label: string, className?: string }) => (
     <TableHead className={className}>
       <Button variant="ghost" onClick={() => handleSort(tkey)}>
@@ -166,23 +218,34 @@ export default function DetailedSalesHistoryTable({ data, columns }: DetailedSal
     </TableHead>
   );
 
-  const renderCell = (sale: VendaDetalhada, columnId: string) => {
+  const renderCell = (sale: VendaAgrupada, columnId: string) => {
     const value = (sale as any)[columnId];
 
-    if (columnId === 'data' && value && typeof value.toDate === 'function') {
-        return format((value as Timestamp).toDate(), "dd/MM/yyyy", { locale: ptBR });
+    if (columnId === 'data' && value) {
+      const date = value.toDate ? value.toDate() : (typeof value === 'string' ? new Date(value) : value);
+      if(date instanceof Date && !isNaN(date.getTime())) {
+          return format(date, "dd/MM/yyyy", { locale: ptBR });
+      }
     }
     
-    if(typeof value === 'number' && ['final', 'valorParcela1', 'taxaCartao1', 'valorParcela2', 'taxaCartao2', 'custoFrete', 'imposto', 'embalagem', 'comissao', 'custoUnitario', 'valorUnitario', 'valorCredito', 'valorDescontos'].includes(columnId)) {
+    if(typeof value === 'number' && ['final', 'custoFrete', 'imposto', 'embalagem', 'comissao', 'custoUnitario', 'valorUnitario', 'valorCredito', 'valorDescontos'].includes(columnId)) {
         return formatCurrency(value);
     }
     
     return value ?? "N/A";
   }
+  
+  const renderDetailCell = (sale: VendaDetalhada, columnId: string) => {
+    const value = (sale as any)[columnId];
+    if(typeof value === 'number' && ['final', 'custoUnitario', 'valorUnitario', 'valorCredito', 'valorDescontos'].includes(columnId)) {
+      return formatCurrency(value);
+    }
+    return value ?? "N/A";
+  }
 
   const visibleColumns = useMemo(() => {
-    return effectiveColumns.filter(c => columnVisibility[c.id]);
-  }, [effectiveColumns, columnVisibility]);
+    return mainColumns.filter(c => columnVisibility[c.id]);
+  }, [mainColumns, columnVisibility]);
 
   return (
     <Card>
@@ -204,10 +267,10 @@ export default function DetailedSalesHistoryTable({ data, columns }: DetailedSal
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent>
-                <DropdownMenuLabel>Alternar Colunas Visíveis</DropdownMenuLabel>
+                <DropdownMenuLabel>Alternar Colunas Principais</DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <ScrollArea className="h-72">
-                  {effectiveColumns.map((column) => (
+                  {mainColumns.map((column) => (
                       <DropdownMenuCheckboxItem
                           key={column.id}
                           className="capitalize"
@@ -228,6 +291,7 @@ export default function DetailedSalesHistoryTable({ data, columns }: DetailedSal
           <Table>
             <TableHeader>
               <TableRow>
+                 <TableHead className="w-[50px]"></TableHead>
                 {visibleColumns.map(col => (
                   col.isSortable ? (
                     <SortableHeader key={col.id} tkey={col.id} label={col.label} className={col.className} />
@@ -239,18 +303,49 @@ export default function DetailedSalesHistoryTable({ data, columns }: DetailedSal
             </TableHeader>
             <TableBody>
               {paginatedData.length > 0 ? (
-                paginatedData.map((sale) => (
-                  <TableRow key={sale.id}>
-                    {visibleColumns.map(col => (
-                      <TableCell key={col.id} className={col.id === 'final' ? 'text-right font-semibold' : ''}>
-                        {col.id === 'bandeira1' ? <Badge variant="outline">{(sale as any)[col.id]}</Badge> : renderCell(sale, col.id)}
-                      </TableCell>
-                    ))}
-                  </TableRow>
+                paginatedData.map((group) => (
+                  <React.Fragment key={group.id}>
+                    <TableRow>
+                       <TableCell>
+                          {group.items.length > 1 && (
+                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => toggleRowExpansion(group.id)}>
+                                <ChevronRight className={cn("h-4 w-4 transition-transform", expandedRows.has(group.id) && "rotate-90")} />
+                            </Button>
+                          )}
+                       </TableCell>
+                       {visibleColumns.map(col => (
+                         <TableCell key={col.id} className={col.id === 'final' ? 'text-right font-semibold' : ''}>
+                           {renderCell(group, col.id)}
+                         </TableCell>
+                       ))}
+                    </TableRow>
+                    {expandedRows.has(group.id) && group.items.length > 1 && (
+                        <TableRow>
+                            <TableCell colSpan={visibleColumns.length + 1} className="p-2 bg-muted/50">
+                                <div className="p-2 rounded-md bg-background">
+                                   <Table>
+                                     <TableHeader>
+                                       <TableRow>
+                                          {detailColumns.map(col => <TableHead key={col.id}>{col.label}</TableHead>)}
+                                       </TableRow>
+                                     </TableHeader>
+                                     <TableBody>
+                                        {group.items.map(item => (
+                                          <TableRow key={item.id}>
+                                              {detailColumns.map(col => <TableCell key={col.id}>{renderDetailCell(item, col.id)}</TableCell>)}
+                                          </TableRow>
+                                        ))}
+                                     </TableBody>
+                                   </Table>
+                                </div>
+                            </TableCell>
+                        </TableRow>
+                    )}
+                  </React.Fragment>
                 ))
               ) : (
                 <TableRow>
-                  <TableCell colSpan={visibleColumns.length || 1} className="h-24 text-center">
+                  <TableCell colSpan={visibleColumns.length + 1} className="h-24 text-center">
                     Nenhum resultado encontrado.
                   </TableCell>
                 </TableRow>
