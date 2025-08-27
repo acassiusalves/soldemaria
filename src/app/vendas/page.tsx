@@ -2,15 +2,27 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { addDays, format, parseISO } from "date-fns";
+import type { DateRange } from "react-day-picker";
 import {
+  Calendar as CalendarIcon,
   LayoutDashboard,
   LogOut,
   Settings,
   ShoppingBag,
 } from "lucide-react";
 
+import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -19,6 +31,11 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   Sidebar,
   SidebarContent,
@@ -35,6 +52,22 @@ import DetailedSalesHistoryTable from "@/components/detailed-sales-history-table
 import { detailedSalesData } from "@/lib/data";
 
 export default function VendasPage() {
+  const [date, setDate] = React.useState<DateRange | undefined>({
+    from: new Date(2025, 5, 1), // June 1, 2025
+    to: addDays(new Date(2025, 7, 31), 0), // August 31, 2025
+  });
+
+  const filteredSales = React.useMemo(() => {
+    if (!date?.from) return detailedSalesData;
+    const fromDate = date.from;
+    const toDate = date.to ?? fromDate;
+
+    return detailedSalesData.filter((sale) => {
+      const saleDate = parseISO(sale.data);
+      return saleDate >= fromDate && saleDate <= toDate;
+    });
+  }, [date]);
+
   return (
     <SidebarProvider>
       <Sidebar>
@@ -108,7 +141,53 @@ export default function VendasPage() {
         </header>
 
         <main className="flex-1 space-y-6 p-6">
-          <DetailedSalesHistoryTable data={detailedSalesData} />
+          <Card>
+            <CardHeader>
+              <CardTitle className="font-headline text-h3">Seleção de Período</CardTitle>
+              <CardDescription>
+                Filtre as vendas que você deseja analisar.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    id="date"
+                    variant={"outline"}
+                    className={cn(
+                      "w-[300px] justify-start text-left font-normal",
+                      !date && "text-muted-foreground"
+                    )}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {date?.from ? (
+                      date.to ? (
+                        <>
+                          {format(date.from, "dd/MM/y")} -{" "}
+                          {format(date.to, "dd/MM/y")}
+                        </>
+                      ) : (
+                        format(date.from, "dd/MM/y")
+                      )
+                    ) : (
+                      <span>Selecione uma data</span>
+                    )}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    initialFocus
+                    mode="range"
+                    defaultMonth={date?.from}
+                    selected={date}
+                    onSelect={setDate}
+                    numberOfMonths={2}
+                  />
+                </PopoverContent>
+              </Popover>
+            </CardContent>
+          </Card>
+          <DetailedSalesHistoryTable data={filteredSales} />
         </main>
       </SidebarInset>
     </SidebarProvider>
