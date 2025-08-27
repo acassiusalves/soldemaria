@@ -15,9 +15,7 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "./ui/input";
-// Collapsible não será mais usado para envolver, então podemos remover se não for usado em outro lugar
-// import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "./ui/collapsible";
+import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "./ui/card";
 
 const ITEMS_PER_PAGE = 10;
@@ -38,7 +36,6 @@ export default function DetailedSalesHistoryTable({ data }: { data: VendaDetalha
   const [sortKey, setSortKey] = useState<SortKey>("data");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [filter, setFilter] = useState('');
-  // Reintroduzindo o estado para controlar as linhas abertas
   const [openRows, setOpenRows] = useState<Set<string>>(new Set());
 
   const filteredData = useMemo(() => {
@@ -81,7 +78,6 @@ export default function DetailedSalesHistoryTable({ data }: { data: VendaDetalha
     }
   };
 
-  // Função para abrir/fechar a linha
   const toggleRow = (id: string) => {
     setOpenRows(prev => {
       const newSet = new Set(prev);
@@ -131,7 +127,6 @@ export default function DetailedSalesHistoryTable({ data }: { data: VendaDetalha
             <TableBody>
               {paginatedData.length > 0 ? (
                 paginatedData.map((sale) => (
-                  // INÍCIO DA MUDANÇA PRINCIPAL
                   <React.Fragment key={sale.id}>
                     <TableRow>
                       <TableCell>
@@ -153,7 +148,6 @@ export default function DetailedSalesHistoryTable({ data }: { data: VendaDetalha
                       <TableRow>
                         <TableCell colSpan={6} className="p-0">
                           <div className="grid grid-cols-4 gap-4 p-4 text-sm bg-muted/10">
-                            {/* O conteúdo detalhado permanece o mesmo */}
                             <div className="space-y-1">
                                 <p className="font-semibold text-muted-foreground">Pagamento 1</p>
                                 <p>Valor Parcela: {formatCurrency(sale.valorParcela1)}</p>
@@ -182,7 +176,6 @@ export default function DetailedSalesHistoryTable({ data }: { data: VendaDetalha
                       </TableRow>
                     )}
                   </React.Fragment>
-                  // FIM DA MUDANÇA PRINCIPAL
                 ))
               ) : (
                 <TableRow>
@@ -195,7 +188,6 @@ export default function DetailedSalesHistoryTable({ data }: { data: VendaDetalha
           </Table>
         </div>
         <div className="flex items-center justify-end space-x-2 py-4">
-            {/* Paginação permanece igual */}
             <span className="text-sm text-muted-foreground">
                 Página {currentPage} de {totalPages}
             </span>
