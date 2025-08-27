@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { addDays, format, parse, parseISO } from "date-fns";
+import { addDays, format, parse, parseISO, endOfDay } from "date-fns";
 import type { DateRange } from "react-day-picker";
 import {
   Calendar as CalendarIcon,
@@ -11,7 +11,7 @@ import {
   Settings,
   ShoppingBag,
 } from "lucide-react";
-import { collection, doc, onSnapshot, writeBatch } from "firebase/firestore";
+import { collection, doc, onSnapshot, writeBatch, Timestamp } from "firebase/firestore";
 
 
 import { cn } from "@/lib/utils";
@@ -114,11 +114,11 @@ export default function VendasPage() {
   const filteredSales = React.useMemo(() => {
     if (!date?.from) return sales;
     const fromDate = date.from;
-    const toDate = date.to ?? fromDate;
+    const toDate = date.to ? endOfDay(date.to) : endOfDay(fromDate);
 
     return sales.filter((sale) => {
-      // Handle potential string dates from Firestore
-      const saleDate = typeof sale.data === 'string' ? parseISO(sale.data) : sale.data;
+      // Handle potential Timestamp from Firestore
+      const saleDate = sale.data instanceof Timestamp ? sale.data.toDate() : (typeof sale.data === 'string' ? parseISO(sale.data) : sale.data);
       return saleDate >= fromDate && saleDate <= toDate;
     });
   }, [date, sales]);
@@ -131,30 +131,31 @@ export default function VendasPage() {
 
         // Update sales data
         data.forEach((item, index) => {
-            let date = new Date().toISOString().split('T')[0]; // Default to today
+            let date = new Date(); // Default to today
             
             if(typeof item.data === 'number') {
                 const excelEpoch = new Date(1899, 11, 30);
-                const jsDate = new Date(excelEpoch.getTime() + item.data * 24 * 60 * 60 * 1000);
-                date = jsDate.toISOString().split('T')[0];
+                date = new Date(excelEpoch.getTime() + item.data * 24 * 60 * 60 * 1000);
             } else if (typeof item.data === 'string') {
                 try {
-                    if (!isNaN(parseISO(item.data).getTime())) {
-                        date = item.data;
-                    } else {
-                        const parsedDate = parse(item.data, 'dd/MM/yyyy', new Date());
-                        if(!isNaN(parsedDate.getTime())){
-                            date = parsedDate.toISOString().split('T')[0];
-                        }
+                    let parsedDate = parseISO(item.data);
+                    if (isNaN(parsedDate.getTime())) {
+                        parsedDate = parse(item.data, 'dd/MM/yyyy', new Date());
+                    }
+                    if(!isNaN(parsedDate.getTime())){
+                        date = parsedDate;
                     }
                 } catch(e) {
                     console.warn(`Could not parse date for row ${index}: ${item.data}`);
                 }
+            } else if (item.data instanceof Date) {
+              date = item.data;
             }
-
+            
+            const dateTimestamp = Timestamp.fromDate(date);
             const docId = `uploaded-${new Date().getTime()}-${index}`;
             const saleRef = doc(db, "vendas", docId);
-            batch.set(saleRef, { ...item, id: docId, data: date });
+            batch.set(saleRef, { ...item, id: docId, data: dateTimestamp });
         });
 
         // Update metadata
