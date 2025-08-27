@@ -75,12 +75,34 @@ const toDate = (value: unknown): Date | null => {
   if (!value) return null;
   if (value instanceof Date && isValid(value)) return value;
   if (value instanceof Timestamp) return value.toDate();
-  if (typeof value === 'string') {
-    const isoDate = parseISO(value);
-    if (isValid(isoDate)) return isoDate;
-    const brDate = parse(value, 'dd/MM/yyyy', new Date());
-    if (isValid(brDate)) return brDate;
+
+  if (typeof value === "number") {
+    // serial Excel (jan/1900 = 1)
+    // faixa segura ~1955..2064
+    if (value > 20000 && value < 60000) {
+      const excelEpoch = new Date(Date.UTC(1899, 11, 30));
+      const d = new Date(excelEpoch.getTime() + value * 86400000);
+      return isValid(d) ? d : null;
+    }
+    return null;
   }
+
+  if (typeof value === "string") {
+    const s = value.trim();
+
+    // yyyy-mm-dd (ou com '/')
+    const iso = parseISO(s.replace(/\//g, "-"));
+    if (isValid(iso)) return iso;
+
+    // dd/MM/yyyy
+    const br = parse(s, "dd/MM/yyyy", new Date());
+    if (isValid(br)) return br;
+
+    // yyyy/MM/dd
+    const ymdSlash = parse(s, "yyyy/MM/dd", new Date());
+    if (isValid(ymdSlash)) return ymdSlash;
+  }
+
   return null;
 };
 
@@ -191,22 +213,32 @@ const headerMappingNormalized: Record<string, string> = {
   "fidelizacao": "fidelizacao"
 };
 
+// reconhece formatos comuns de data
+const isDateLike = (s: string) =>
+  /^\d{4}[-/]\d{2}[-/]\d{2}$/.test(s) ||   // 2025-08-27 ou 2025/08/27
+  /^\d{2}[-/]\d{2}[-/]\d{4}$/.test(s);     // 27-08-2025 ou 27/08/2025
 
 const cleanNumericValue = (value: any): number | string => {
-  if (typeof value === 'number') return value;
-  if (typeof value !== 'string') return value;
+  if (typeof value === "number") return value;
+  if (typeof value !== "string") return value;
 
-  const cleaned = value
-    .replace(/\u00A0/g, "") // Remove non-breaking spaces
-    .replace('R$', '')
-    .replace(/\((.+)\)/, '-$1') // Handle negative numbers in parentheses
-    .replace(/\./g, '')
-    .replace(',', '.')
-    .trim();
+  const s = value.replace(/\u00A0/g, "").trim();
+  if (!s) return s;
 
-  const num = parseFloat(cleaned);
-  return isNaN(num) ? value : num;
+  // ⚠️ se parece data, não tentar converter para número
+  if (isDateLike(s)) return s;
+
+  const cleaned = s
+    .replace("R$", "")
+    .replace(/\((.+)\)/, "-$1")
+    .replace(/\./g, "")
+    .replace(",", ".");
+
+  const num = Number(cleaned);
+  // só retorna número se de fato for um número válido
+  return Number.isFinite(num) && /[0-9]/.test(cleaned) ? num : value;
 };
+
 
 // fallback por conteúdo (cobre variações ou espaços invisíveis)
 const resolveSystemKey = (normalized: string): string | undefined => {
@@ -417,6 +449,10 @@ export default function VendasPage() {
         }
 
         const allKeys = Array.from(new Set(stagedSales.flatMap(row => Object.keys(row))));
+        if (!allKeys.includes("data") && stagedSales.some(r => r.data)) {
+          allKeys.push("data");
+        }
+
         const detectedColumns: ColumnDef[] = allKeys.map(key => ({
             id: key,
             label: getLabel(key),

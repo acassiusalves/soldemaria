@@ -133,6 +133,7 @@ export default function DetailedSalesHistoryTable({ data, columns }: DetailedSal
           mergedVisibility[k] = defaultVisibleKeys.includes(k); 
         }
       });
+      mergedVisibility["data"] ??= true; // Force data column to be visible
       setColumnVisibility(mergedVisibility);
       return;
     }
@@ -144,6 +145,7 @@ export default function DetailedSalesHistoryTable({ data, columns }: DetailedSal
     keys.forEach((k) => { 
         initial[k] = defaultVisibleKeys.includes(k);
     });
+    initial["data"] = true; // Force data column to be visible
     setColumnVisibility(initial);
   }, [mainColumns]);
 
