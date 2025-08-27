@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { addDays, format, parseISO } from "date-fns";
+import { addDays, format, parse, parseISO } from "date-fns";
 import type { DateRange } from "react-day-picker";
 import {
   Calendar as CalendarIcon,
@@ -71,12 +71,38 @@ export default function VendasPage() {
   }, [date, sales]);
 
   const handleDataUpload = (data: VendaDetalhada[]) => {
-    const formattedData = data.map(item => ({
-      ...item,
-      // dates from xlsx are not in ISO format, let's assume they are DD/MM/YYYY
-      // and convert them to YYYY-MM-DD
-      data: new Date().toISOString().split('T')[0] // Placeholder for now
-    }))
+    const formattedData = data.map((item, index) => {
+      let date = new Date().toISOString().split('T')[0]; // Default to today
+      
+      // XLSX can return dates as numbers (Excel date serial number) or strings
+      if(typeof item.data === 'number') {
+        // Formula to convert Excel serial number to JS Date
+        const excelEpoch = new Date(1899, 11, 30);
+        const jsDate = new Date(excelEpoch.getTime() + item.data * 24 * 60 * 60 * 1000);
+        date = jsDate.toISOString().split('T')[0];
+      } else if (typeof item.data === 'string') {
+        // Try to parse common date formats, e.g., DD/MM/YYYY
+        try {
+          // It might already be in YYYY-MM-DD
+          if (!isNaN(parseISO(item.data).getTime())) {
+             date = item.data;
+          } else {
+             const parsedDate = parse(item.data, 'dd/MM/yyyy', new Date());
+             if(!isNaN(parsedDate.getTime())){
+                date = parsedDate.toISOString().split('T')[0];
+             }
+          }
+        } catch(e) {
+          console.warn(`Could not parse date for row ${index}: ${item.data}`);
+        }
+      }
+
+      return {
+        ...item,
+        id: `uploaded-${new Date().getTime()}-${index}`, // Create a unique ID
+        data: date
+      }
+    });
     setSales(prev => [...prev, ...formattedData]);
   };
 
@@ -153,7 +179,7 @@ export default function VendasPage() {
         </header>
 
         <main className="flex-1 space-y-6 p-6">
-          <Card>
+           <Card>
             <CardHeader>
               <div className="flex justify-between items-start">
                 <div>
@@ -215,3 +241,5 @@ export default function VendasPage() {
     </SidebarProvider>
   );
 }
+
+    

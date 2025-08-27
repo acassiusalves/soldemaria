@@ -12,7 +12,6 @@ import {
   DialogClose,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { UploadCloud } from "lucide-react";
 import { useDropzone } from "react-dropzone";
 import * as XLSX from "xlsx";
@@ -21,7 +20,7 @@ import { useToast } from "@/hooks/use-toast";
 
 interface SupportDataDialogProps {
   children: React.ReactNode;
-  onDataUpload: (data: VendaDetalhada[]) => void;
+  onDataUpload: (data: any[]) => void;
 }
 
 export function SupportDataDialog({ children, onDataUpload }: SupportDataDialogProps) {
@@ -37,10 +36,11 @@ export function SupportDataDialog({ children, onDataUpload }: SupportDataDialogP
         if (!data) {
           throw new Error("Não foi possível ler o arquivo.");
         }
-        const workbook = XLSX.read(data, { type: "binary" });
+        const workbook = XLSX.read(data, { type: "array", cellDates: true });
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
-        const json = XLSX.utils.sheet_to_json<VendaDetalhada>(worksheet);
+        const json = XLSX.utils.sheet_to_json(worksheet);
+        
         onDataUpload(json);
         setIsOpen(false);
         setFile(null);
@@ -57,7 +57,7 @@ export function SupportDataDialog({ children, onDataUpload }: SupportDataDialogP
         });
       }
     };
-    reader.readAsBinaryString(file);
+    reader.readAsArrayBuffer(file);
   };
   
   const onDrop = useCallback((acceptedFiles: File[]) => {
@@ -124,3 +124,5 @@ export function SupportDataDialog({ children, onDataUpload }: SupportDataDialogP
     </Dialog>
   );
 }
+
+    
