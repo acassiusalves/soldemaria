@@ -201,17 +201,46 @@ const isDateLike = (s: string) =>
 const cleanNumericValue = (value: any): number | string => {
   if (typeof value === "number") return value;
   if (typeof value !== "string") return value;
-  const s = value.replace(/\u00A0/g, "").trim();
+
+  let s = value.replace(/\u00A0/g, " ").trim(); // tira NBSP
   if (!s) return s;
+
+  // não tentar converter datas
   if (isDateLike(s)) return s;
-  const cleaned = s
-    .replace("R$", "")
-    .replace(/\((.+)\)/, "-$1")
-    .replace(/\./g, "")
-    .replace(",", ".");
-  const num = Number(cleaned);
-  return Number.isFinite(num) && /[0-9]/.test(cleaned) ? num : value;
+
+  // remove símbolos de moeda e espaços
+  s = s.replace(/\s/g, "").replace(/R\$/i, "");
+
+  const hasComma = s.includes(",");
+  const hasDot   = s.includes(".");
+
+  if (hasComma && hasDot) {
+    // Ex.: 1.234,56  →  1234.56
+    s = s.replace(/\./g, "").replace(",", ".");
+  } else if (hasComma) {
+    // Ex.: 1234,56   →  1234.56
+    // (vírgula como decimal)
+    if (/^\d+,\d{2}$/.test(s) || /^\d+,\d+$/.test(s)) {
+      s = s.replace(",", ".");
+    } else {
+      // vírgulas como milhar (raro no BR), remove todas
+      s = s.replace(/,/g, "");
+    }
+  } else if (hasDot) {
+    // Só ponto presente: decidir se é decimal ou milhar
+    if (/^\d+\.\d{2}$/.test(s) || /^\d+\.\d+$/.test(s)) {
+      // decimal com ponto → mantém
+    } else if (/^\d{1,3}(\.\d{3})+$/.test(s)) {
+      // 1.234.567 → remove pontos de milhar
+      s = s.replace(/\./g, "");
+    } // senão, deixa como está (é inteiro com ponto perdido, improvável)
+  }
+  // caso sem ponto nem vírgula: já é inteiro
+
+  const num = Number(s);
+  return Number.isFinite(num) && /[0-9]/.test(s) ? num : value;
 };
+
 
 export const resolveSystemKey = (normalized: string): string => {
   if (headerMappingNormalized[normalized]) return headerMappingNormalized[normalized];
@@ -496,7 +525,7 @@ export default function VendasPage() {
           stagedUpdates.set(merged.id, merged);
           updated++;
         } else {
-          // Permite upsert, criando novos registros se não encontrados
+          // Permite upsert para carga inicial
           const docId = `staged-${uploadTimestamp}-${inserted}`;
           stagedInserts.push({ 
             ...mappedRow, 
@@ -646,153 +675,146 @@ export default function VendasPage() {
   };
 
   return (
-    <SidebarProvider>
-      <Sidebar>
-        <SidebarHeader>
-          <div className="flex items-center gap-2">
+    <div className="flex min-h-screen w-full flex-col">
+      <header className="sticky top-0 flex h-16 items-center gap-4 border-b bg-background px-4 md:px-6">
+        <nav className="hidden flex-col gap-6 text-lg font-medium md:flex md:flex-row md:items-center md:gap-5 md:text-sm lg:gap-6">
+          <Link
+            href="/"
+            className="flex items-center gap-2 text-lg font-semibold md:text-base"
+          >
             <Logo className="size-8 text-primary" />
             <span className="text-xl font-semibold font-headline">Visão de Vendas</span>
-          </div>
-        </SidebarHeader>
-        <SidebarContent>
-          <SidebarMenu>
-            <SidebarMenuItem>
-              <Link href="/">
-                <SidebarMenuButton>
-                  <LayoutDashboard />
-                  Painel
-                </SidebarMenuButton>
-              </Link>
-            </SidebarMenuItem>
-            <SidebarMenuItem>
-              <Link href="/vendas">
-                <SidebarMenuButton isActive>
-                  <ShoppingBag />
-                  Vendas
-                </SidebarMenuButton>
-              </Link>
-            </SidebarMenuItem>
-          </SidebarMenu>
-        </SidebarContent>
-      </Sidebar>
-      <SidebarInset>
-        <header className="flex items-center justify-between p-4 border-b">
-          <div className="flex items-center gap-4">
-            <SidebarTrigger className="md:hidden" />
-            <h1 className="text-h2 font-bold font-headline text-foreground/90">
-              Vendas
-            </h1>
-          </div>
-          <div className="flex items-center gap-2">
-            <SupportDataDialog
-              onProcessData={handleDataUpload}
-              uploadedFileNames={uploadedFileNames}
-              onRemoveUploadedFile={handleRemoveUploadedFileName}
-              stagedFileNames={stagedFileNames}
-            >
-              <Button variant="outline">
-                <Settings className="mr-2 h-4 w-4" />
-                Dados de Apoio
-              </Button>
-            </SupportDataDialog>
-
-            {stagedSales.length > 0 && (
-              <Button onClick={handleClearStagedData} variant="destructive" disabled={isSaving}>
-                <Trash2 className="mr-2 h-4 w-4" />
-                Limpar Revisão
-              </Button>
-            )}
-
-            <Button
-              onClick={handleSaveChangesToDb}
-              disabled={stagedSales.length === 0 || isSaving}
-              variant={stagedSales.length === 0 ? "outline" : "default"}
-              title={stagedSales.length === 0 ? "Carregue planilhas para habilitar" : "Salvar dados no Firestore"}
-            >
-              {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-              {isSaving ? "Salvando..." : `Salvar no Banco ${stagedSales.length > 0 ? `(${stagedSales.length})` : ""}`}
-            </Button>
-
-            {salesFromDb.length > 0 && uploadedFileNames.length === 0 && (
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button variant="destructive">
-                    <AlertTriangle className="mr-2 h-4 w-4" />
-                    Apagar Tudo
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Você tem certeza absoluta?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      Esta ação não pode ser desfeita. Isso irá apagar permanentemente
-                      TODOS os dados de vendas do seu banco de dados.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                    <AlertDialogAction onClick={handleClearAllData}>
-                      Sim, apagar tudo
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-            )}
-          </div>
-        </header>
-
-        <main className="flex-1 space-y-6 p-6">
-          <MotionCard
-            className="rounded-2xl shadow hover:shadow-lg transition-shadow"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3 }}
+          </Link>
+          <Link
+            href="/"
+            className="text-muted-foreground transition-colors hover:text-foreground"
           >
-            <CardHeader>
-              <div className="flex justify-between items-start">
-                <div>
-                  <CardTitle className="font-headline text-h3">Seleção de Período</CardTitle>
-                  <CardDescription>Filtre as vendas que você deseja analisar.</CardDescription>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    id="date"
-                    variant={"outline"}
-                    className={cn("w-[300px] justify-start text-left font-normal", !date && "text-muted-foreground")}
+            Painel
+          </Link>
+          <Link
+            href="/vendas"
+            className="text-foreground transition-colors hover:text-foreground"
+          >
+            Vendas
+          </Link>
+        </nav>
+        <div className="flex w-full items-center gap-4 md:ml-auto md:gap-2 lg:gap-4">
+            <div className="ml-auto flex-1 sm:flex-initial">
+              <div className="flex items-center gap-2">
+                 <SupportDataDialog
+                    onProcessData={handleDataUpload}
+                    uploadedFileNames={uploadedFileNames}
+                    onRemoveUploadedFile={handleRemoveUploadedFileName}
+                    stagedFileNames={stagedFileNames}
                   >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {date?.from ? (
-                      date.to ? (<>{format(date.from, "dd/MM/y")} - {format(date.to, "dd/MM/y")}</>) : (format(date.from, "dd/MM/y"))
-                    ) : (<span>Selecione uma data</span>)}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar initialFocus mode="range" defaultMonth={date?.from} selected={date} onSelect={setDate} numberOfMonths={2} />
-                </PopoverContent>
-              </Popover>
-            </CardContent>
-            {isSaving && (
-              <div className="px-6 pb-4">
-                <Progress value={saveProgress} className="w-full" />
-                <p className="text-sm text-muted-foreground mt-2 text-center">
-                  Salvando {stagedSales.length} registros. Isso pode levar um momento...
-                </p>
-              </div>
-            )}
-          </MotionCard>
+                    <Button variant="outline">
+                      <Settings className="mr-2 h-4 w-4" />
+                      Dados de Apoio
+                    </Button>
+                  </SupportDataDialog>
 
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.1 }}>
-            {/* AGORA a tabela recebe os dados agrupados, com subRows e lista de parcelas */}
-            <DetailedSalesHistoryTable data={groupedForView} columns={columns} />
-          </motion.div>
-        </main>
-      </SidebarInset>
-    </SidebarProvider>
+                  {stagedSales.length > 0 && (
+                    <Button onClick={handleClearStagedData} variant="destructive" disabled={isSaving}>
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      Limpar Revisão
+                    </Button>
+                  )}
+
+                  <Button
+                    onClick={handleSaveChangesToDb}
+                    disabled={stagedSales.length === 0 || isSaving}
+                    variant={stagedSales.length === 0 ? "outline" : "default"}
+                    title={stagedSales.length === 0 ? "Carregue planilhas para habilitar" : "Salvar dados no Firestore"}
+                  >
+                    {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                    {isSaving ? "Salvando..." : `Salvar no Banco ${stagedSales.length > 0 ? `(${stagedSales.length})` : ""}`}
+                  </Button>
+
+                  {salesFromDb.length > 0 && uploadedFileNames.length === 0 && (
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button variant="destructive">
+                          <AlertTriangle className="mr-2 h-4 w-4" />
+                          Apagar Tudo
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Você tem certeza absoluta?</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            Esta ação não pode ser desfeita. Isso irá apagar permanentemente
+                            TODOS os dados de vendas do seu banco de dados.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                          <AlertDialogAction onClick={handleClearAllData}>
+                            Sim, apagar tudo
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  )}
+              </div>
+            </div>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="secondary" size="icon" className="rounded-full">
+                  <Avatar className="h-9 w-9">
+                    <AvatarImage src="https://picsum.photos/100/100" data-ai-hint="person" alt="@usuario" />
+                    <AvatarFallback>UV</AvatarFallback>
+                  </Avatar>
+                  <span className="sr-only">Toggle user menu</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuLabel>Minha Conta</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem>Configurações</DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem>Sair</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+        </div>
+      </header>
+
+      <main className="flex flex-1 flex-col gap-4 p-4 md:gap-8 md:p-8">
+        <Card>
+          <CardHeader>
+            <CardTitle className="font-headline text-h3">Seleção de Período</CardTitle>
+            <CardDescription>Filtre as vendas que você deseja analisar.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  id="date"
+                  variant={"outline"}
+                  className={cn("w-[300px] justify-start text-left font-normal", !date && "text-muted-foreground")}
+                >
+                  <CalendarIcon className="mr-2 h-4 w-4" />
+                  {date?.from ? (
+                    date.to ? (<>{format(date.from, "dd/MM/y")} - {format(date.to, "dd/MM/y")}</>) : (format(date.from, "dd/MM/y"))
+                  ) : (<span>Selecione uma data</span>)}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <Calendar initialFocus mode="range" defaultMonth={date?.from} selected={date} onSelect={setDate} numberOfMonths={2} />
+              </PopoverContent>
+            </Popover>
+          </CardContent>
+          {isSaving && (
+            <div className="px-6 pb-4">
+              <Progress value={saveProgress} className="w-full" />
+              <p className="text-sm text-muted-foreground mt-2 text-center">
+                Salvando {stagedSales.length} registros. Isso pode levar um momento...
+              </p>
+            </div>
+          )}
+        </Card>
+
+        <DetailedSalesHistoryTable data={groupedForView} columns={columns} />
+      </main>
+    </div>
   );
 }
-
-    
