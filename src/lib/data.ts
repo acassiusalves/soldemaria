@@ -45,3 +45,5 @@ export type VendaDetalhada = {
   valorCredito?: number;
   valorDescontos?: number;
 };
+
+export type LogisticaDetalhada = VendaDetalhada;
