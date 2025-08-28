@@ -671,62 +671,7 @@ export default function VendasPage() {
         </nav>
         <div className="flex w-full items-center gap-4 md:ml-auto md:gap-2 lg:gap-4">
             <div className="ml-auto flex-1 sm:flex-initial">
-              <div className="flex items-center gap-2">
-                 <SupportDataDialog
-                    onProcessData={handleDataUpload}
-                    uploadedFileNames={uploadedFileNames}
-                    onRemoveUploadedFile={handleRemoveUploadedFileName}
-                    stagedFileNames={stagedFileNames}
-                  >
-                    <Button variant="outline">
-                      <Settings className="mr-2 h-4 w-4" />
-                      Dados de Apoio
-                    </Button>
-                  </SupportDataDialog>
-
-                  {stagedSales.length > 0 && (
-                    <Button onClick={handleClearStagedData} variant="destructive" disabled={isSaving}>
-                      <Trash2 className="mr-2 h-4 w-4" />
-                      Limpar Revisão
-                    </Button>
-                  )}
-
-                  <Button
-                    onClick={handleSaveChangesToDb}
-                    disabled={stagedSales.length === 0 || isSaving}
-                    variant={stagedSales.length === 0 ? "outline" : "default"}
-                    title={stagedSales.length === 0 ? "Carregue planilhas para habilitar" : "Salvar dados no Firestore"}
-                  >
-                    {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                    {isSaving ? "Salvando..." : `Salvar no Banco ${stagedSales.length > 0 ? `(${stagedSales.length})` : ""}`}
-                  </Button>
-
-                  {salesFromDb.length > 0 && uploadedFileNames.length === 0 && (
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button variant="destructive">
-                          <AlertTriangle className="mr-2 h-4 w-4" />
-                          Apagar Tudo
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>Você tem certeza absoluta?</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            Esta ação não pode ser desfeita. Isso irá apagar permanentemente
-                            TODOS os dados de vendas do seu banco de dados.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                          <AlertDialogAction onClick={handleClearAllData}>
-                            Sim, apagar tudo
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
-                  )}
-              </div>
+              {/* This space is intentionally left blank for now */}
             </div>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -752,8 +697,73 @@ export default function VendasPage() {
       <main className="flex-1 space-y-6 p-4 md:p-8">
         <Card>
           <CardHeader>
-            <CardTitle className="font-headline text-h3">Seleção de Período</CardTitle>
-            <CardDescription>Filtre as vendas que você deseja analisar.</CardDescription>
+            <div className="flex justify-between items-start">
+                <div>
+                  <CardTitle className="font-headline text-h3">Seleção de Período</CardTitle>
+                  <CardDescription>Filtre as vendas que você deseja analisar.</CardDescription>
+                </div>
+                 <div className="flex items-center gap-2">
+                    <SupportDataDialog
+                      onProcessData={handleDataUpload}
+                      uploadedFileNames={uploadedFileNames}
+                      onRemoveUploadedFile={handleRemoveUploadedFileName}
+                      stagedFileNames={stagedFileNames}
+                    >
+                       <Button variant="outline">
+                        <Settings className="mr-2 h-4 w-4" />
+                        Dados de Apoio
+                      </Button>
+                    </SupportDataDialog>
+                     {stagedSales.length > 0 && (
+                      <Button
+                        onClick={handleClearStagedData}
+                        variant="destructive"
+                        disabled={isSaving}
+                      >
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        Limpar Revisão
+                      </Button>
+                    )}
+                    <Button
+                      onClick={handleSaveChangesToDb}
+                      disabled={stagedSales.length === 0 || isSaving}
+                      variant={stagedSales.length === 0 ? "outline" : "default"}
+                      title={stagedSales.length === 0 ? "Carregue planilhas para habilitar" : "Salvar dados no Firestore"}
+                    >
+                      {isSaving ? (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                          <Save className="mr-2 h-4 w-4" />
+                      )}
+                      {isSaving ? "Salvando..." : `Salvar no Banco ${stagedSales.length > 0 ? `(${stagedSales.length})` : ""}`}
+                    </Button>
+                     {salesFromDb.length > 0 && uploadedFileNames.length === 0 && (
+                        <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                                <Button variant="destructive">
+                                    <AlertTriangle className="mr-2 h-4 w-4" />
+                                    Apagar Tudo
+                                </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                                <AlertDialogHeader>
+                                    <AlertDialogTitle>Você tem certeza absoluta?</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                        Esta ação não pode ser desfeita. Isso irá apagar permanentemente
+                                        TODOS os dados de vendas do seu banco de dados.
+                                    </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                    <AlertDialogAction onClick={handleClearAllData}>
+                                        Sim, apagar tudo
+                                    </AlertDialogAction>
+                                </AlertDialogFooter>
+                            </AlertDialogContent>
+                        </AlertDialog>
+                     )}
+                 </div>
+              </div>
           </CardHeader>
           <CardContent>
             <Popover>
@@ -789,3 +799,5 @@ export default function VendasPage() {
     </div>
   );
 }
+
+    
