@@ -16,24 +16,16 @@ import { UploadCloud, File as FileIcon, PlusCircle, Trash2 } from "lucide-react"
 import { useDropzone } from "react-dropzone";
 import * as XLSX from "xlsx";
 import { useToast } from "@/hooks/use-toast";
-import ColumnMapping, { type ColumnMapping as ColumnMappingType } from "@/components/column-mapping";
-import { resolveSystemKey } from "@/app/vendas/page";
 import { ScrollArea } from "./ui/scroll-area";
-import type { VendaDetalhada } from "@/lib/data";
 
 type UploadPayload = {
   rows: any[];
   fileName: string;
-  mapping: Record<string, string>;
-  assoc: { fileColumn: string; systemKey: keyof VendaDetalhada };
 };
 
 type FileWithData = {
     file: File;
     data: any[];
-    headers: string[];
-    mappings: ColumnMappingType[];
-    associationKey: string;
 }
 
 interface SupportDataDialogProps {
@@ -49,7 +41,7 @@ export function SupportDataDialog({ children, onProcessData, uploadedFileNames, 
   const [isOpen, setIsOpen] = useState(false);
   const { toast } = useToast();
 
-  const handleFileParse = (file: File): Promise<{data: any[], headers: string[]}> => {
+  const handleFileParse = (file: File): Promise<any[]> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = (e) => {
@@ -61,9 +53,8 @@ export function SupportDataDialog({ children, onProcessData, uploadedFileNames, 
           const sheetName = workbook.SheetNames[0];
           const worksheet = workbook.Sheets[sheetName];
           const json = XLSX.utils.sheet_to_json(worksheet, { defval: "", raw: false, dateNF: "yyyy-mm-dd" });
-          const headers: string[] = XLSX.utils.sheet_to_json(worksheet, { header: 1 })[0] as string[];
           
-          resolve({data: json, headers: headers.filter(h => h) });
+          resolve(json);
         } catch (error) {
           console.error("Erro ao processar o arquivo:", error);
           reject(error);
@@ -82,15 +73,8 @@ export function SupportDataDialog({ children, onProcessData, uploadedFileNames, 
         }
 
         try {
-            const { data, headers } = await handleFileParse(file);
-            const initialMappings = headers.map(h => ({
-                originalHeader: h,
-                systemHeader: resolveSystemKey(h),
-                isActive: true,
-            }));
-            const initialAssociationKey = initialMappings.find(m => m.systemHeader === 'codigo')?.originalHeader || headers[0];
-
-            setFilesToProcess(prev => [...prev, { file, data, headers, mappings: initialMappings, associationKey: initialAssociationKey }]);
+            const data = await handleFileParse(file);
+            setFilesToProcess(prev => [...prev, { file, data }]);
         } catch(e) {
             toast({ title: "Erro ao ler arquivo", description: `Não foi possível processar ${file.name}.`, variant: "destructive" });
         }
@@ -122,21 +106,10 @@ export function SupportDataDialog({ children, onProcessData, uploadedFileNames, 
         return;
     }
 
-    const payloads: UploadPayload[] = filesToProcess.map(f => {
-      const activeMappings = f.mappings.filter(m => m.isActive);
-      const mapping = Object.fromEntries(activeMappings.map(m => [m.originalHeader, m.systemHeader]));
-      const assoc: UploadPayload['assoc'] = { 
-        fileColumn: f.associationKey, 
-        systemKey: "codigo" // For now, we hardcode association to 'codigo'
-      };
-
-      return {
-          rows: f.data,
-          fileName: f.file.name,
-          mapping,
-          assoc,
-      };
-    });
+    const payloads: UploadPayload[] = filesToProcess.map(f => ({
+      rows: f.data,
+      fileName: f.file.name,
+    }));
     
     onProcessData(payloads);
     
@@ -144,25 +117,17 @@ export function SupportDataDialog({ children, onProcessData, uploadedFileNames, 
     setFilesToProcess([]);
   };
   
-  const updateFileMapping = (fileName: string, newMappings: ColumnMappingType[]) => {
-    setFilesToProcess(prev => prev.map(f => f.file.name === fileName ? {...f, mappings: newMappings} : f));
-  }
-  
-  const updateAssociationKey = (fileName: string, newKey: string) => {
-    setFilesToProcess(prev => prev.map(f => f.file.name === fileName ? {...f, associationKey: newKey} : f));
-  }
-
   return (
     <Dialog open={isOpen} onOpenChange={(open) => {
         if(!open) setFilesToProcess([]); 
         setIsOpen(open);
     }}>
       <DialogTrigger asChild>{children}</DialogTrigger>
-      <DialogContent className="max-w-3xl">
+      <DialogContent className="max-w-xl">
         <DialogHeader>
-          <DialogTitle>Importar e Mapear Dados de Apoio</DialogTitle>
+          <DialogTitle>Importar Dados de Apoio</DialogTitle>
           <DialogDescription>
-            Arraste ou selecione planilhas. Mapeie as colunas e defina a chave de associação antes de adicionar para revisão.
+            Arraste ou selecione planilhas. O sistema irá assumir que as colunas da sua planilha seguem o modelo padrão.
           </DialogDescription>
         </DialogHeader>
 
@@ -181,28 +146,41 @@ export function SupportDataDialog({ children, onProcessData, uploadedFileNames, 
             </div>
 
             {/* Files Area */}
-            <ScrollArea className="h-[400px] pr-4">
+            <ScrollArea className="h-[300px] pr-4">
               <div className="space-y-4">
-                {filesToProcess.map((f, i) => (
-                    <ColumnMapping
-                        key={f.file.name}
-                        fileName={f.file.name}
-                        mappings={f.mappings}
-                        associationKey={f.associationKey}
-                        onMappingsChange={(m) => updateFileMapping(f.file.name, m)}
-                        onAssociationKeyChange={(k) => updateAssociationKey(f.file.name, k)}
-                        onRemoveFile={() => removeFile(f.file.name)}
-                    />
-                ))}
-
-                 {uploadedFileNames.length > 0 && (
+                 {(filesToProcess.length > 0 || uploadedFileNames.length > 0 || stagedFileNames.length > 0) && (
                     <div className="space-y-2 pt-4">
-                        <h4 className="font-semibold text-sm text-muted-foreground">Histórico de Arquivos</h4>
+                        <h4 className="font-semibold text-sm text-muted-foreground">Histórico e Fila de Upload</h4>
+                        
+                        {/* Staged Files */}
+                        {stagedFileNames.map(name => (
+                             <div key={name} className="flex items-center justify-between p-2 rounded-md bg-yellow-100/50 text-sm">
+                                <div className="flex items-center gap-2 overflow-hidden">
+                                    <FileIcon className="w-5 h-5 text-yellow-600 flex-shrink-0" />
+                                    <span className="truncate text-yellow-700" title={name}>{name} (Em Revisão)</span>
+                                </div>
+                             </div>
+                        ))}
+
+                        {/* New files to process */}
+                        {filesToProcess.map(f => (
+                             <div key={f.file.name} className="flex items-center justify-between p-2 rounded-md bg-blue-100/50 text-sm">
+                                <div className="flex items-center gap-2 overflow-hidden">
+                                    <FileIcon className="w-5 h-5 text-blue-600 flex-shrink-0" />
+                                    <span className="truncate text-blue-700" title={f.file.name}>{f.file.name} (Pronto para adicionar)</span>
+                                </div>
+                                <Button variant="ghost" size="icon" className="h-6 w-6 flex-shrink-0" onClick={() => removeFile(f.file.name)}>
+                                    <Trash2 className="h-4 w-4" />
+                                </Button>
+                             </div>
+                        ))}
+                        
+                        {/* Already uploaded files */}
                         {uploadedFileNames.map(name => (
                              <div key={name} className="flex items-center justify-between p-2 rounded-md bg-muted/50 text-sm">
                                 <div className="flex items-center gap-2 overflow-hidden">
                                     <FileIcon className="w-5 h-5 text-muted-foreground flex-shrink-0" />
-                                    <span className="truncate text-muted-foreground" title={name}>{name}</span>
+                                    <span className="truncate text-muted-foreground" title={name}>{name} (Salvo no banco)</span>
                                 </div>
                                 <Button variant="ghost" size="icon" className="h-6 w-6 flex-shrink-0" onClick={() => onRemoveUploadedFile(name)}>
                                     <Trash2 className="h-4 w-4" />
@@ -228,5 +206,3 @@ export function SupportDataDialog({ children, onProcessData, uploadedFileNames, 
     </Dialog>
   );
 }
-
-    

@@ -63,18 +63,6 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import {
-  Sidebar,
-  SidebarContent,
-  SidebarHeader,
-  SidebarInset,
-  SidebarMenu,
-  SidebarMenuItem,
-  SidebarMenuButton,
-  SidebarProvider,
-  SidebarTrigger,
-} from "@/components/ui/sidebar";
-import { Logo } from "@/components/icons";
 import DetailedSalesHistoryTable, { ColumnDef } from "@/components/detailed-sales-history-table";
 import type { VendaDetalhada } from "@/lib/data";
 import { SupportDataDialog } from "@/components/support-data-dialog";
@@ -158,39 +146,24 @@ const getLabel = (key: string) => columnLabels[key] || key;
 
 /* ========== mapeamento por cabeçalho conhecido ========== */
 const headerMappingNormalized: Record<string, string> = {
-  "data": "data", "data da venda": "data", "data venda": "data",
-  "data do recebimento": "data", "data recebimento": "data", "emissao": "data",
-  "codigo": "codigo", "cod": "codigo", "cod.": "codigo",
-  "documento": "codigo", "numero do documento": "codigo", "numero documento": "codigo",
-  "nota fiscal": "codigo", "nota": "codigo", "nf": "codigo", "numero da nf": "codigo",
-  "numero da venda": "codigo", "numero venda": "codigo",
-  "no da venda": "codigo", "n da venda": "codigo",
-  "numero do pedido": "codigo", "n do pedido": "codigo", "pedido": "codigo",
-  "cliente": "nomeCliente", "nome do cliente": "nomeCliente", "nome cliente": "nomeCliente",
-  "favorecido": "nomeCliente", "destinatario": "nomeCliente", "comprador": "nomeCliente",
-  "vendedor": "vendedor", "vendedora": "vendedor",
-  "colaborador": "vendedor", "colaboradora": "vendedor", "responsavel": "vendedor",
-  "cidade": "cidade", "municipio": "cidade", "cidade uf": "cidade", "municipio uf": "cidade",
-  "origem": "origem", "origem do pedido": "origem", "origem do cliente": "origem",
-  "canal": "origem", "canal de venda": "origem", "marketplace": "origem", "plataforma": "origem",
-  "logistica": "logistica", "logistica entrega": "logistica",
-  "forma de entrega": "logistica", "tipo de entrega": "logistica", "modalidade de entrega": "logistica",
-  "entrega": "logistica", "envio": "logistica", "transportadora": "logistica", "correios": "logistica",
-  "retirada": "logistica", "retirada na loja": "logistica",
-  "tipo": "tipo", "tipo de venda": "tipo", "tipo de recebimento": "tipo", "tipo do pedido": "tipo",
-  "forma de pagamento": "tipo", "meio de pagamento": "tipo", "forma pgto": "tipo",
-  "condicao de pagamento": "tipo", "condicao pagamento": "tipo", "pagamento": "tipo",
-  "valor final": "final", "valor total": "final", "total": "final",
-  "valor recebimento": "final", "valor recebido": "final",
-  "frete": "custoFrete", "valor do frete": "custoFrete", "valor frete": "custoFrete",
-  "taxa de entrega": "custoFrete", "valor entrega": "custoFrete",
-  "custo do frete": "custoFrete", "custo frete": "custoFrete", "frete rs": "custoFrete",
-  "item": "item", "descricao": "descricao",
-  "qtd": "quantidade", "qtde": "quantidade", "quantidade": "quantidade",
-  "custo unitario": "custoUnitario", "valor unitario": "valorUnitario",
-  "imposto": "imposto", "custo embalagem": "embalagem", "embalagem": "embalagem",
-  "comissao": "comissao",
+  "data": "data",
+  "codigo": "codigo",
+  "tipo": "tipo",
+  "cliente": "nomeCliente",
+  "vendedor": "vendedor",
+  "cidade": "cidade",
+  "origem": "origem",
   "fidelizacao": "fidelizacao",
+  "logistica": "logistica",
+  "item": "item",
+  "descricao": "descricao",
+  "qtd": "quantidade",
+  "custo unitario": "custoUnitario",
+  "valor unitario": "valorUnitario",
+  "valor final": "final",
+  "valor entrega": "custoFrete",
+  "valor credito": "valorCredito",
+  "valor descontos": "valorDescontos",
 };
 
 /* ========== limpadores ========= */
@@ -243,26 +216,7 @@ const cleanNumericValue = (value: any): number | string => {
 
 
 export const resolveSystemKey = (normalized: string): string => {
-  if (headerMappingNormalized[normalized]) return headerMappingNormalized[normalized];
-  const n = normalized;
-  if (n.includes("data")) return "data";
-  if (n.startsWith("cod") || n.includes("pedido") || n.includes("document")) return "codigo";
-  if (n.includes("cliente") || n.includes("favorecido") || n.includes("destinatario") || n.includes("comprador")) return "nomeCliente";
-  if (n.includes("vended") || n.includes("colaborador") || n.includes("responsavel")) return "vendedor";
-  if (n.includes("cidade") || n.includes("municipio")) return "cidade";
-  if (n.includes("origem") || n.includes("canal") || n.includes("marketplace") || n.includes("plataforma")) return "origem";
-  if (n.includes("logistica") || n.includes("entrega") || n.includes("envio") ||
-      n.includes("transportadora") || n.includes("correios") || n.includes("retirada")) return "logistica";
-  if (n.includes("tipo") || n.includes("pagamento") || n.includes("recebiment")) return "tipo";
-  if (n.includes("frete") || (n.includes("taxa") && n.includes("entrega"))) return "custoFrete";
-  if (n.includes("total") || (n.includes("valor") && (n.includes("final") || n.includes("recebid")))) return "final";
-  if (n.includes("desconto")) return "valorDescontos";
-  if (n.includes("credito")) return "valorCredito";
-  if (n.includes("fidel")) return "fidelizacao";
-  if (n.includes("qtd") || n.includes("quantidade")) return "quantidade";
-  if (n.includes("custo") && n.includes("unitario")) return "custoUnitario";
-  if (n.includes("valor") && n.includes("unitario")) return "valorUnitario";
-  return normalized.replace(/\s/g, '_');
+  return headerMappingNormalized[normalized] || normalized.replace(/\s/g, '_');
 };
 
 /* ========== normalizador de código (chave) ========== */
@@ -336,23 +290,23 @@ const mapRowToSystem = (row: Record<string, any>) => {
 const pickCodeFromRow = (
   rawRow: Record<string, any>,
   mappedRow: Record<string, any>,
-  assocKey?: string
+  assocKey: string = 'codigo' // Default to 'codigo'
 ) => {
-  if (assocKey) {
-    if (rawRow[assocKey] != null) return normCode(rawRow[assocKey]);
-    const assocNorm = normalizeHeader(assocKey).replace(/\s+/g, "_");
-    if (mappedRow[assocNorm] != null) return normCode(mappedRow[assocNorm]);
-    const resolved = resolveSystemKey(normalizeHeader(assocKey));
-    if (resolved === "codigo" && mappedRow.codigo != null) return normCode(mappedRow.codigo);
-  }
-  if (mappedRow.codigo != null) return normCode(mappedRow.codigo);
-  const candidates = ["codigo","cod","documento","nf","numero_documento","mov_estoque","movestoque"];
-  for (const c of candidates) {
-    if (mappedRow[c] != null) return normCode(mappedRow[c]);
-    if (rawRow[c] != null) return normCode(rawRow[c]);
-  }
-  return "";
+    const resolvedAssocKey = resolveSystemKey(normalizeHeader(assocKey));
+    if (mappedRow[resolvedAssocKey] != null) return normCode(mappedRow[resolvedAssocKey]);
+    
+    if (mappedRow.codigo != null) return normCode(mappedRow.codigo);
+
+    const candidates = ["codigo","cod","documento","nf","numero_documento","mov_estoque","movestoque", "pedido"];
+    for (const c of candidates) {
+        if (mappedRow[c] != null) return normCode(mappedRow[c]);
+        const normalizedCand = normalizeHeader(c);
+        if(mappedRow[normalizedCand] != null) return normCode(mappedRow[normalizedCand]);
+        if (rawRow[c] != null) return normCode(rawRow[c]);
+    }
+    return "";
 };
+
 
 /* ========== agrega valores para compor o cabeçalho do pedido ========== */
 const mergeForHeader = (base: any, row: any) => {
@@ -384,7 +338,7 @@ const mergeForHeader = (base: any, row: any) => {
 
 const MotionCard = motion(Card);
 
-type IncomingDataset = { rows: any[]; fileName: string; assocKey?: string };
+type IncomingDataset = { rows: any[]; fileName: string; };
 
 export default function VendasPage() {
   const [salesFromDb, setSalesFromDb] = React.useState<VendaDetalhada[]>([]);
@@ -497,21 +451,16 @@ export default function VendasPage() {
     let updated = 0, notFound = 0, skippedNoKey = 0, inserted = 0;
 
     for (const ds of datasets) {
-      const { rows, fileName, assocKey } = ds;
+      const { rows, fileName } = ds;
       if (!rows?.length) continue;
 
       const mapped = rows.map(mapRowToSystem);
-
-      console.log("[apoio] arquivo:", fileName);
-      console.log("[apoio] assocKey marcada:", assocKey);
-      console.log("[apoio] headers brutos:", Object.keys(rows[0] ?? {}));
-      console.log("[apoio] headers mapeados:", Object.keys(mapped[0] ?? {}));
 
       for (let i = 0; i < rows.length; i++) {
         const rawRow = rows[i];
         const mappedRow = mapped[i];
 
-        const code = pickCodeFromRow(rawRow, mappedRow, assocKey);
+        const code = pickCodeFromRow(rawRow, mappedRow);
         if (!code) { skippedNoKey++; continue; }
 
         const fromDb = dbByCode.get(code);
@@ -525,9 +474,9 @@ export default function VendasPage() {
           stagedUpdates.set(merged.id, merged);
           updated++;
         } else {
-           const docId = `staged-${uploadTimestamp}-${inserted}`;
-           stagedInserts.push({ ...mappedRow, codigo: code, id: docId, sourceFile: fileName, uploadTimestamp: new Date(uploadTimestamp) });
-           inserted++;
+          const docId = `staged-${uploadTimestamp}-${inserted}`;
+          stagedInserts.push({ ...mappedRow, codigo: code, id: docId, sourceFile: fileName, uploadTimestamp: new Date(uploadTimestamp) });
+          inserted++;
         }
       }
     }
@@ -540,9 +489,9 @@ export default function VendasPage() {
     toast({
       title: "Associação concluída",
       description: [
-        updated > 0 ? `${updated} pedido(s) atualizado(s)` : null,
-        inserted > 0 ? `${inserted} novo(s) pedido(s) criado(s)` : null,
-        skippedNoKey > 0 ? `${skippedNoKey} linha(s) ignoradas (sem chave)` : null,
+        `${updated} pedido(s) atualizado(s)`,
+        `${inserted > 0 ? `${inserted} novo(s) pedido(s) criado(s)`: ''}`,
+        `${skippedNoKey} linha(s) ignoradas (sem chave)`,
       ].filter(Boolean).join(" • "),
     });
 
@@ -597,7 +546,10 @@ export default function VendasPage() {
       // Optimistic update
       setSalesFromDb(prev => {
           const map = new Map(prev.map(s => [s.id, s]));
-          salesToSave.forEach(s => map.set(s.id, s));
+          salesToSave.forEach(s => {
+              const existing = map.get(s.id) || {};
+              map.set(s.id, { ...existing, ...s });
+          });
           return Array.from(map.values());
       });
 
@@ -781,7 +733,7 @@ export default function VendasPage() {
         </div>
       </header>
 
-      <main className="flex flex-1 flex-col gap-4 p-4 md:gap-8 md:p-8">
+      <main className="flex-1 space-y-6 p-4 md:p-8">
         <Card>
           <CardHeader>
             <CardTitle className="font-headline text-h3">Seleção de Período</CardTitle>
