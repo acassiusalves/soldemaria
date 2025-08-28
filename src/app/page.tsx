@@ -66,7 +66,10 @@ import InsightsGenerator from "@/components/insights-generator";
 import SalesHistoryTable from "@/components/sales-history-table";
 
 export default function DashboardPage() {
-  const [date, setDate] = React.useState<DateRange | undefined>(undefined);
+  const [date, setDate] = React.useState<DateRange | undefined>({
+    from: new Date(2023, 0, 1),
+    to: addDays(new Date(2023, 11, 31), 0),
+  });
 
   const filteredSales = React.useMemo(() => {
     if (!date?.from) return salesData;
@@ -103,17 +106,10 @@ export default function DashboardPage() {
     return Object.entries(salesByCategory).sort((a, b) => b[1] - a[1])[0];
   }, [salesByCategory]);
 
-  const defaultInitialDate = {
+  const displayDate = date ?? {
     from: new Date(2023, 0, 1),
     to: addDays(new Date(2023, 11, 31), 0),
   };
-
-  React.useEffect(() => {
-    setDate(defaultInitialDate);
-  }, []);
-  
-  const displayDate = date ?? defaultInitialDate;
-
 
   return (
     <SidebarProvider>
