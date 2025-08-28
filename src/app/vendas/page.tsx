@@ -525,16 +525,9 @@ export default function VendasPage() {
           stagedUpdates.set(merged.id, merged);
           updated++;
         } else {
-          // Permite upsert para carga inicial
-          const docId = `staged-${uploadTimestamp}-${inserted}`;
-          stagedInserts.push({ 
-            ...mappedRow, 
-            codigo: code, 
-            id: docId, 
-            sourceFile: fileName, 
-            uploadTimestamp: new Date(uploadTimestamp) 
-          });
-          inserted++;
+           const docId = `staged-${uploadTimestamp}-${inserted}`;
+           stagedInserts.push({ ...mappedRow, codigo: code, id: docId, sourceFile: fileName, uploadTimestamp: new Date(uploadTimestamp) });
+           inserted++;
         }
       }
     }
@@ -550,7 +543,7 @@ export default function VendasPage() {
         updated > 0 ? `${updated} pedido(s) atualizado(s)` : null,
         inserted > 0 ? `${inserted} novo(s) pedido(s) criado(s)` : null,
         skippedNoKey > 0 ? `${skippedNoKey} linha(s) ignoradas (sem chave)` : null,
-      ].filter(Boolean).join(" • ") || "Nenhuma alteração detectada.",
+      ].filter(Boolean).join(" • "),
     });
 
     if (stagedArray.length > 0) {
@@ -573,8 +566,9 @@ export default function VendasPage() {
 
     try {
       const chunks = [];
-      for (let i = 0; i < stagedSales.length; i += 450) {
-        chunks.push(stagedSales.slice(i, i + 450));
+      const salesToSave = [...stagedSales];
+      for (let i = 0; i < salesToSave.length; i += 450) {
+        chunks.push(salesToSave.slice(i, i + 450));
       }
 
       for (let i = 0; i < chunks.length; i++) {
@@ -589,19 +583,28 @@ export default function VendasPage() {
 
           if (payload.data instanceof Date) payload.data = Timestamp.fromDate(payload.data);
           if (payload.uploadTimestamp instanceof Date) payload.uploadTimestamp = Timestamp.fromDate(payload.uploadTimestamp);
+          
+          if(!isUpdate) payload.id = docId;
 
           if (isUpdate) batch.update(saleRef, payload);
-          else batch.set(saleRef, { ...payload, id: docId });
+          else batch.set(saleRef, payload);
         });
 
         await batch.commit();
         setSaveProgress(((i + 1) / chunks.length) * 100);
       }
 
+      // Optimistic update
+      setSalesFromDb(prev => {
+          const map = new Map(prev.map(s => [s.id, s]));
+          salesToSave.forEach(s => map.set(s.id, s));
+          return Array.from(map.values());
+      });
+
       const allKeys = new Set<string>();
-      stagedSales.forEach(row => Object.keys(row).forEach(k => allKeys.add(k)));
+      salesToSave.forEach(row => Object.keys(row).forEach(k => allKeys.add(k)));
       salesFromDb.forEach(row => Object.keys(row).forEach(k => allKeys.add(k)));
-      if (!allKeys.has("data") && stagedSales.some(r => (r as any).data)) allKeys.add("data");
+      if (!allKeys.has("data") && salesToSave.some(r => (r as any).data)) allKeys.add("data");
 
       const current = new Map(columns.map(c => [c.id, c]));
       allKeys.forEach(key => { if (!current.has(key)) current.set(key, { id: key, label: getLabel(key), isSortable: true }); });
