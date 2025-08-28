@@ -74,23 +74,25 @@ export default function DetailedSalesHistoryTable({ data, columns }: DetailedSal
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
   const effectiveColumns = useMemo(() => {
-    const allKeys = new Set(columns.map(c => c.id));
-    data.forEach(row => {
-        Object.keys(row).forEach(key => allKeys.add(key));
-    });
+    const systemColumnsToHide = ["id", "sourceFile", "uploadTimestamp", "subRows", "parcelas", "total_valor_parcelas"];
+    
+    // If there is data, derive columns from data + props to catch all dynamic fields.
+    // If not, just use the columns from props.
+    if (data.length > 0) {
+        const allKeys = new Set(columns.map(c => c.id));
+        data.forEach(row => {
+            Object.keys(row).forEach(key => allKeys.add(key));
+        });
 
-    const systemColumnsToHide = ["id", "sourceFile", "uploadTimestamp"];
+        return Array.from(allKeys).map(id => {
+            const existingColumn = columns.find(c => c.id === id);
+            if (existingColumn) return existingColumn;
+            return { id, label: id, isSortable: true };
+        }).filter(col => !systemColumnsToHide.includes(col.id));
+    }
+    
+    return columns.filter(col => !systemColumnsToHide.includes(col.id));
 
-    return Array.from(allKeys).map(id => {
-        const existingColumn = columns.find(c => c.id === id);
-        if (existingColumn) return existingColumn;
-        return { id, label: id, isSortable: true };
-    }).filter(col =>
-      data.some(row => {
-        const v = (row as any)[col.id];
-        return v !== undefined && v !== null && String(v).trim() !== "" && !["subRows", "parcelas", "total_valor_parcelas"].includes(col.id);
-      }) && !systemColumnsToHide.includes(col.id)
-    );
   }, [columns, data]);
 
 
