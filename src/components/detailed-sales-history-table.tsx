@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
@@ -29,6 +28,7 @@ import { Card, CardContent } from "./ui/card";
 import { ScrollArea } from "./ui/scroll-area";
 import type { Timestamp } from "firebase/firestore";
 import { cn } from "@/lib/utils";
+import PaymentPanel from "./payment-panel";
 
 const ITEMS_PER_PAGE = 10;
 const DEFAULT_MAIN_COUNT = 8; 
@@ -36,20 +36,6 @@ const STORAGE_KEY = 'vendas_columns_visibility';
 
 type SortKey = keyof VendaDetalhada | string | null;
 type SortDirection = "asc" | "desc";
-
-type VendaAgrupada = {
-  id: string; // Usaremos o ID do primeiro item do grupo
-  codigo: string;
-  items: VendaDetalhada[];
-  // O primeiro item do grupo será a "referência" para dados comuns
-  data: any; 
-  nomeCliente?: string;
-  vendedor?: string;
-  cidade?: string;
-  origem?: string;
-  logistica?: string;
-  final: number; // Soma dos finais
-};
 
 export type ColumnDef = {
   id: string;
@@ -75,7 +61,7 @@ function saveVisibility(state: Record<string, boolean>) {
 
 
 interface DetailedSalesHistoryTableProps {
-    data: VendaDetalhada[];
+    data: any[]; // Data is now grouped data
     columns: ColumnDef[];
 }
 
@@ -100,7 +86,7 @@ export default function DetailedSalesHistoryTable({ data, columns }: DetailedSal
     }).filter(col =>
       data.some(row => {
         const v = (row as any)[col.id];
-        return v !== undefined && v !== null && String(v).trim() !== "";
+        return v !== undefined && v !== null && String(v).trim() !== "" && !["subRows", "parcelas", "total_valor_parcelas"].includes(col.id);
       })
     );
   }, [columns, data]);
@@ -134,6 +120,9 @@ export default function DetailedSalesHistoryTable({ data, columns }: DetailedSal
         }
       });
       mergedVisibility["data"] ??= true; // Force data column to be visible
+      mergedVisibility["codigo"] ??= true;
+      mergedVisibility["nomeCliente"] ??= true;
+      mergedVisibility["final"] ??= true;
       setColumnVisibility(mergedVisibility);
       return;
     }
@@ -146,6 +135,9 @@ export default function DetailedSalesHistoryTable({ data, columns }: DetailedSal
         initial[k] = defaultVisibleKeys.includes(k);
     });
     initial["data"] = true; // Force data column to be visible
+    initial["codigo"] = true;
+    initial["nomeCliente"] = true;
+    initial["final"] = true;
     setColumnVisibility(initial);
   }, [mainColumns]);
 
@@ -155,49 +147,14 @@ export default function DetailedSalesHistoryTable({ data, columns }: DetailedSal
       saveVisibility(columnVisibility);
     }
   }, [columnVisibility]);
-
-  const groupedData = useMemo(() => {
-    const groups: Record<string, VendaDetalhada[]> = {};
-    data.forEach(sale => {
-      if (!sale.codigo) return;
-      if (!groups[sale.codigo]) {
-        groups[sale.codigo] = [];
-      }
-      groups[sale.codigo].push(sale);
-    });
-
-    const notEmpty = (v: any) =>
-      v !== undefined && v !== null && (typeof v !== "string" || v.trim() !== "");
-
-    return Object.values(groups).map((items): VendaAgrupada => {
-      const firstItem = items[0];
-      
-      const findFirstValid = (key: keyof VendaDetalhada) =>
-        items.find(i => notEmpty((i as any)[key]))?.[key];
-
-      return {
-        ...firstItem,
-        id: firstItem.id,
-        items,
-        codigo: (findFirstValid("codigo") ?? (firstItem as any).codigo ?? "").toString(),
-        data: findFirstValid("data") ?? (firstItem as any).data,
-        nomeCliente: findFirstValid("nomeCliente") as any,
-        vendedor: findFirstValid("vendedor") as any,
-        cidade: findFirstValid("cidade") as any,
-        origem: findFirstValid("origem") as any,
-        logistica: findFirstValid("logistica") as any,
-        final: items.reduce((s, it) => s + (Number((it as any).final) || 0), 0),
-      };
-    });
-  }, [data]);
   
   const filteredData = useMemo(() => {
-    if(!filter) return groupedData;
-    return groupedData.filter(group =>
+    if(!filter) return data;
+    return data.filter(group =>
        String(group.codigo).toLowerCase().includes(filter.toLowerCase()) ||
        String(group.nomeCliente).toLowerCase().includes(filter.toLowerCase())
     );
-  }, [groupedData, filter]);
+  }, [data, filter]);
 
   const sortedData = useMemo(() => {
     if (!sortKey) return filteredData;
@@ -209,8 +166,8 @@ export default function DetailedSalesHistoryTable({ data, columns }: DetailedSal
       if (aValue === undefined || aValue === null) return 1;
       if (bValue === undefined || bValue === null) return -1;
       
-      const valA = aValue.toDate ? aValue.toDate() : aValue;
-      const valB = bValue.toDate ? bValue.toDate() : bValue;
+      const valA = aValue?.toDate ? aValue.toDate() : aValue;
+      const valB = bValue?.toDate ? bValue.toDate() : bValue;
 
       if (valA < valB) return sortDirection === "asc" ? -1 : 1;
       if (valA > valB) return sortDirection === "asc" ? 1 : -1;
@@ -262,7 +219,6 @@ export default function DetailedSalesHistoryTable({ data, columns }: DetailedSal
       return "N/A";
     }
 
-    // converte "0", "0,00", "1.234,56" -> número
     const toNumber = (x: any) => {
       if (typeof x === "number") return x;
       if (typeof x === "string") {
@@ -292,7 +248,6 @@ export default function DetailedSalesHistoryTable({ data, columns }: DetailedSal
   const renderDetailCell = (sale: VendaDetalhada, columnId: string) => {
     const value = (sale as any)[columnId];
     
-    // converte "0", "0,00", "1.234,56" -> número
     const toNumber = (x: any) => {
       if (typeof x === "number") return x;
       if (typeof x === "string") {
@@ -378,41 +333,47 @@ export default function DetailedSalesHistoryTable({ data, columns }: DetailedSal
             </TableHeader>
             <TableBody>
               {paginatedData.length > 0 ? (
-                paginatedData.map((group) => (
-                  <React.Fragment key={group.id}>
+                paginatedData.map((row) => (
+                  <React.Fragment key={row.id}>
                     <TableRow>
                        <TableCell>
-                          {group.items.length > 1 && (
-                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => toggleRowExpansion(group.id)}>
-                                <ChevronRight className={cn("h-4 w-4 transition-transform", expandedRows.has(group.id) && "rotate-90")} />
+                          {(row.subRows?.length > 1 || row.parcelas?.length > 0) && (
+                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => toggleRowExpansion(row.id)}>
+                                <ChevronRight className={cn("h-4 w-4 transition-transform", expandedRows.has(row.id) && "rotate-90")} />
                             </Button>
                           )}
                        </TableCell>
                        {visibleColumns.map(col => (
                          <TableCell key={col.id} className={col.id === 'final' ? 'text-right font-semibold' : ''}>
-                           {renderCell(group, col.id)}
+                           {renderCell(row, col.id)}
                          </TableCell>
                        ))}
                     </TableRow>
-                    {expandedRows.has(group.id) && group.items.length > 1 && (
+                    {expandedRows.has(row.id) && (
                         <TableRow>
                             <TableCell colSpan={visibleColumns.length + 1} className="p-2 bg-muted/50">
-                                <div className="p-2 rounded-md bg-background">
-                                   <Table>
-                                     <TableHeader>
-                                       <TableRow>
-                                          {detailColumns.map(col => <TableHead key={col.id}>{col.label}</TableHead>)}
-                                       </TableRow>
-                                     </TableHeader>
-                                     <TableBody>
-                                        {group.items.map(item => (
-                                          <TableRow key={item.id}>
-                                              {detailColumns.map(col => <TableCell key={col.id}>{renderDetailCell(item, col.id)}</TableCell>)}
-                                          </TableRow>
-                                        ))}
-                                     </TableBody>
-                                   </Table>
-                                </div>
+                              <div className="space-y-2">
+                                {row.subRows && row.subRows.length > 1 && (
+                                  <div className="p-2 rounded-md bg-background">
+                                    <h4 className="font-semibold p-2">Itens do Pedido</h4>
+                                     <Table>
+                                       <TableHeader>
+                                         <TableRow>
+                                            {detailColumns.map(col => <TableHead key={col.id}>{col.label}</TableHead>)}
+                                         </TableRow>
+                                       </TableHeader>
+                                       <TableBody>
+                                          {row.subRows.map((item: VendaDetalhada) => (
+                                            <TableRow key={item.id}>
+                                                {detailColumns.map(col => <TableCell key={col.id}>{renderDetailCell(item, col.id)}</TableCell>)}
+                                            </TableRow>
+                                          ))}
+                                       </TableBody>
+                                     </Table>
+                                  </div>
+                                )}
+                                {row.parcelas?.length > 0 && <PaymentPanel row={row} />}
+                              </div>
                             </TableCell>
                         </TableRow>
                     )}
