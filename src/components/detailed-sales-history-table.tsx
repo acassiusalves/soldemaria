@@ -20,6 +20,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -33,6 +34,24 @@ import PaymentPanel from "./payment-panel";
 const ITEMS_PER_PAGE = 10;
 const DEFAULT_MAIN_COUNT = 8; 
 const STORAGE_KEY = 'vendas_columns_visibility';
+const FIXED_COLUMNS: ColumnDef[] = [
+  { id: "data",         label: "Data",            isSortable: true },
+  { id: "codigo",       label: "Código",          isSortable: true },
+  { id: "tipo",         label: "Tipo",            isSortable: true },
+  { id: "nomeCliente",  label: "Nome do Cliente", isSortable: true },
+  { id: "vendedor",     label: "Vendedor",        isSortable: true },
+  { id: "cidade",       label: "Cidade",          isSortable: true },
+  { id: "origem",       label: "Origem",          isSortable: true },
+  { id: "logistica",    label: "Logística",       isSortable: true },
+  { id: "final",        label: "Valor Final",     isSortable: true, className: "text-right" },
+  { id: "custoFrete",   label: "Frete",           isSortable: true },
+  { id: "imposto",      label: "Imposto",         isSortable: true },
+  { id: "embalagem",    label: "Embalagem",       isSortable: true },
+  { id: "comissao",     label: "Comissão",        isSortable: true },
+  { id: "mov_estoque",  label: "mov_estoque",     isSortable: true },
+  { id: "valor_da_parcela", label: "Valor da Parcela", isSortable: true },
+];
+const REQUIRED_ALWAYS_ON = ["data", "codigo", "nomeCliente", "final"];
 
 type SortKey = keyof VendaDetalhada | string | null;
 type SortDirection = "asc" | "desc";
@@ -75,24 +94,18 @@ export default function DetailedSalesHistoryTable({ data, columns }: DetailedSal
 
   const effectiveColumns = useMemo(() => {
     const systemColumnsToHide = ["id", "sourceFile", "uploadTimestamp", "subRows", "parcelas", "total_valor_parcelas"];
-    
-    // If there is data, derive columns from data + props to catch all dynamic fields.
-    // If not, just use the columns from props.
+    const base = (columns && columns.length > 0) ? columns : FIXED_COLUMNS;
+
+    const map = new Map<string, ColumnDef>();
+    base.forEach(c => map.set(c.id, c));
     if (data.length > 0) {
-        const allKeys = new Set(columns.map(c => c.id));
-        data.forEach(row => {
-            Object.keys(row).forEach(key => allKeys.add(key));
+      data.forEach(row => {
+        Object.keys(row).forEach(k => {
+          if (!map.has(k)) map.set(k, { id: k, label: k, isSortable: true });
         });
-
-        return Array.from(allKeys).map(id => {
-            const existingColumn = columns.find(c => c.id === id);
-            if (existingColumn) return existingColumn;
-            return { id, label: id, isSortable: true };
-        }).filter(col => !systemColumnsToHide.includes(col.id));
+      });
     }
-    
-    return columns.filter(col => !systemColumnsToHide.includes(col.id));
-
+    return Array.from(map.values()).filter(c => !systemColumnsToHide.includes(c.id));
   }, [columns, data]);
 
 
@@ -114,19 +127,14 @@ export default function DetailedSalesHistoryTable({ data, columns }: DetailedSal
     
     if (loaded) {
       const mergedVisibility = { ...loaded };
-      // Ensure any new columns from staged data are at least visible by default if not in storage
       keys.forEach(k => {
         if (mergedVisibility[k] === undefined) {
-          // Find if this key was part of the initial defaults
           const detailKeys = ['item', 'descricao', 'quantidade', 'custoUnitario', 'valorUnitario', 'valorCredito', 'valorDescontos'];
           const defaultVisibleKeys = mainColumns.filter(c => !detailKeys.includes(c.id)).slice(0, DEFAULT_MAIN_COUNT).map(c => c.id);
           mergedVisibility[k] = defaultVisibleKeys.includes(k); 
         }
       });
-      mergedVisibility["data"] ??= true; // Force data column to be visible
-      mergedVisibility["codigo"] ??= true;
-      mergedVisibility["nomeCliente"] ??= true;
-      mergedVisibility["final"] ??= true;
+      REQUIRED_ALWAYS_ON.forEach(k => { if (k in mergedVisibility) mergedVisibility[k] = true; });
       setColumnVisibility(mergedVisibility);
       return;
     }
@@ -138,10 +146,7 @@ export default function DetailedSalesHistoryTable({ data, columns }: DetailedSal
     keys.forEach((k) => { 
         initial[k] = defaultVisibleKeys.includes(k);
     });
-    initial["data"] = true; // Force data column to be visible
-    initial["codigo"] = true;
-    initial["nomeCliente"] = true;
-    initial["final"] = true;
+    REQUIRED_ALWAYS_ON.forEach(k => { if (k in initial) initial[k] = true; });
     setColumnVisibility(initial);
   }, [mainColumns]);
 
@@ -151,6 +156,17 @@ export default function DetailedSalesHistoryTable({ data, columns }: DetailedSal
       saveVisibility(columnVisibility);
     }
   }, [columnVisibility]);
+  
+  const handleResetColumns = () => {
+    try { localStorage.removeItem(STORAGE_KEY); } catch {}
+    const next: Record<string, boolean> = {};
+    mainColumns.forEach(c => { next[c.id] = false; });
+    const detailKeys = ['item', 'descricao', 'quantidade', 'custoUnitario', 'valorUnitario', 'valorCredito', 'valorDescontos'];
+    const defaultVisibleKeys = mainColumns.filter(c => !detailKeys.includes(c.id)).slice(0, DEFAULT_MAIN_COUNT).map(c => c.id);
+    defaultVisibleKeys.forEach(k => { next[k] = true; });
+    REQUIRED_ALWAYS_ON.forEach(k => { if (k in next) next[k] = true; });
+    setColumnVisibility(next);
+  };
   
   const filteredData = useMemo(() => {
     if(!filter) return data;
@@ -309,6 +325,7 @@ export default function DetailedSalesHistoryTable({ data, columns }: DetailedSal
                           key={column.id}
                           className="capitalize"
                           checked={!!columnVisibility[column.id]}
+                          disabled={REQUIRED_ALWAYS_ON.includes(column.id)}
                           onCheckedChange={(value) =>
                             setColumnVisibility(prev => ({ ...prev, [column.id]: !!value }))
                           }
@@ -317,6 +334,10 @@ export default function DetailedSalesHistoryTable({ data, columns }: DetailedSal
                       </DropdownMenuCheckboxItem>
                   ))}
                 </ScrollArea>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleResetColumns}>
+                  Resetar preferências de colunas
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -326,7 +347,11 @@ export default function DetailedSalesHistoryTable({ data, columns }: DetailedSal
             <TableHeader>
               <TableRow>
                  <TableHead className="w-[50px]"></TableHead>
-                {visibleColumns.map(col => (
+                {visibleColumns.length === 0 ? (
+                  <TableHead className="text-muted-foreground">
+                    Nenhuma coluna visível — abra “Exibir Colunas” ou clique em “Resetar preferências”.
+                  </TableHead>
+                ) : visibleColumns.map(col => (
                   col.isSortable ? (
                     <SortableHeader key={col.id} tkey={col.id} label={col.label} className={col.className} />
                   ) : (
@@ -348,7 +373,7 @@ export default function DetailedSalesHistoryTable({ data, columns }: DetailedSal
                           )}
                        </TableCell>
                        {visibleColumns.map(col => (
-                         <TableCell key={col.id} className={col.id === 'final' ? 'text-right font-semibold' : ''}>
+                         <TableCell key={col.id} className={cn(col.className, col.id === 'final' ? 'font-semibold' : '')}>
                            {renderCell(row, col.id)}
                          </TableCell>
                        ))}
@@ -367,8 +392,8 @@ export default function DetailedSalesHistoryTable({ data, columns }: DetailedSal
                                          </TableRow>
                                        </TableHeader>
                                        <TableBody>
-                                          {row.subRows.map((item: VendaDetalhada) => (
-                                            <TableRow key={item.id}>
+                                          {row.subRows.map((item: VendaDetalhada, index: number) => (
+                                            <TableRow key={`${item.id}-${index}`}>
                                                 {detailColumns.map(col => <TableCell key={col.id}>{renderDetailCell(item, col.id)}</TableCell>)}
                                             </TableRow>
                                           ))}
