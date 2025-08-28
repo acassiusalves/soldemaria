@@ -79,6 +79,8 @@ export default function DetailedSalesHistoryTable({ data, columns }: DetailedSal
         Object.keys(row).forEach(key => allKeys.add(key));
     });
 
+    const systemColumnsToHide = ["id", "sourceFile", "uploadTimestamp"];
+
     return Array.from(allKeys).map(id => {
         const existingColumn = columns.find(c => c.id === id);
         if (existingColumn) return existingColumn;
@@ -87,7 +89,7 @@ export default function DetailedSalesHistoryTable({ data, columns }: DetailedSal
       data.some(row => {
         const v = (row as any)[col.id];
         return v !== undefined && v !== null && String(v).trim() !== "" && !["subRows", "parcelas", "total_valor_parcelas"].includes(col.id);
-      })
+      }) && !systemColumnsToHide.includes(col.id)
     );
   }, [columns, data]);
 
