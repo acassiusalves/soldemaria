@@ -66,10 +66,7 @@ import InsightsGenerator from "@/components/insights-generator";
 import SalesHistoryTable from "@/components/sales-history-table";
 
 export default function DashboardPage() {
-  const [date, setDate] = React.useState<DateRange | undefined>({
-    from: new Date(2023, 0, 1),
-    to: addDays(new Date(2023, 11, 31), 0),
-  });
+  const [date, setDate] = React.useState<DateRange | undefined>(undefined);
 
   const filteredSales = React.useMemo(() => {
     if (!date?.from) return salesData;
@@ -77,8 +74,12 @@ export default function DashboardPage() {
     const toDate = date.to ?? fromDate;
 
     return salesData.filter((sale) => {
-      const saleDate = parseISO(sale.data);
-      return saleDate >= fromDate && saleDate <= toDate;
+      try {
+        const saleDate = parseISO(sale.data);
+        return saleDate >= fromDate && saleDate <= toDate;
+      } catch (e) {
+        return false;
+      }
     });
   }, [date]);
 
@@ -98,8 +99,21 @@ export default function DashboardPage() {
   }, [filteredSales]);
 
   const topCategory = React.useMemo(() => {
-    return Object.entries(salesByCategory).sort((a, b) => b[1] - a[1])[0] || ["N/A", 0];
+    if (Object.keys(salesByCategory).length === 0) return ["N/A", 0];
+    return Object.entries(salesByCategory).sort((a, b) => b[1] - a[1])[0];
   }, [salesByCategory]);
+
+  const defaultInitialDate = {
+    from: new Date(2023, 0, 1),
+    to: addDays(new Date(2023, 11, 31), 0),
+  };
+
+  React.useEffect(() => {
+    setDate(defaultInitialDate);
+  }, []);
+  
+  const displayDate = date ?? defaultInitialDate;
+
 
   return (
     <SidebarProvider>
@@ -152,14 +166,14 @@ export default function DashboardPage() {
                     )}
                   >
                     <CalendarIcon className="mr-2 h-4 w-4" />
-                    {date?.from ? (
-                      date.to ? (
+                    {displayDate?.from ? (
+                      displayDate.to ? (
                         <>
-                          {format(date.from, "LLL dd, y")} -{" "}
-                          {format(date.to, "LLL dd, y")}
+                          {format(displayDate.from, "LLL dd, y")} -{" "}
+                          {format(displayDate.to, "LLL dd, y")}
                         </>
                       ) : (
-                        format(date.from, "LLL dd, y")
+                        format(displayDate.from, "LLL dd, y")
                       )
                     ) : (
                       <span>Selecione uma data</span>
@@ -170,7 +184,7 @@ export default function DashboardPage() {
                   <Calendar
                     initialFocus
                     mode="range"
-                    defaultMonth={date?.from}
+                    defaultMonth={displayDate?.from}
                     selected={date}
                     onSelect={setDate}
                     numberOfMonths={2}
