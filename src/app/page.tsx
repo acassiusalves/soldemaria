@@ -16,6 +16,7 @@ import {
   LayoutDashboard,
   LogOut,
   MoreHorizontal,
+  Percent,
   Settings,
   ShoppingBag,
   Trophy,
@@ -144,6 +145,14 @@ export default function DashboardPage() {
                 <SidebarMenuButton>
                   <Box />
                   Logística
+                </SidebarMenuButton>
+              </Link>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <Link href="/taxas">
+                <SidebarMenuButton>
+                  <Percent />
+                  Taxas
                 </SidebarMenuButton>
               </Link>
             </SidebarMenuItem>

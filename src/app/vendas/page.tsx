@@ -15,6 +15,7 @@ import {
   ShoppingBag,
   Trash2,
   Loader2,
+  Percent,
 } from "lucide-react";
 import {
   collection,
@@ -664,6 +665,12 @@ export default function VendasPage() {
             className="text-muted-foreground transition-colors hover:text-foreground"
           >
             Logística
+          </Link>
+           <Link
+            href="/taxas"
+            className="text-muted-foreground transition-colors hover:text-foreground"
+          >
+            Taxas
           </Link>
         </nav>
         <div className="flex w-full items-center gap-4 md:ml-auto md:gap-2 lg:gap-4">

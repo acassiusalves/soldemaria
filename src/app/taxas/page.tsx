@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { Box, LayoutDashboard, LogOut, Percent, Settings, ShoppingBag } from "lucide-react";
+import { Box, DollarSign, LayoutDashboard, LogOut, Settings, ShoppingBag, Percent } from "lucide-react";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Logo } from "@/components/icons";
 
-export default function LogisticaPage() {
+export default function TaxasPage() {
   return (
     <div className="flex min-h-screen w-full flex-col">
       <header className="sticky top-0 flex h-16 items-center gap-4 border-b bg-background px-4 md:px-6">
@@ -49,13 +49,13 @@ export default function LogisticaPage() {
           </Link>
           <Link
             href="/logistica"
-            className="text-foreground transition-colors hover:text-foreground"
+            className="text-muted-foreground transition-colors hover:text-foreground"
           >
             Logística
           </Link>
            <Link
             href="/taxas"
-            className="text-muted-foreground transition-colors hover:text-foreground"
+            className="text-foreground transition-colors hover:text-foreground"
           >
             Taxas
           </Link>
@@ -87,13 +87,13 @@ export default function LogisticaPage() {
       <main className="flex flex-1 flex-col gap-4 p-4 md:gap-8 md:p-8">
         <Card>
           <CardHeader>
-            <CardTitle className="font-headline text-h3">Painel de Logística</CardTitle>
+            <CardTitle className="font-headline text-h3">Painel de Taxas</CardTitle>
             <CardDescription>
-              Acompanhe e gerencie as operações de logística da sua empresa.
+              Gerencie as taxas e impostos associados às suas vendas.
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <p>Funcionalidades de logística serão implementadas aqui.</p>
+            <p>Funcionalidades de gerenciamento de taxas serão implementadas aqui.</p>
           </CardContent>
         </Card>
       </main>
