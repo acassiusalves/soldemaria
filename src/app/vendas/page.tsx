@@ -496,11 +496,16 @@ export default function VendasPage() {
           stagedUpdates.set(merged.id, merged);
           updated++;
         } else {
-          notFound++;
-          // Upsert opcional:
-          // const docId = `staged-${uploadTimestamp}-${inserted}`;
-          // stagedInserts.push({ ...mappedRow, codigo: code, id: docId, sourceFile: fileName, uploadTimestamp: new Date(uploadTimestamp) });
-          // inserted++;
+          // Permite upsert, criando novos registros se não encontrados
+          const docId = `staged-${uploadTimestamp}-${inserted}`;
+          stagedInserts.push({ 
+            ...mappedRow, 
+            codigo: code, 
+            id: docId, 
+            sourceFile: fileName, 
+            uploadTimestamp: new Date(uploadTimestamp) 
+          });
+          inserted++;
         }
       }
     }
@@ -513,17 +518,18 @@ export default function VendasPage() {
     toast({
       title: "Associação concluída",
       description: [
-        `${updated} pedido(s) atualizado(s)`,
-        `${notFound} não encontrado(s)`,
-        `${skippedNoKey} linha(s) ignoradas (sem chave)`,
-        inserted ? `${inserted} inserido(s)` : null,
-      ].filter(Boolean).join(" • "),
+        updated > 0 ? `${updated} pedido(s) atualizado(s)` : null,
+        inserted > 0 ? `${inserted} novo(s) pedido(s) criado(s)` : null,
+        skippedNoKey > 0 ? `${skippedNoKey} linha(s) ignoradas (sem chave)` : null,
+      ].filter(Boolean).join(" • ") || "Nenhuma alteração detectada.",
     });
 
-    toast({
-      title: "Dados Prontos para Revisão",
-      description: `${stagedArray.length} registro(s) adicionados à revisão.`,
-    });
+    if (stagedArray.length > 0) {
+      toast({
+        title: "Dados Prontos para Revisão",
+        description: `${stagedArray.length} registro(s) adicionados à revisão.`,
+      });
+    }
   };
 
   /* ======= Salvar no Firestore ======= */
@@ -788,3 +794,5 @@ export default function VendasPage() {
     </SidebarProvider>
   );
 }
+
+    
