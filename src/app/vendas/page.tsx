@@ -112,13 +112,8 @@ export const normalizeHeader = (s: string) =>
 const columnLabels: Record<string, string> = {
   data: 'Data',
   codigo: 'Código',
-  nomeCliente: 'Nome do Cliente',
-  final: 'Valor Final',
-  custoFrete: 'Frete',
-  imposto: 'Imposto',
-  embalagem: 'Embalagem',
-  comissao: 'Comissão',
   tipo: 'Tipo',
+  nomeCliente: 'Cliente',
   vendedor: 'Vendedor',
   cidade: 'Cidade',
   origem: 'Origem',
@@ -129,8 +124,12 @@ const columnLabels: Record<string, string> = {
   quantidade: 'Qtd.',
   custoUnitario: 'Custo Unitário',
   valorUnitario: 'Valor Unitário',
+  final: 'Valor Final',
+  custoFrete: 'Valor Entrega',
   valorCredito: 'Valor Crédito',
   valorDescontos: 'Valor Descontos',
+  
+  // Keep payment details for processing, even if not primary columns
   bandeira1: 'Bandeira',
   parcelas1: 'Parcelas',
   valorParcela1: 'Valor Parcela 1',
@@ -564,10 +563,21 @@ export default function VendasPage() {
           const map = new Map(prev.map(s => [s.id, s]));
           salesToSave.forEach(s => {
               const existing = map.get(s.id) || {};
-              map.set(s.id, { ...existing, ...s });
+              const newRecord = { ...existing, ...s };
+              // Ensure the final ID is the one from DB, not the staged one
+              if (!String(s.id).startsWith('staged-')) {
+                 newRecord.id = s.id;
+              }
+              map.set(newRecord.id, newRecord);
           });
+           // Clean up any remaining staged-id entries
+          stagedSales.forEach(s => {
+            if (String(s.id).startsWith('staged-')) map.delete(s.id);
+          });
+
           return Array.from(map.values());
       });
+
 
       const allKeys = new Set<string>();
       salesToSave.forEach(row => Object.keys(row).forEach(k => allKeys.add(k)));
@@ -799,5 +809,3 @@ export default function VendasPage() {
     </div>
   );
 }
-
-    
