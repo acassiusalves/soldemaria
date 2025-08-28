@@ -69,6 +69,7 @@ import { SupportDataDialog } from "@/components/support-data-dialog";
 import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
 import { Progress } from "@/components/ui/progress";
+import { Logo } from "@/components/icons";
 
 /* ========== helpers de datas e normalização ========== */
 const toDate = (value: unknown): Date | null => {
@@ -222,9 +223,14 @@ export const resolveSystemKey = (normalized: string): string => {
 /* ========== normalizador de código (chave) ========== */
 const normCode = (v: any) => {
   let s = String(v ?? "").replace(/\u00A0/g, " ").trim();
+
+  // 357528.0 -> 357528
   if (/^\d+(?:\.0+)?$/.test(s)) s = s.replace(/\.0+$/, "");
-  s = s.replace(/[^\d]/g, ""); // remove separadores
-  s = s.replace(/^0+/, "");    // tira zeros à esquerda
+
+  // remove tudo que não é dígito (ponto, traço, espaço, etc.)
+  s = s.replace(/[^\d]/g, "");
+  // remove zeros à esquerda
+  s = s.replace(/^0+/, "");
   return s;
 };
 
@@ -290,23 +296,23 @@ const mapRowToSystem = (row: Record<string, any>) => {
 const pickCodeFromRow = (
   rawRow: Record<string, any>,
   mappedRow: Record<string, any>,
-  assocKey: string = 'codigo' // Default to 'codigo'
+  assocKey?: string
 ) => {
-    const resolvedAssocKey = resolveSystemKey(normalizeHeader(assocKey));
-    if (mappedRow[resolvedAssocKey] != null) return normCode(mappedRow[resolvedAssocKey]);
-    
-    if (mappedRow.codigo != null) return normCode(mappedRow.codigo);
-
-    const candidates = ["codigo","cod","documento","nf","numero_documento","mov_estoque","movestoque", "pedido"];
-    for (const c of candidates) {
-        if (mappedRow[c] != null) return normCode(mappedRow[c]);
-        const normalizedCand = normalizeHeader(c);
-        if(mappedRow[normalizedCand] != null) return normCode(mappedRow[normalizedCand]);
-        if (rawRow[c] != null) return normCode(rawRow[c]);
-    }
-    return "";
+  if (assocKey) {
+    if (rawRow[assocKey] != null) return normCode(rawRow[assocKey]);
+    const assocNorm = normalizeHeader(assocKey).replace(/\s+/g, "_");
+    if (mappedRow[assocNorm] != null) return normCode(mappedRow[assocNorm]);
+    const resolved = resolveSystemKey(normalizeHeader(assocKey));
+    if (resolved === "codigo" && mappedRow.codigo != null) return normCode(mappedRow.codigo);
+  }
+  if (mappedRow.codigo != null) return normCode(mappedRow.codigo);
+  const candidates = ["codigo","cod","documento","nf","numero_documento","mov_estoque","movestoque", "pedido"];
+  for (const c of candidates) {
+    if (mappedRow[c] != null) return normCode(mappedRow[c]);
+    if (rawRow[c] != null) return normCode(rawRow[c]);
+  }
+  return "";
 };
-
 
 /* ========== agrega valores para compor o cabeçalho do pedido ========== */
 const mergeForHeader = (base: any, row: any) => {
@@ -338,7 +344,7 @@ const mergeForHeader = (base: any, row: any) => {
 
 const MotionCard = motion(Card);
 
-type IncomingDataset = { rows: any[]; fileName: string; };
+type IncomingDataset = { rows: any[]; fileName: string; assocKey?: string };
 
 export default function VendasPage() {
   const [salesFromDb, setSalesFromDb] = React.useState<VendaDetalhada[]>([]);
@@ -394,7 +400,10 @@ export default function VendasPage() {
   /* ======= Mescla banco + staged (staged tem prioridade) ======= */
   const allSales = React.useMemo(() => {
     const map = new Map(salesFromDb.map(s => [s.id, s]));
-    stagedSales.forEach(s => map.set(s.id, s));
+    stagedSales.forEach(s => {
+        const existing = map.get(s.id) || {};
+        map.set(s.id, { ...existing, ...s });
+    });
     return Array.from(map.values());
   }, [salesFromDb, stagedSales]);
 
@@ -451,16 +460,21 @@ export default function VendasPage() {
     let updated = 0, notFound = 0, skippedNoKey = 0, inserted = 0;
 
     for (const ds of datasets) {
-      const { rows, fileName } = ds;
+      const { rows, fileName, assocKey } = ds;
       if (!rows?.length) continue;
 
       const mapped = rows.map(mapRowToSystem);
+
+      console.log("[apoio] arquivo:", fileName);
+      console.log("[apoio] assocKey marcada:", assocKey);
+      console.log("[apoio] headers brutos:", Object.keys(rows[0] ?? {}));
+      console.log("[apoio] headers mapeados:", Object.keys(mapped[0] ?? {}));
 
       for (let i = 0; i < rows.length; i++) {
         const rawRow = rows[i];
         const mappedRow = mapped[i];
 
-        const code = pickCodeFromRow(rawRow, mappedRow);
+        const code = pickCodeFromRow(rawRow, mappedRow, assocKey);
         if (!code) { skippedNoKey++; continue; }
 
         const fromDb = dbByCode.get(code);
@@ -474,6 +488,7 @@ export default function VendasPage() {
           stagedUpdates.set(merged.id, merged);
           updated++;
         } else {
+          // Upsert
           const docId = `staged-${uploadTimestamp}-${inserted}`;
           stagedInserts.push({ ...mappedRow, codigo: code, id: docId, sourceFile: fileName, uploadTimestamp: new Date(uploadTimestamp) });
           inserted++;
@@ -491,15 +506,16 @@ export default function VendasPage() {
       description: [
         `${updated} pedido(s) atualizado(s)`,
         `${inserted > 0 ? `${inserted} novo(s) pedido(s) criado(s)`: ''}`,
+        `${notFound} não encontrado(s)`,
         `${skippedNoKey} linha(s) ignoradas (sem chave)`,
       ].filter(Boolean).join(" • "),
     });
 
     if (stagedArray.length > 0) {
-      toast({
-        title: "Dados Prontos para Revisão",
-        description: `${stagedArray.length} registro(s) adicionados à revisão.`,
-      });
+        toast({
+            title: "Dados Prontos para Revisão",
+            description: `${stagedArray.length} registro(s) adicionados à revisão.`,
+        });
     }
   };
 
@@ -529,11 +545,11 @@ export default function VendasPage() {
           const docId = isUpdate ? item.id : doc(collection(db, "vendas")).id;
           const saleRef = doc(db, "vendas", docId);
           const { id, ...payload } = item;
+          
+          if(!isUpdate) payload.id = docId;
 
           if (payload.data instanceof Date) payload.data = Timestamp.fromDate(payload.data);
           if (payload.uploadTimestamp instanceof Date) payload.uploadTimestamp = Timestamp.fromDate(payload.uploadTimestamp);
-          
-          if(!isUpdate) payload.id = docId;
 
           if (isUpdate) batch.update(saleRef, payload);
           else batch.set(saleRef, payload);
