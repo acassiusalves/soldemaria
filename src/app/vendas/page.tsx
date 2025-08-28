@@ -6,6 +6,7 @@ import { format, parse, parseISO, endOfDay, isValid } from "date-fns";
 import type { DateRange } from "react-day-picker";
 import {
   AlertTriangle,
+  Box,
   Calendar as CalendarIcon,
   LayoutDashboard,
   LogOut,
@@ -128,19 +129,6 @@ const columnLabels: Record<string, string> = {
   custoFrete: 'Valor Entrega',
   valorCredito: 'Valor Crédito',
   valorDescontos: 'Valor Descontos',
-  
-  // Keep payment details for processing, even if not primary columns
-  bandeira1: 'Bandeira',
-  parcelas1: 'Parcelas',
-  valorParcela1: 'Valor Parcela 1',
-  taxaCartao1: 'Taxa Cartão 1',
-  modoPagamento2: 'Modo Pgto. 2',
-  parcelas2: 'Parcelas 2',
-  bandeira2: 'Bandeira 2',
-  valorParcela2: 'Valor Parcela 2',
-  taxaCartao2: 'Taxa Cartão 2',
-  mov_estoque: 'Mov_Estoque',
-  valor_da_parcela: 'Valor da Parcela',
 };
 const getLabel = (key: string) => columnLabels[key] || key;
 
@@ -188,27 +176,20 @@ const cleanNumericValue = (value: any): number | string => {
   const hasDot   = s.includes(".");
 
   if (hasComma && hasDot) {
-    // Ex.: 1.234,56  →  1234.56
-    s = s.replace(/\./g, "").replace(",", ".");
-  } else if (hasComma) {
-    // Ex.: 1234,56   →  1234.56
-    // (vírgula como decimal)
-    if (/^\d+,\d{2}$/.test(s) || /^\d+,\d+$/.test(s)) {
-      s = s.replace(",", ".");
-    } else {
-      // vírgulas como milhar (raro no BR), remove todas
+    const lastDot = s.lastIndexOf('.');
+    const lastComma = s.lastIndexOf(',');
+    // 1.234,56 (pt-BR) -> 1234.56
+    if (lastComma > lastDot) {
+      s = s.replace(/\./g, "").replace(",", ".");
+    } else { // 1,234.56 (en-US) -> 1234.56
       s = s.replace(/,/g, "");
     }
-  } else if (hasDot) {
-    // Só ponto presente: decidir se é decimal ou milhar
-    if (/^\d+\.\d{2}$/.test(s) || /^\d+\.\d+$/.test(s)) {
-      // decimal com ponto → mantém
-    } else if (/^\d{1,3}(\.\d{3})+$/.test(s)) {
-      // 1.234.567 → remove pontos de milhar
-      s = s.replace(/\./g, "");
-    } // senão, deixa como está (é inteiro com ponto perdido, improvável)
+  } else if (hasComma) {
+    // 1234,56 -> 1234.56
+    s = s.replace(",", ".");
   }
-  // caso sem ponto nem vírgula: já é inteiro
+  // Se tiver só ponto (1234.56), já está ok
+  // Se não tiver nem ponto nem vírgula, já está ok
 
   const num = Number(s);
   return Number.isFinite(num) && /[0-9]/.test(s) ? num : value;
@@ -677,6 +658,12 @@ export default function VendasPage() {
             className="text-foreground transition-colors hover:text-foreground"
           >
             Vendas
+          </Link>
+          <Link
+            href="/logistica"
+            className="text-muted-foreground transition-colors hover:text-foreground"
+          >
+            Logística
           </Link>
         </nav>
         <div className="flex w-full items-center gap-4 md:ml-auto md:gap-2 lg:gap-4">

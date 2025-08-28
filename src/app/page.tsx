@@ -9,6 +9,7 @@ import {
   ArrowDownRight,
   ArrowUpRight,
   Bot,
+  Box,
   Calendar as CalendarIcon,
   DollarSign,
   History,
@@ -66,7 +67,7 @@ import InsightsGenerator from "@/components/insights-generator";
 import SalesHistoryTable from "@/components/sales-history-table";
 
 export default function DashboardPage() {
-  const [date, setDate] = React.useState<DateRange | undefined>({
+    const [date, setDate] = React.useState<DateRange | undefined>({
     from: new Date(2023, 0, 1),
     to: addDays(new Date(2023, 11, 31), 0),
   });
@@ -135,6 +136,14 @@ export default function DashboardPage() {
                 <SidebarMenuButton>
                   <ShoppingBag />
                   Vendas
+                </SidebarMenuButton>
+              </Link>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <Link href="/logistica">
+                <SidebarMenuButton>
+                  <Box />
+                  Logística
                 </SidebarMenuButton>
               </Link>
             </SidebarMenuItem>
