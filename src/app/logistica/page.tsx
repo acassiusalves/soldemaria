@@ -1,3 +1,4 @@
+
 "use client";
 
 import * as React from "react";
@@ -75,7 +76,7 @@ import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
 import { Progress } from "@/components/ui/progress";
 import { Logo } from "@/components/icons";
-import { organizeLogistics } from "@/ai/flows/organize-logistics";
+import { organizeLogisticsWithAI, organizeLogisticsTest, organizeLogisticsManual } from "@/ai/flows/organize-logistics";
 
 /* ========== helpers de datas e normalização ========== */
 const toDate = (value: unknown): Date | null => {
@@ -411,7 +412,7 @@ export default function LogisticaPage() {
     }
     setIsOrganizing(true);
     try {
-      const result = await organizeLogistics({ logisticsData: stagedData, apiKey });
+      const result = await organizeLogisticsWithAI({ logisticsData: stagedData, apiKey });
       if (result.organizedData) {
         setStagedData(result.organizedData);
         toast({ title: "Sucesso!", description: "Os dados foram organizados pela IA." });
@@ -552,6 +553,70 @@ export default function LogisticaPage() {
     } catch (error) {
       console.error("Error clearing all data:", error);
       _t({ title: "Erro na Limpeza", description: "Não foi possível apagar todos os dados. Verifique o console.", variant: "destructive" });
+    }
+  };
+
+  // Funções de teste
+  const handleTestBasic = async () => {
+    const apiKey = localStorage.getItem("gemini_api_key") || "test";
+    
+    try {
+      setIsOrganizing(true);
+      const result = await organizeLogisticsTest({ 
+        logisticsData: stagedData.slice(0, 2), // Só 2 itens
+        apiKey 
+      });
+      console.log('✅ Teste básico passou:', result);
+      toast({ title: 'Teste básico funcionou!' });
+    } catch (error: any) {
+      console.error('❌ Teste básico falhou:', error);
+      toast({ title: `Teste básico falhou: ${error.message}`, variant: 'destructive' });
+    } finally {
+      setIsOrganizing(false);
+    }
+  };
+
+  const handleTestManual = async () => {
+    const apiKey = localStorage.getItem("gemini_api_key") || "test";
+    
+    try {
+      setIsOrganizing(true);
+      const result = await organizeLogisticsManual({ 
+        logisticsData: stagedData.slice(0, 2),
+        apiKey 
+      });
+      console.log('✅ Teste manual passou:', result);
+      setStagedData(result.organizedData);
+      toast({ title: 'Processamento manual funcionou!' });
+    } catch (error: any) {
+      console.error('❌ Teste manual falhou:', error);
+      toast({ title: `Teste manual falhou: ${error.message}`, variant: 'destructive' });
+    } finally {
+      setIsOrganizing(false);
+    }
+  };
+
+  const handleTestAI = async () => {
+    const apiKey = localStorage.getItem("gemini_api_key");
+    if (!apiKey) {
+      toast({ title: 'Configure a API Key primeiro!', variant: 'destructive' });
+      return;
+    }
+    
+    try {
+      setIsOrganizing(true);
+      const result = await organizeLogisticsWithAI({ 
+        logisticsData: stagedData.slice(0, 2),
+        apiKey 
+      });
+      console.log('✅ Teste IA passou:', result);
+      setStagedData(result.organizedData);
+      toast({ title: 'IA funcionou!' });
+    } catch (error: any) {
+      console.error('❌ Teste IA falhou:', error);
+      toast({ title: `Teste IA falhou: ${error.message}`, variant: 'destructive' });
+    } finally {
+      setIsOrganizing(false);
     }
   };
 
@@ -735,6 +800,19 @@ export default function LogisticaPage() {
             </div>
           )}
         </Card>
+        
+        {/* BOTÕES DE TESTE - REMOVER DEPOIS */}
+        <div className="flex gap-2 p-4 bg-yellow-50 border border-yellow-200 rounded">
+          <Button onClick={handleTestBasic} size="sm" variant="outline">
+            🧪 Teste Básico
+          </Button>
+          <Button onClick={handleTestManual} size="sm" variant="outline">
+            🔧 Teste Manual
+          </Button>
+          <Button onClick={handleTestAI} size="sm" variant="outline">
+            🤖 Teste IA
+          </Button>
+        </div>
 
         <DetailedSalesHistoryTable data={groupedForView} columns={columns} />
       </main>

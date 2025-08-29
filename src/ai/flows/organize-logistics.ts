@@ -1,178 +1,219 @@
+
 'use server';
 
 import { z } from 'zod';
-import { VendaDetalhada } from '@/lib/data';
 
-// Tipos de entrada - COMPATÍVEL com sua página
-const OrganizeLogisticsInputSchema = z.object({
-  logisticsData: z.array(z.any()).describe("An array of logistics data records to be organized."),
-  apiKey: z.string().describe("The API key for the AI service"),
-});
+// Tipos simplificados
+export type OrganizeLogisticsInput = {
+  logisticsData: any[];
+  apiKey: string;
+};
 
-export type OrganizeLogisticsInput = z.infer<typeof OrganizeLogisticsInputSchema>;
+export type OrganizeLogisticsOutput = {
+  organizedData: any[];
+};
 
-// Tipo de saída
-const OrganizeLogisticsOutputSchema = z.object({
-  organizedData: z.array(z.any()).describe('The organized logistics data with extracted fields.'),
-});
+// VERSÃO 1: Só retorna os dados sem processar (para testar se o erro é na estrutura)
+export async function organizeLogisticsTest(input: OrganizeLogisticsInput): Promise<OrganizeLogisticsOutput> {
+  console.log('🧪 TESTE: Função iniciada');
+  
+  try {
+    // Validação básica
+    if (!input) {
+      throw new Error('Input é null/undefined');
+    }
+    
+    console.log('📊 Input type:', typeof input);
+    console.log('📊 Has logisticsData:', !!input.logisticsData);
+    console.log('📊 Has apiKey:', !!input.apiKey);
+    console.log('📊 Array length:', input.logisticsData?.length);
+    
+    // Só retorna os dados originais para testar
+    const result = {
+      organizedData: input.logisticsData || []
+    };
+    
+    console.log('✅ TESTE: Retornando dados');
+    return result;
+    
+  } catch (error: any) {
+    console.error('❌ TESTE: Erro:', error.message);
+    console.error('❌ TESTE: Stack:', error.stack);
+    
+    // Forçar erro bem simples
+    throw new Error(`Teste falhou: ${error.message}`);
+  }
+}
 
-export type OrganizeLogisticsOutput = z.infer<typeof OrganizeLogisticsOutputSchema>;
+// VERSÃO 2: Processamento manual (sem IA) 
+export async function organizeLogisticsManual(input: OrganizeLogisticsInput): Promise<OrganizeLogisticsOutput> {
+  console.log('🔧 MANUAL: Iniciando processamento');
+  
+  try {
+    if (!input?.logisticsData || input.logisticsData.length === 0) {
+      throw new Error('Dados não fornecidos');
+    }
+    
+    console.log('📊 Processando', input.logisticsData.length, 'itens manualmente');
+    
+    // Processamento manual simples
+    const processedData = input.logisticsData.map((item, index) => {
+      const processed = { ...item };
+      
+      // Lógica simples de processamento
+      if (item.logistica === 'X_Loja') {
+        processed.logistica = 'Loja';
+        processed.entregador = '';
+        processed.valor = 0;
+      } else if (item.logistica && typeof item.logistica === 'string' && item.logistica.includes('/')) {
+        // Ex: "João/R$15"
+        const parts = item.logistica.split('/');
+        processed.entregador = parts[0]?.trim() || '';
+        
+        if (parts[1]) {
+          const valorStr = parts[1].replace(/[R$\s]/g, '').replace(',', '.');
+          const valor = parseFloat(valorStr);
+          processed.valor = isNaN(valor) ? 0 : valor;
+        }
+      } else {
+        processed.entregador = processed.entregador || '';
+        processed.valor = processed.valor || 0;
+      }
+      
+      return processed;
+    });
+    
+    console.log('✅ MANUAL: Processamento concluído');
+    console.log('📋 Exemplo processado:', processedData[0]);
+    
+    return { organizedData: processedData };
+    
+  } catch (error: any) {
+    console.error('❌ MANUAL: Erro:', error);
+    throw new Error(`Processamento manual falhou: ${error.message}`);
+  }
+}
 
-// Função principal - COMPATÍVEL com sua página
-export async function organizeLogistics(input: OrganizeLogisticsInput): Promise<{ organizedData: VendaDetalhada[] }> {
-  console.log('🚀 Iniciando organização com IA');
-  console.log('📊 Dados recebidos:', input.logisticsData.length, 'itens');
-  console.log('🔑 API Key presente:', !!input.apiKey);
-
+// VERSÃO 3: Com IA (mais robusta)
+export async function organizeLogisticsWithAI(input: OrganizeLogisticsInput): Promise<OrganizeLogisticsOutput> {
+  console.log('🤖 IA: Iniciando com IA');
+  
   try {
     // Validações
-    if (!input.logisticsData || input.logisticsData.length === 0) {
-      throw new Error('Nenhum dado fornecido para organizar');
+    if (!input?.logisticsData || input.logisticsData.length === 0) {
+      throw new Error('Dados não fornecidos');
     }
-
-    if (!input.apiKey) {
-      throw new Error('Chave de API não fornecida');
-    }
-
-    // Preparar dados para a IA
-    const itemsToProcess = input.logisticsData.map(item => ({
-      id: item.id || `item-${Date.now()}-${Math.random()}`,
-      logistica: item.logistica || '',
-      entregador: item.entregador || '',
-      valor: item.valor || 0
-    }));
-
-    console.log('🤖 Enviando para IA:', itemsToProcess.slice(0, 2)); // Log dos primeiros 2
-
-    // Chamar API do Google AI diretamente
-    const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-goog-api-key': input.apiKey
-      },
-      body: JSON.stringify({
-        contents: [{
-          parts: [{
-            text: createPrompt(itemsToProcess)
-          }]
-        }],
-        generationConfig: {
-          temperature: 0.1,
-          topK: 1,
-          topP: 1,
-          maxOutputTokens: 8192,
-        }
-      })
-    });
-
-    if (!response.ok) {
-      const errorData = await response.text();
-      console.error('❌ Erro da API:', response.status, errorData);
-      
-      if (response.status === 400) {
-        throw new Error('Chave de API inválida ou problema na requisição');
-      } else if (response.status === 429) {
-        throw new Error('Limite de uso da API atingido. Tente novamente mais tarde.');
-      } else {
-        throw new Error(`Erro da API: ${response.status}`);
-      }
-    }
-
-    const result = await response.json();
-    console.log('📥 Resposta bruta da IA:', result);
-
-    // Extrair o texto da resposta
-    const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!text) {
-      throw new Error('IA não retornou texto válido');
-    }
-
-    console.log('📝 Texto da IA:', text);
-
-    // Tentar extrair JSON da resposta
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      throw new Error('IA não retornou JSON válido');
-    }
-
-    const organizedResults = JSON.parse(jsonMatch[0]);
-    console.log('📋 Dados organizados:', organizedResults);
-
-    if (!organizedResults.results || !Array.isArray(organizedResults.results)) {
-      throw new Error('Formato de resposta da IA inválido');
-    }
-
-    // Merge dos resultados com dados originais
-    const originalDataMap = new Map(
-      input.logisticsData.map(item => [item.id, item])
-    );
-
-    organizedResults.results.forEach((organizedItem: any) => {
-      const originalItem = originalDataMap.get(organizedItem.id);
-      if (originalItem) {
-        originalItem.entregador = organizedItem.entregador || '';
-        originalItem.valor = organizedItem.valor || 0;
-        
-        // Atualizar logística se for loja
-        if (organizedItem.logistica === 'Loja') {
-          originalItem.logistica = 'Loja';
-        }
-      }
-    });
-
-    const finalData = Array.from(originalDataMap.values());
-    console.log('✅ Organização concluída:', finalData.length, 'itens processados');
-
-    return { organizedData: finalData };
-
-  } catch (error: any) {
-    console.error('❌ Erro detalhado:', error);
     
-    // Mensagens de erro mais específicas
-    if (error.message.includes('API key')) {
+    if (!input.apiKey || input.apiKey.length < 10) {
+      throw new Error('Chave de API inválida');
+    }
+    
+    console.log('🔑 API Key válida:', input.apiKey.substring(0, 10) + '...');
+    console.log('📊 Processando', input.logisticsData.length, 'itens com IA');
+    
+    // Se muitos dados, processar em lotes
+    if (input.logisticsData.length > 50) {
+      console.log('⚠️ Muitos dados, processando primeiro lote de 10');
+      const smallBatch = input.logisticsData.slice(0, 10);
+      return await processWithAI(smallBatch, input.apiKey);
+    }
+    
+    return await processWithAI(input.logisticsData, input.apiKey);
+    
+  } catch (error: any) {
+    console.error('❌ IA: Erro:', error);
+    
+    if (error.message.includes('fetch')) {
+      throw new Error('Erro de conexão com a IA. Verifique sua internet.');
+    } else if (error.message.includes('API')) {
       throw new Error('Problema com a chave da API. Verifique se está correta.');
-    } else if (error.message.includes('quota') || error.message.includes('429')) {
-      throw new Error('Limite de uso da API atingido. Tente novamente em alguns minutos.');
-    } else if (error.message.includes('network') || error.name === 'TypeError') {
-      throw new Error('Erro de conexão. Verifique sua internet.');
-    } else if (error.message.includes('JSON')) {
-      throw new Error('Resposta da IA em formato inválido. Tente novamente.');
     } else {
-      throw new Error(`Erro ao organizar dados: ${error.message}`);
+      throw new Error(`IA falhou: ${error.message}`);
     }
   }
 }
 
-// Função para criar o prompt
-function createPrompt(items: any[]): string {
-  return `
-Você é um assistente especializado em organizar dados de logística de vendas.
+// Função auxiliar para processar com IA
+async function processWithAI(data: any[], apiKey: string): Promise<OrganizeLogisticsOutput> {
+  const prompt = createSimplePrompt(data);
+  
+  console.log('📤 Enviando para Google AI...');
+  
+  const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-goog-api-key': apiKey
+    },
+    body: JSON.stringify({
+      contents: [{
+        parts: [{ text: prompt }]
+      }],
+      generationConfig: {
+        temperature: 0.1,
+        maxOutputTokens: 4096,
+      }
+    })
+  });
 
-Analise cada item da lista e extraia as seguintes informações:
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error('❌ API Error:', response.status, errorText);
+    throw new Error(`API Error: ${response.status}`);
+  }
 
-REGRAS IMPORTANTES:
-1. Se logistica = "X_Loja" → entregador = "", valor = 0, logistica = "Loja"
-2. Se logistica contém nome/valor (ex: "João/R$15", "Maria-20") → extraia nome e valor numérico
-3. Se logistica = "Loja" → entregador = "", valor = 0
-4. SEMPRE mantenha o ID original de cada item
-5. Valores devem ser apenas números (remova R$, símbolos, etc.)
+  const result = await response.json();
+  console.log('📥 Resposta da IA recebida');
+  
+  const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!text) {
+    throw new Error('IA não retornou texto');
+  }
 
-EXEMPLOS:
-- Input: {"id": "123", "logistica": "Maria/R$25"} 
-- Output: {"id": "123", "entregador": "Maria", "valor": 25, "logistica": "Maria/R$25"}
+  // Processar resposta da IA
+  try {
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      throw new Error('JSON não encontrado na resposta');
+    }
 
-- Input: {"id": "456", "logistica": "X_Loja"}
-- Output: {"id": "456", "entregador": "", "valor": 0, "logistica": "Loja"}
+    const parsed = JSON.parse(jsonMatch[0]);
+    
+    if (!parsed.results || !Array.isArray(parsed.results)) {
+      throw new Error('Formato inválido da resposta da IA');
+    }
 
-DADOS PARA PROCESSAR:
-${JSON.stringify(items, null, 2)}
+    // Merge com dados originais
+    const organizedData = data.map(originalItem => {
+      const aiResult = parsed.results.find((r: any) => r.id === originalItem.id);
+      if (aiResult) {
+        return {
+          ...originalItem,
+          entregador: aiResult.entregador || '',
+          valor: aiResult.valor || 0,
+          logistica: aiResult.logistica === 'Loja' ? 'Loja' : originalItem.logistica
+        };
+      }
+      return originalItem;
+    });
 
-RETORNE APENAS o JSON no seguinte formato (sem texto adicional):
-{
-  "results": [
-    {"id": "...", "entregador": "...", "valor": 0, "logistica": "..."}
-  ]
+    console.log('✅ IA: Processamento concluído');
+    return { organizedData };
+
+  } catch (parseError: any) {
+    console.error('❌ Erro ao processar resposta da IA:', parseError);
+    throw new Error('Erro ao interpretar resposta da IA');
+  }
 }
-`;
+
+function createSimplePrompt(items: any[]): string {
+  return `Organize estes dados de logística. Para cada item:
+- Se logistica = "X_Loja", defina: entregador = "", valor = 0, logistica = "Loja"
+- Se logistica tem formato "Nome/R$valor", extraia nome e valor
+- Mantenha sempre o id original
+
+Dados: ${JSON.stringify(items.slice(0, 5), null, 2)}
+
+Retorne apenas este JSON:
+{"results": [{"id": "...", "entregador": "...", "valor": 0, "logistica": "..."}]}`;
 }
