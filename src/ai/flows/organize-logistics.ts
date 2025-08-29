@@ -10,6 +10,8 @@
 import { VendaDetalhada } from '@/lib/data';
 import { googleAI } from '@genkit-ai/googleai';
 import { genkit, z } from 'genkit';
+import { ai } from '@/ai/genkit';
+
 
 const LogisticsEntrySchema = z.object({
   id: z.string().describe('The unique identifier for the entry. This MUST be returned unmodified.'),
@@ -94,7 +96,7 @@ export async function organizeLogistics(input: OrganizeLogisticsInput): Promise<
 }
 
 
-const prompt = genkit.definePrompt({
+const prompt = ai.definePrompt({
   name: 'organizeLogisticsPrompt',
   input: { schema: z.object({ logisticsData: z.array(z.object({ id: z.string(), logistica: z.string().optional() })) }) },
   output: { schema: OrganizeLogisticsOutputSchema },
@@ -116,7 +118,7 @@ Data to analyze:
 \`\`\``,
 });
 
-const organizeLogisticsFlow = genkit.defineFlow(
+const organizeLogisticsFlow = ai.defineFlow(
   {
     name: 'organizeLogisticsFlow',
     inputSchema: z.object({ 
@@ -130,7 +132,7 @@ const organizeLogisticsFlow = genkit.defineFlow(
       plugins: [googleAI({ apiKey: input.apiKey })],
     });
 
-    const { output } = await customAI.run(prompt(input));
+    const { output } = await customAI.run(prompt, input);
     
     if (!output) {
       throw new Error('AI did not return an output.');
