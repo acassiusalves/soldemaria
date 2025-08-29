@@ -96,11 +96,23 @@ export async function organizeLogistics(input: OrganizeLogisticsInput): Promise<
 }
 
 
-const prompt = ai.definePrompt({
-  name: 'organizeLogisticsPrompt',
-  input: { schema: z.object({ logisticsData: z.array(z.object({ id: z.string(), logistica: z.string().optional() })) }) },
-  output: { schema: OrganizeLogisticsOutputSchema },
-  prompt: `You are an intelligent data processing agent. Your task is to analyze a list of logistics entries and extract structured information.
+const organizeLogisticsFlow = ai.defineFlow(
+  {
+    name: 'organizeLogisticsFlow',
+    inputSchema: z.object({ 
+      logisticsData: z.array(z.object({ id: z.string(), logistica: z.string().optional() })),
+      apiKey: z.string().optional(),
+    }),
+    outputSchema: OrganizeLogisticsOutputSchema,
+  },
+  async (input) => {
+    const customAI = genkit({
+      plugins: [googleAI({ apiKey: input.apiKey })],
+    });
+
+    const { output } = await customAI.generate({
+        model: 'gemini-1.5-flash-latest',
+        prompt: `You are an intelligent data processing agent. Your task is to analyze a list of logistics entries and extract structured information.
 
 For each entry, examine the 'logistica' field:
 - If the field contains a name and a currency value (e.g., "Matheus/R$20", "Ana-15", "João R$ 10.50"), extract the name and numerical value.
@@ -116,23 +128,9 @@ Data to analyze:
 \`\`\`json
 {{{json logisticsData}}}
 \`\`\``,
-});
-
-const organizeLogisticsFlow = ai.defineFlow(
-  {
-    name: 'organizeLogisticsFlow',
-    inputSchema: z.object({ 
-      logisticsData: z.array(z.object({ id: z.string(), logistica: z.string().optional() })),
-      apiKey: z.string().optional(),
-    }),
-    outputSchema: OrganizeLogisticsOutputSchema,
-  },
-  async (input) => {
-    const customAI = genkit({
-      plugins: [googleAI({ apiKey: input.apiKey })],
+        input: { logisticsData: input.logisticsData },
+        output: { schema: OrganizeLogisticsOutputSchema },
     });
-
-    const { output } = await customAI.run(prompt, input);
     
     if (!output) {
       throw new Error('AI did not return an output.');
