@@ -1,3 +1,4 @@
+
 "use client";
 
 import * as React from "react";
@@ -13,6 +14,7 @@ import {
   ShoppingBag,
   Eye,
   EyeOff,
+  CheckCircle,
 } from "lucide-react";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -36,20 +38,40 @@ import { Logo } from "@/components/icons";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 export default function ConexoesPage() {
   const [apiKey, setApiKey] = React.useState("");
   const [showApiKey, setShowApiKey] = React.useState(false);
+  const [isKeyValid, setIsKeyValid] = React.useState<boolean | null>(null);
   const { toast } = useToast();
 
   const handleSaveApiKey = () => {
-    // In a real application, this would be sent to a secure backend endpoint.
-    // For this prototype, we'll just show a success message.
-    console.log("API Key to save:", apiKey);
-    toast({
-      title: "Chave Salva!",
-      description: "Sua chave de API foi salva com sucesso (simulado).",
-    });
+    // In a real application, this would be sent to a secure backend endpoint
+    // and validated. For this prototype, we'll simulate a successful validation.
+    if (apiKey.trim() !== "") {
+        console.log("API Key to save:", apiKey);
+        setIsKeyValid(true);
+        toast({
+            title: "Chave Salva!",
+            description: "Sua chave de API foi salva e validada com sucesso (simulado).",
+        });
+    } else {
+        setIsKeyValid(false);
+        toast({
+            title: "Chave Inválida",
+            description: "Por favor, insira uma chave de API válida.",
+            variant: "destructive",
+        });
+    }
+  };
+  
+  const handleApiKeyChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setApiKey(e.target.value);
+    // Reset validation status when user types
+    if (isKeyValid !== null) {
+        setIsKeyValid(null);
+    }
   };
 
   return (
@@ -131,6 +153,15 @@ export default function ConexoesPage() {
                 </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
+                {isKeyValid && (
+                    <Alert>
+                        <CheckCircle className="h-4 w-4" />
+                        <AlertTitle>Conexão Ativa!</AlertTitle>
+                        <AlertDescription>
+                            Sua chave de API do Gemini foi validada e está funcionando.
+                        </AlertDescription>
+                    </Alert>
+                )}
                 <div className="space-y-2">
                     <Label htmlFor="gemini-api-key">Chave de API do Gemini</Label>
                     <div className="relative">
@@ -139,7 +170,7 @@ export default function ConexoesPage() {
                             type={showApiKey ? "text" : "password"}
                             placeholder="Cole sua chave de API aqui"
                             value={apiKey}
-                            onChange={(e) => setApiKey(e.target.value)}
+                            onChange={handleApiKeyChange}
                         />
                         <Button
                             variant="ghost"
