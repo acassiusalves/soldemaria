@@ -3,12 +3,9 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { format, parse, parseISO, endOfDay, isValid } from "date-fns";
-import type { DateRange } from "react-day-picker";
 import {
   AlertTriangle,
   Box,
-  Calendar as CalendarIcon,
   LayoutDashboard,
   LogOut,
   Save,
@@ -35,7 +32,6 @@ import {
 } from "firebase/firestore";
 import { motion } from "framer-motion";
 
-import { cn } from "@/lib/utils";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -49,7 +45,6 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Calendar } from "@/components/ui/calendar";
 import {
   Card,
   CardContent,
@@ -65,11 +60,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 import DetailedSalesHistoryTable, { ColumnDef } from "@/components/detailed-sales-history-table";
 import type { VendaDetalhada } from "@/lib/data";
 import { SupportDataDialog } from "@/components/support-data-dialog";
@@ -79,34 +69,7 @@ import { Progress } from "@/components/ui/progress";
 import { Logo } from "@/components/icons";
 import { organizeCosts } from "@/ai/flows/organize-costs";
 
-/* ========== helpers de datas e normalização ========== */
-const toDate = (value: unknown): Date | null => {
-  if (!value) return null;
-  if (value instanceof Date && isValid(value)) return value;
-  if (value instanceof Timestamp) return value.toDate();
-
-  if (typeof value === "number") {
-    if (value > 20000 && value < 60000) {
-      const excelEpoch = new Date(Date.UTC(1899, 11, 30));
-      const d = new Date(excelEpoch.getTime() + value * 86400000);
-      return isValid(d) ? d : null;
-    }
-    return null;
-  }
-
-  if (typeof value === "string") {
-    const s = value.trim();
-    const iso = parseISO(s.replace(/\//g, "-"));
-    if (isValid(iso)) return iso;
-    const br = parse(s, "dd/MM/yyyy", new Date());
-    if (isValid(br)) return br;
-    const ymdSlash = parse(s, "yyyy/MM/dd", new Date());
-    if (isValid(ymdSlash)) return ymdSlash;
-  }
-
-  return null;
-};
-
+/* ========== helpers de normalização ========== */
 export const normalizeHeader = (s: string) =>
   String(s)
     .toLowerCase()
@@ -230,10 +193,6 @@ const mapRowToSystem = (row: Record<string, any>) => {
     else out[normalized.replace(/\s+/g, "_")] = val; // fallback snake_case
   }
   if (out.codigo != null) out.codigo = normCode(out.codigo);
-  if (out.data != null) {
-    const d = toDate(out.data);
-    if (d) out.data = d; else delete out.data;
-  }
   return out;
 };
 
@@ -279,7 +238,6 @@ export default function CustosVendasPage() {
   const [uploadedFileNames, setUploadedFileNames] = React.useState<string[]>([]);
   const { toast } = useToast();
 
-  const [date, setDate] = React.useState<DateRange | undefined>(undefined);
   const [isSaving, setIsSaving] = React.useState(false);
   const [isOrganizing, setIsOrganizing] = React.useState(false);
   const [saveProgress, setSaveProgress] = React.useState(0);
@@ -333,21 +291,11 @@ export default function CustosVendasPage() {
     return Array.from(map.values());
   }, [custosData, stagedData]);
 
-  /* ======= Filtro por período ======= */
-  const filteredData = React.useMemo(() => {
-    if (!date?.from) return allData;
-    const fromDate = date.from;
-    const toDateValue = date.to ? endOfDay(date.to) : endOfDay(fromDate);
-    return allData.filter((item) => {
-      const itemDate = toDate(item.data);
-      return itemDate && itemDate >= fromDate && itemDate <= toDateValue;
-    });
-  }, [date, allData]);
 
   /* ======= AGRUPAMENTO por código + subRows ======= */
   const groupedForView = React.useMemo(() => {
     const groups = new Map<string, any>();
-    for (const row of filteredData) {
+    for (const row of allData) {
       const code = normCode((row as any).codigo);
       if (!code) continue;
 
@@ -362,12 +310,12 @@ export default function CustosVendasPage() {
 
     for (const g of groups.values()) {
       g.header.subRows.sort((a: any, b: any) =>
-        (toDate(a.data)?.getTime() ?? 0) - (toDate(b.data)?.getTime() ?? 0)
+        ((a.item || 0) as number) - ((b.item || 0) as number)
       );
     }
 
     return Array.from(groups.values()).map(g => g.header);
-  }, [filteredData]);
+  }, [allData]);
 
   /* ======= UPLOAD / PROCESSAMENTO ======= */
   const handleDataUpload = async (datasets: IncomingDataset[]) => {
@@ -639,8 +587,8 @@ export default function CustosVendasPage() {
           <CardHeader>
             <div className="flex justify-between items-start">
                 <div>
-                  <CardTitle className="font-headline text-h3">Seleção de Período</CardTitle>
-                  <CardDescription>Filtre os custos sobre vendas que você deseja analisar.</CardDescription>
+                  <CardTitle className="font-headline text-h3">Custos sobre Vendas</CardTitle>
+                  <CardDescription>Carregue e organize suas planilhas de custos.</CardDescription>
                 </div>
                  <div className="flex items-center gap-2">
                     <SupportDataDialog
@@ -719,32 +667,13 @@ export default function CustosVendasPage() {
                  </div>
               </div>
           </CardHeader>
-          <CardContent>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  id="date"
-                  variant={"outline"}
-                  className={cn("w-[300px] justify-start text-left font-normal", !date && "text-muted-foreground")}
-                >
-                  <CalendarIcon className="mr-2 h-4 w-4" />
-                  {date?.from ? (
-                    date.to ? (<>{format(date.from, "dd/MM/y")} - {format(date.to, "dd/MM/y")}</>) : (format(date.from, "dd/MM/y"))
-                  ) : (<span>Selecione uma data</span>)}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
-                <Calendar initialFocus mode="range" defaultMonth={date?.from} selected={date} onSelect={setDate} numberOfMonths={2} />
-              </PopoverContent>
-            </Popover>
-          </CardContent>
           {isSaving && (
-            <div className="px-6 pb-4">
+            <CardContent className="pb-4">
               <Progress value={saveProgress} className="w-full" />
               <p className="text-sm text-muted-foreground mt-2 text-center">
                 Salvando {stagedData.length} registros. Isso pode levar um momento...
               </p>
-            </div>
+            </CardContent>
           )}
         </Card>
 
@@ -753,5 +682,3 @@ export default function CustosVendasPage() {
     </div>
   );
 }
-
-    
