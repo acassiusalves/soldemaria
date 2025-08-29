@@ -5,7 +5,7 @@ import React, { useState, useMemo, useEffect, useRef } from "react";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { ArrowUpDown, Columns, ChevronRight, X, Eye, EyeOff, Save, Loader2, Settings2 } from "lucide-react";
-import { VendaDetalhada } from "@/lib/data";
+import { VendaDetalhada, CustomCalculation } from "@/lib/data";
 import {
   Table,
   TableBody,
@@ -95,7 +95,6 @@ interface DetailedSalesHistoryTableProps {
     columns: ColumnDef[];
     tableTitle?: string;
     showAdvancedFilters?: boolean;
-    // Props for controlled visibility are now optional
     columnVisibility?: ColumnVisibility;
     onVisibilityChange?: (newVisibility: ColumnVisibility) => void;
     onSavePreferences?: (visibilityToSave: ColumnVisibility) => void;
@@ -182,7 +181,7 @@ export default function DetailedSalesHistoryTable({
     columns, 
     tableTitle = "Histórico Detalhado de Vendas", 
     showAdvancedFilters = false,
-    columnVisibility = {}, // Default to empty object
+    columnVisibility: controlledVisibility,
     onVisibilityChange,
     onSavePreferences,
     isLoadingPreferences = false,
@@ -199,11 +198,18 @@ export default function DetailedSalesHistoryTable({
   const [logisticsFilter, setLogisticsFilter] = useState<Set<string>>(new Set());
   const [cityFilter, setCityFilter] = useState<Set<string>>(new Set());
   
+  const [internalVisibility, setInternalVisibility] = useState<ColumnVisibility>({});
+  
+  const isVisibilityManaged = !!controlledVisibility && !!onVisibilityChange && !!onSavePreferences;
+  const columnVisibility = isVisibilityManaged ? controlledVisibility : internalVisibility;
+  const setColumnVisibility = isVisibilityManaged ? onVisibilityChange! : setInternalVisibility;
+  
+
   const effectiveColumns = useMemo(() => {
     const systemColumnsToHide = [
         "id", "sourceFile", "uploadTimestamp", "subRows", "parcelas", 
         "total_valor_parcelas", "mov_estoque", "valor_da_parcela", "tipo_de_pagamento",
-        "quantidade_movimentada", "costs",
+        "quantidade_movimentada", "costs", "customData"
     ];
     const base = (columns && columns.length > 0) ? columns : FIXED_COLUMNS;
 
@@ -214,6 +220,14 @@ export default function DetailedSalesHistoryTable({
         Object.keys(row).forEach(k => {
           if (!map.has(k)) map.set(k, { id: k, label: getLabel(k), isSortable: true });
         });
+        if (row.customData) {
+            Object.keys(row.customData).forEach(k => {
+                if(!map.has(k)) {
+                    const calc = (columns as (ColumnDef | CustomCalculation)[]).find(c => c.id === k);
+                    map.set(k, { id: k, label: calc?.label || k, isSortable: true });
+                }
+            })
+        }
       });
     }
     // ensure all labels are correct
@@ -243,6 +257,17 @@ export default function DetailedSalesHistoryTable({
     const detailKeys = detailColumns.map(c => c.id);
     return effectiveColumns.filter(c => !detailKeys.includes(c.id));
   }, [effectiveColumns, detailColumns]);
+
+  useEffect(() => {
+      if (!isVisibilityManaged && mainColumns.length > 0) {
+          const defaultVisibility = mainColumns.reduce((acc, col) => {
+              acc[col.id] = true;
+              return acc;
+          }, {} as ColumnVisibility);
+          setInternalVisibility(defaultVisibility);
+      }
+  }, [isVisibilityManaged, mainColumns]);
+
 
   const { uniqueVendores, uniqueEntregadores, uniqueLogisticas, uniqueCidades } = useMemo(() => {
     const vendores = new Set<string>();
@@ -286,8 +311,8 @@ export default function DetailedSalesHistoryTable({
     if (!sortKey) return filteredData;
 
     return [...filteredData].sort((a, b) => {
-      const aValue = (a as any)[sortKey];
-      const bValue = (b as any)[sortKey];
+      const aValue = (a as any)[sortKey] ?? (a as any).customData?.[sortKey];
+      const bValue = (b as any)[sortKey] ?? (b as any).customData?.[sortKey];
 
       if (aValue === undefined || aValue === null) return 1;
       if (bValue === undefined || bValue === null) return -1;
@@ -339,7 +364,7 @@ export default function DetailedSalesHistoryTable({
   );
 
   const renderCell = (row: any, columnId: string) => {
-    let value = row[columnId];
+    let value = row[columnId] ?? row.customData?.[columnId];
     
     if (columnId === 'tipo_pagamento' || columnId === 'tipo_de_pagamento') {
         return showBlank(row.tipo_de_pagamento ?? row.tipo_pagamento);
@@ -363,7 +388,7 @@ export default function DetailedSalesHistoryTable({
     };
 
     if (["final","custoFrete","imposto","embalagem","comissao","custoUnitario","valorUnitario","valorCredito","valorDescontos", "valor"]
-        .includes(columnId)) {
+        .includes(columnId) || (typeof value === 'number')) {
       const n = toNumber(value);
       if (n !== null) {
         return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -405,9 +430,6 @@ export default function DetailedSalesHistoryTable({
     
     return showBlank(value);
   }
-
-    // When visibility is not controlled from outside, all columns are visible.
-  const isVisibilityManaged = !!onVisibilityChange && !!onSavePreferences;
 
   const visibleColumns = useMemo(() => {
     if (!isVisibilityManaged) {
@@ -462,7 +484,7 @@ export default function DetailedSalesHistoryTable({
               onChange={(e) => setFilter(e.target.value)}
               className="w-auto"
             />
-            {isVisibilityManaged && onVisibilityChange && onSavePreferences && (
+            {isVisibilityManaged && onSavePreferences && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline">
@@ -494,7 +516,7 @@ export default function DetailedSalesHistoryTable({
                           className="capitalize"
                           checked={!!columnVisibility[column.id]}
                           disabled={REQUIRED_ALWAYS_ON.includes(column.id)}
-                          onCheckedChange={(value) => onVisibilityChange!({ ...columnVisibility, [column.id]: !!value })}
+                          onCheckedChange={(value) => setColumnVisibility({ ...columnVisibility, [column.id]: !!value })}
                       >
                           {column.label}
                       </DropdownMenuCheckboxItem>

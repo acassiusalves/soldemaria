@@ -47,3 +47,18 @@ export type VendaDetalhada = {
 };
 
 export type LogisticaDetalhada = VendaDetalhada;
+
+// -- Custom Calculation Types --
+export type FormulaItem = { type: 'column' | 'operator' | 'number'; value: string; label: string };
+
+export interface CustomCalculation {
+    id: string;
+    name: string;
+    formula: FormulaItem[];
+    isPercentage?: boolean;
+    targetMarketplace?: string;
+    interaction?: {
+        targetColumn: string;
+        operator: '+' | '-';
+    };
+}
