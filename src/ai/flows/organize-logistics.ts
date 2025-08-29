@@ -44,7 +44,7 @@ export async function organizeLogistics(input: OrganizeLogisticsInput): Promise<
         // We only need to send a subset of fields to the AI to save tokens
         const dataForAI = input.logisticsData.map(item => ({
             id: item.id,
-            logistica: item.logistica,
+            logistica: String(item.logistica ?? ''), // Ensure logistica is always a string
         }));
 
         const result = await organizeLogisticsFlow({ logisticsData: dataForAI });
