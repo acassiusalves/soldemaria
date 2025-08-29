@@ -337,10 +337,10 @@ export default function CustosVendasPage() {
   const filteredData = React.useMemo(() => {
     if (!date?.from) return allData;
     const fromDate = date.from;
-    const toDate = date.to ? endOfDay(date.to) : endOfDay(fromDate);
+    const toDateValue = date.to ? endOfDay(date.to) : endOfDay(fromDate);
     return allData.filter((item) => {
       const itemDate = toDate(item.data);
-      return itemDate && itemDate >= fromDate && itemDate <= toDate;
+      return itemDate && itemDate >= fromDate && itemDate <= toDateValue;
     });
   }, [date, allData]);
 
