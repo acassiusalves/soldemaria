@@ -55,50 +55,78 @@ export async function organizeCosts(input: OrganizeCostsInput): Promise<Organize
         if (processedItem.modo_de_pagamento && typeof processedItem.modo_de_pagamento === 'string') {
           const modoPagamento = processedItem.modo_de_pagamento.trim().toLowerCase();
           
-          // REGRA 1: PIX - manter como está
-          if (modoPagamento.includes('pix')) {
+          console.log(`🔍 Processando: "${processedItem.modo_de_pagamento}" → "${modoPagamento}"`);
+          
+          // REGRA 1: PIX simples
+          if (modoPagamento === 'pix') {
             processedItem.modo_de_pagamento = 'PIX';
-            processedItem.tipo_de_pagamento = '';
+            processedItem.tipo_pagamento = '';  // CORRIGIDO: sem "de"
             processedItem.parcela = '';
+            console.log('✅ Regra PIX aplicada');
           }
           // REGRA 2: Cartao/Debito
           else if (modoPagamento.includes('cartao') && modoPagamento.includes('debito')) {
             processedItem.modo_de_pagamento = 'Cartao';
-            processedItem.tipo_de_pagamento = 'Debito';
+            processedItem.tipo_pagamento = 'Debito';  // CORRIGIDO: sem "de"
             processedItem.parcela = '';
+            console.log('✅ Regra Cartao/Debito aplicada');
           }
-          // REGRA 3: Cartao/Credito com parcelas (ex: "Cartao/Credito 3x")
+          // REGRA 3: Cartao/Credito com parcelas
           else if (modoPagamento.includes('cartao') && modoPagamento.includes('credito')) {
             processedItem.modo_de_pagamento = 'Cartao';
-            processedItem.tipo_de_pagamento = 'Credito';
+            processedItem.tipo_pagamento = 'Credito';  // CORRIGIDO: sem "de"
             
-            // Extrair número de parcelas (ex: "3x" → "3")
+            // Extrair número de parcelas
             const parcelaMatch = modoPagamento.match(/(\d+)x?/);
             if (parcelaMatch) {
               processedItem.parcela = parcelaMatch[1];
+              console.log(`✅ Regra Cartao/Credito aplicada com ${parcelaMatch[1]} parcelas`);
             } else {
-              processedItem.parcela = '1'; // Default para crédito sem especificar parcelas
+              processedItem.parcela = '1';
+              console.log('✅ Regra Cartao/Credito aplicada (default 1 parcela)');
             }
+          }
+          // REGRA 4: Pix/QR Code
+          else if (modoPagamento.includes('pix') && (modoPagamento.includes('qr') || modoPagamento.includes('code'))) {
+            processedItem.modo_de_pagamento = 'Pix';
+            processedItem.tipo_pagamento = 'QR Code';  // CORRIGIDO: sem "de"
+            processedItem.parcela = '';
+            console.log('✅ Regra Pix/QR Code aplicada');
+          }
+          // REGRA 5: Dinheiro
+          else if (modoPagamento === 'dinheiro') {
+            processedItem.modo_de_pagamento = 'Dinheiro';
+            processedItem.tipo_pagamento = '';  // CORRIGIDO: sem "de"
+            processedItem.parcela = '';
+            console.log('✅ Regra Dinheiro aplicada');
           }
           // CASO GENÉRICO: Cartao sem especificação
           else if (modoPagamento.includes('cartao')) {
             processedItem.modo_de_pagamento = 'Cartao';
-            processedItem.tipo_de_pagamento = 'Credito'; // Default
-            processedItem.parcela = '1'; // Default
+            processedItem.tipo_pagamento = 'Credito';  // CORRIGIDO: sem "de"
+            processedItem.parcela = '1';
+            console.log('✅ Regra Cartao genérico aplicada');
           }
-          // OUTROS CASOS: manter original mas limpar
+          // PIX genérico
+          else if (modoPagamento.includes('pix')) {
+            processedItem.modo_de_pagamento = 'PIX';
+            processedItem.tipo_pagamento = '';  // CORRIGIDO: sem "de"
+            processedItem.parcela = '';
+            console.log('✅ Regra PIX genérico aplicada');
+          }
+          // OUTROS CASOS
           else {
-            // Manter valor original mas capitalizado
             const originalValue = processedItem.modo_de_pagamento.trim();
             processedItem.modo_de_pagamento = originalValue.charAt(0).toUpperCase() + originalValue.slice(1).toLowerCase();
-            processedItem.tipo_de_pagamento = '';
+            processedItem.tipo_pagamento = '';  // CORRIGIDO: sem "de"
             processedItem.parcela = '';
+            console.log('⚪ Mantendo original:', processedItem.modo_de_pagamento);
           }
         } else {
-          // Se não tem modo de pagamento, definir campos vazios
           processedItem.modo_de_pagamento = processedItem.modo_de_pagamento || '';
-          processedItem.tipo_de_pagamento = '';
+          processedItem.tipo_pagamento = '';  // CORRIGIDO: sem "de"
           processedItem.parcela = '';
+          console.log('⚠️ Modo de pagamento vazio');
         }
         
         // 4. Garantir que valor é numérico
