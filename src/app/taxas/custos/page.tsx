@@ -216,8 +216,8 @@ const API_KEY_STORAGE_KEY = "gemini_api_key";
 // Colunas fixas para a tela de Custos
 const fixedColumns: ColumnDef[] = [
     { id: "codigo", label: "Código", isSortable: true },
-    { id: "tipo_pagamento", label: "Tipo de Pagamento", isSortable: true },
     { id: "modo_de_pagamento", label: "Modo de Pagamento", isSortable: true },
+    { id: "tipo_pagamento", label: "Tipo de Pagamento", isSortable: true },
     { id: "parcela", label: "Parcela", isSortable: true },
     { id: "valor", label: "Valor", isSortable: true, className: "text-right" },
     { id: "instituicao_financeira", label: "Instituição Financeira", isSortable: true },
@@ -686,5 +686,6 @@ export default function CustosVendasPage() {
     </div>
   );
 }
+
 
 

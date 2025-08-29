@@ -1,4 +1,3 @@
-
 'use server';
 
 import { z } from 'zod';
@@ -157,7 +156,7 @@ export async function debugCostsDetailed(input: OrganizeCostsInput): Promise<any
   
   console.log('🔍 Análise dos campos:', fieldAnalysis);
   
-  // Testar o mapeamento manualmente
+  // Testar o mapeamento manually
   const testMapping: any = {};
   
   // Testar mapeamento do código
