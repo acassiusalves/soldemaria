@@ -1,3 +1,4 @@
+
 'use server';
 
 import { z } from 'zod';
@@ -53,7 +54,11 @@ export async function organizeCosts(input: OrganizeCostsInput): Promise<Organize
         
         // 3. ORGANIZAR MODO DE PAGAMENTO COM AS REGRAS ESPECÍFICAS
         if (processedItem.modo_de_pagamento && typeof processedItem.modo_de_pagamento === 'string') {
-          const modoPagamento = processedItem.modo_de_pagamento.trim().toLowerCase();
+          const modoPagamento = processedItem.modo_de_pagamento
+            .trim()
+            .toLowerCase()
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, ""); // <-- CORREÇÃO APLICADA AQUI
           
           // REGRA 1: PIX - manter como está
           if (modoPagamento.includes('pix')) {
