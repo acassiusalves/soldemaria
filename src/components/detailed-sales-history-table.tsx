@@ -355,7 +355,7 @@ export default function DetailedSalesHistoryTable({ data, columns }: DetailedSal
                   <React.Fragment key={row.id}>
                     <TableRow>
                        <TableCell>
-                          {(row.subRows?.length > 1 || row.parcelas?.length > 0) && (
+                          {(row.subRows?.length > 0 || row.parcelas?.length > 0) && (
                             <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => toggleRowExpansion(row.id)}>
                                 <ChevronRight className={cn("h-4 w-4 transition-transform", expandedRows.has(row.id) && "rotate-90")} />
                             </Button>
@@ -371,7 +371,7 @@ export default function DetailedSalesHistoryTable({ data, columns }: DetailedSal
                         <TableRow>
                             <TableCell colSpan={visibleColumns.length + 1} className="p-2 bg-muted/50">
                               <div className="space-y-2">
-                                {row.subRows && row.subRows.length > 1 && (
+                                {row.subRows && row.subRows.length > 0 && (
                                   <div className="p-2 rounded-md bg-background">
                                     <h4 className="font-semibold p-2">Itens do Pedido</h4>
                                      <Table>
