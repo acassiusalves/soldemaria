@@ -16,12 +16,12 @@ import {
   Settings,
   ShoppingBag,
   Trash2,
+  X,
 } from "lucide-react";
 import {
   collection,
   doc,
   onSnapshot,
-  writeBatch,
   addDoc,
   deleteDoc,
   updateDoc,
@@ -68,21 +68,29 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { Badge } from "@/components/ui/badge";
+
+type Parcela = {
+    numero: number;
+    taxa: number;
+};
 
 type Operadora = {
   id: string;
   nome: string;
   taxaDebito: number;
-  taxaCredito: number;
+  taxasCredito: Parcela[];
+};
+
+const initialNovaOperadoraState = {
+    nome: "",
+    taxaDebito: "",
+    taxasCredito: [{ numero: 1, taxa: "" }],
 };
 
 export default function TaxasPage() {
   const [operadoras, setOperadoras] = React.useState<Operadora[]>([]);
-  const [novaOperadora, setNovaOperadora] = React.useState({
-    nome: "",
-    taxaDebito: "",
-    taxaCredito: "",
-  });
+  const [novaOperadora, setNovaOperadora] = React.useState(initialNovaOperadoraState);
   const [editingId, setEditingId] = React.useState<string | null>(null);
   const { toast } = useToast();
 
@@ -100,6 +108,27 @@ export default function TaxasPage() {
     const { name, value } = e.target;
     setNovaOperadora((prev) => ({ ...prev, [name]: value }));
   };
+  
+  const handleParcelaChange = (index: number, field: 'numero' | 'taxa', value: string) => {
+    const updatedParcelas = [...novaOperadora.taxasCredito];
+    updatedParcelas[index] = { ...updatedParcelas[index], [field]: value };
+    setNovaOperadora(prev => ({ ...prev, taxasCredito: updatedParcelas }));
+  };
+
+  const addParcela = () => {
+    const lastNumero = novaOperadora.taxasCredito[novaOperadora.taxasCredito.length - 1]?.numero || 0;
+    setNovaOperadora(prev => ({
+        ...prev,
+        taxasCredito: [...prev.taxasCredito, { numero: lastNumero + 1, taxa: "" }]
+    }));
+  };
+
+  const removeParcela = (index: number) => {
+    if (novaOperadora.taxasCredito.length <= 1) return; // Must have at least one
+    const updatedParcelas = novaOperadora.taxasCredito.filter((_, i) => i !== index);
+    setNovaOperadora(prev => ({ ...prev, taxasCredito: updatedParcelas }));
+  };
+
 
   const handleSave = async () => {
     if (!novaOperadora.nome) {
@@ -114,8 +143,14 @@ export default function TaxasPage() {
     const payload = {
       nome: novaOperadora.nome,
       taxaDebito: parseFloat(novaOperadora.taxaDebito) || 0,
-      taxaCredito: parseFloat(novaOperadora.taxaCredito) || 0,
+      taxasCredito: novaOperadora.taxasCredito.map(p => ({
+        numero: parseInt(String(p.numero), 10) || 0,
+        taxa: parseFloat(String(p.taxa)) || 0,
+      })).filter(p => p.numero > 0), // Filter out invalid installment numbers
     };
+    
+    // Sort by installment number
+    payload.taxasCredito.sort((a, b) => a.numero - b.numero);
 
     try {
       if (editingId) {
@@ -126,7 +161,7 @@ export default function TaxasPage() {
         await addDoc(collection(db, "taxas"), payload);
         toast({ title: "Sucesso!", description: "Nova operadora salva." });
       }
-      setNovaOperadora({ nome: "", taxaDebito: "", taxaCredito: "" });
+      setNovaOperadora(initialNovaOperadoraState);
       setEditingId(null);
     } catch (error) {
       console.error("Erro ao salvar operadora:", error);
@@ -143,7 +178,7 @@ export default function TaxasPage() {
     setNovaOperadora({
         nome: operadora.nome,
         taxaDebito: String(operadora.taxaDebito),
-        taxaCredito: String(operadora.taxaCredito),
+        taxasCredito: operadora.taxasCredito.map(p => ({ numero: p.numero, taxa: String(p.taxa) })),
     });
   }
 
@@ -159,7 +194,7 @@ export default function TaxasPage() {
   
   const handleCancelEdit = () => {
     setEditingId(null);
-    setNovaOperadora({ nome: "", taxaDebito: "", taxaCredito: "" });
+    setNovaOperadora(initialNovaOperadoraState);
   }
 
   return (
@@ -235,15 +270,15 @@ export default function TaxasPage() {
         </div>
       </header>
       <main className="flex flex-1 flex-col gap-4 p-4 md:gap-8 md:p-8">
-        <div className="grid gap-6 md:grid-cols-2">
-            <Card>
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-5">
+            <Card className="lg:col-span-2">
             <CardHeader>
                 <CardTitle className="font-headline text-h3 flex items-center gap-2">
                 <CreditCard className="size-6"/>
                 {editingId ? "Editar Operadora" : "Cadastrar Nova Operadora"}
                 </CardTitle>
                 <CardDescription>
-                Adicione ou edite as operadoras de cartão e suas taxas.
+                Adicione ou edite as operadoras de cartão e suas taxas por parcela.
                 </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -251,19 +286,43 @@ export default function TaxasPage() {
                     <Label htmlFor="nome">Nome da Operadora</Label>
                     <Input id="nome" name="nome" placeholder="Ex: Cielo, Rede, PagSeguro" value={novaOperadora.nome} onChange={handleInputChange} />
                 </div>
-                 <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                        <Label htmlFor="taxaDebito">Taxa de Débito (%)</Label>
-                        <Input id="taxaDebito" name="taxaDebito" type="number" placeholder="Ex: 1.99" value={novaOperadora.taxaDebito} onChange={handleInputChange} />
-                    </div>
-                    <div className="space-y-2">
-                        <Label htmlFor="taxaCredito">Taxa de Crédito à Vista (%)</Label>
-                        <Input id="taxaCredito" name="taxaCredito" type="number" placeholder="Ex: 3.49" value={novaOperadora.taxaCredito} onChange={handleInputChange} />
-                    </div>
-                 </div>
-                 <div className="flex gap-2">
+                <div className="space-y-2">
+                    <Label htmlFor="taxaDebito">Taxa de Débito (%)</Label>
+                    <Input id="taxaDebito" name="taxaDebito" type="number" placeholder="Ex: 1.99" value={novaOperadora.taxaDebito} onChange={handleInputChange} />
+                </div>
+
+                <div className="space-y-4">
+                    <Label>Taxas de Crédito por Parcela</Label>
+                    {novaOperadora.taxasCredito.map((p, index) => (
+                        <div key={index} className="flex items-center gap-2">
+                            <Input
+                                type="number"
+                                placeholder="Parcela"
+                                value={p.numero}
+                                onChange={(e) => handleParcelaChange(index, 'numero', e.target.value)}
+                                className="w-24"
+                                aria-label="Número da parcela"
+                            />
+                             <Input
+                                type="number"
+                                placeholder="Taxa %"
+                                value={p.taxa}
+                                onChange={(e) => handleParcelaChange(index, 'taxa', e.target.value)}
+                                aria-label="Taxa da parcela"
+                            />
+                            <Button variant="ghost" size="icon" onClick={() => removeParcela(index)} disabled={novaOperadora.taxasCredito.length <= 1}>
+                                <X className="h-4 w-4" />
+                            </Button>
+                        </div>
+                    ))}
+                    <Button variant="outline" size="sm" onClick={addParcela}>
+                        <PlusCircle className="mr-2 h-4 w-4" />
+                        Adicionar Parcela
+                    </Button>
+                </div>
+                 <div className="flex gap-2 pt-4">
                     <Button onClick={handleSave}>
-                        <Save className="mr-2" />
+                        <Save className="mr-2 h-4 w-4" />
                         {editingId ? "Salvar Alterações" : "Adicionar Operadora"}
                     </Button>
                     {editingId && (
@@ -273,7 +332,7 @@ export default function TaxasPage() {
             </CardContent>
             </Card>
 
-            <Card>
+            <Card className="lg:col-span-3">
                  <CardHeader>
                     <CardTitle className="font-headline text-h3">Operadoras Cadastradas</CardTitle>
                     <CardDescription>
@@ -285,8 +344,8 @@ export default function TaxasPage() {
                         <TableHeader>
                             <TableRow>
                                 <TableHead>Operadora</TableHead>
-                                <TableHead className="text-right">Débito</TableHead>
-                                <TableHead className="text-right">Crédito</TableHead>
+                                <TableHead>Débito</TableHead>
+                                <TableHead>Crédito (Parcelas)</TableHead>
                                 <TableHead className="w-[80px]"></TableHead>
                             </TableRow>
                         </TableHeader>
@@ -294,8 +353,16 @@ export default function TaxasPage() {
                             {operadoras.length > 0 ? operadoras.map(op => (
                                 <TableRow key={op.id}>
                                     <TableCell className="font-medium">{op.nome}</TableCell>
-                                    <TableCell className="text-right">{op.taxaDebito.toFixed(2)}%</TableCell>
-                                    <TableCell className="text-right">{op.taxaCredito.toFixed(2)}%</TableCell>
+                                    <TableCell>{op.taxaDebito.toFixed(2)}%</TableCell>
+                                    <TableCell>
+                                        <div className="flex flex-wrap gap-1">
+                                            {op.taxasCredito?.sort((a,b) => a.numero - b.numero).map(p => (
+                                                <Badge key={p.numero} variant="secondary" className="font-normal">
+                                                    {p.numero}x: {p.taxa.toFixed(2)}%
+                                                </Badge>
+                                            ))}
+                                        </div>
+                                    </TableCell>
                                     <TableCell>
                                         <DropdownMenu>
                                             <DropdownMenuTrigger asChild>
@@ -340,4 +407,3 @@ export default function TaxasPage() {
     </div>
   );
 }
-
