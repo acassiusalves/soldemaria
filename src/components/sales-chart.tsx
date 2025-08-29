@@ -8,7 +8,7 @@ import {
   ChartContainer,
   ChartTooltipContent,
 } from "@/components/ui/chart";
-import { parseISO } from "date-fns";
+import { parseISO, isValid } from "date-fns";
 
 interface SalesChartProps {
   data: Venda[];
@@ -24,8 +24,12 @@ const chartConfig = {
 export default function SalesChart({ data }: SalesChartProps) {
   const monthlySales = React.useMemo(() => {
     const salesByMonth: { [key: string]: number } = {};
+    
     data.forEach((sale) => {
-      const month = parseISO(sale.data).toLocaleString("default", { month: "short" });
+      const date = parseISO(sale.data);
+      if (!isValid(date)) return;
+
+      const month = date.toLocaleString("default", { month: "short" });
       salesByMonth[month] = (salesByMonth[month] || 0) + sale.receita;
     });
 
@@ -61,7 +65,7 @@ export default function SalesChart({ data }: SalesChartProps) {
           <Tooltip 
             cursor={false}
             content={<ChartTooltipContent
-                formatter={(value) => value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                formatter={(value) => typeof value === 'number' ? value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : value}
              />}
           />
           <Bar

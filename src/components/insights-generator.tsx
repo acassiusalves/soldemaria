@@ -12,12 +12,12 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { generateSalesInsights } from "@/ai/flows/generate-sales-insights";
-import { Venda } from "@/lib/data";
+import { VendaDetalhada } from "@/lib/data";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 
 interface InsightsGeneratorProps {
-  data: Venda[];
+  data: VendaDetalhada[];
 }
 
 export default function InsightsGenerator({ data }: InsightsGeneratorProps) {
@@ -82,7 +82,7 @@ export default function InsightsGenerator({ data }: InsightsGeneratorProps) {
         )}
       </CardContent>
       <CardFooter>
-        <Button onClick={handleGenerateInsights} disabled={isPending} className="w-full">
+        <Button onClick={handleGenerateInsights} disabled={isPending || data.length === 0} className="w-full">
           {isPending ? "Gerando..." : "Gerar Insights"}
         </Button>
       </CardFooter>

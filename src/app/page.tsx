@@ -3,33 +3,23 @@
 "use client";
 
 import * as React from "react";
-import Image from "next/image";
 import Link from "next/link";
-import { addDays, format, parseISO } from "date-fns";
+import { addDays, format, parse, parseISO, endOfDay, isValid } from "date-fns";
 import type { DateRange } from "react-day-picker";
 import {
-  ArrowDownRight,
-  ArrowUpRight,
-  Bot,
-  Box,
-  Calendar as CalendarIcon,
-  ChevronDown,
   DollarSign,
-  History,
-  LayoutDashboard,
-  LogOut,
-  MoreHorizontal,
-  Percent,
-  Plug,
-  Settings,
   ShoppingBag,
   Trophy,
+  Calendar as CalendarIcon,
+  ChevronDown,
+  LogOut,
+  Settings,
 } from "lucide-react";
+import { collection, onSnapshot, query, Timestamp } from "firebase/firestore";
 import { useRouter } from "next/navigation";
-import { auth } from "@/lib/firebase";
+import { auth, db } from "@/lib/firebase";
 
-
-import { salesData, type Venda } from "@/lib/data";
+import type { VendaDetalhada } from "@/lib/data";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -58,14 +48,29 @@ import { Logo } from "@/components/icons";
 import KpiCard from "@/components/kpi-card";
 import SalesChart from "@/components/sales-chart";
 import InsightsGenerator from "@/components/insights-generator";
-import SalesHistoryTable from "@/components/sales-history-table";
+
+// Helper to reliably convert various date formats to a Date object
+const toDate = (value: unknown): Date | null => {
+  if (!value) return null;
+  if (value instanceof Date && isValid(value)) return value;
+  if (value instanceof Timestamp) return value.toDate();
+  if (typeof value === "string") return parseISO(value.replace(/\//g, "-"));
+  return null;
+};
 
 export default function DashboardPage() {
-    const [date, setDate] = React.useState<DateRange | undefined>({
-    from: new Date(2023, 0, 1),
-    to: addDays(new Date(2023, 11, 31), 0),
-  });
-    const router = useRouter();
+  const [salesData, setSalesData] = React.useState<VendaDetalhada[]>([]);
+  const [date, setDate] = React.useState<DateRange | undefined>(undefined);
+  const router = useRouter();
+
+  React.useEffect(() => {
+    const salesQuery = query(collection(db, "vendas"));
+    const unsub = onSnapshot(salesQuery, (snapshot) => {
+      const data = snapshot.docs.map(doc => ({...doc.data(), id: doc.id} as VendaDetalhada));
+      setSalesData(data);
+    });
+    return () => unsub();
+  }, []);
 
   const handleLogout = async () => {
     await auth.signOut();
@@ -75,42 +80,36 @@ export default function DashboardPage() {
   const filteredSales = React.useMemo(() => {
     if (!date?.from) return salesData;
     const fromDate = date.from;
-    const toDate = date.to ?? fromDate;
+    const toDateVal = date.to ? endOfDay(date.to) : endOfDay(fromDate);
 
     return salesData.filter((sale) => {
-      try {
-        const saleDate = parseISO(sale.data);
-        return saleDate >= fromDate && saleDate <= toDate;
-      } catch (e) {
-        return false;
-      }
+      const saleDate = toDate(sale.data);
+      return saleDate && saleDate >= fromDate && saleDate <= toDateVal;
     });
-  }, [date]);
+  }, [date, salesData]);
 
-  const totalRevenue = React.useMemo(() => 
-    filteredSales.reduce((sum, sale) => sum + sale.receita, 0)
-  , [filteredSales]);
-
-  const totalSales = React.useMemo(() => 
-    filteredSales.reduce((sum, sale) => sum + sale.unidadesVendidas, 0)
-  , [filteredSales]);
-
-  const salesByCategory = React.useMemo(() => {
-    return filteredSales.reduce((acc, sale) => {
-      acc[sale.categoria] = (acc[sale.categoria] || 0) + sale.receita;
-      return acc;
+  // Use 'final' for revenue and count distinct orders (by codigo) for sales count
+  const { totalRevenue, totalSales, salesByCategory, totalOrders } = React.useMemo(() => {
+    const revenue = filteredSales.reduce((sum, sale) => sum + (sale.final || 0), 0);
+    const uniqueOrders = new Set(filteredSales.map(s => s.codigo));
+    const ordersCount = uniqueOrders.size;
+    const categoryMap = filteredSales.reduce((acc, sale) => {
+        // Assuming category might be in 'tipo' or a similar field if not explicitly present
+        const category = (sale as any).tipo || 'Outros'; 
+        acc[category] = (acc[category] || 0) + (sale.final || 0);
+        return acc;
     }, {} as Record<string, number>);
+
+    return { totalRevenue: revenue, totalSales: filteredSales.length, salesByCategory: categoryMap, totalOrders: ordersCount };
   }, [filteredSales]);
+
 
   const topCategory = React.useMemo(() => {
     if (Object.keys(salesByCategory).length === 0) return ["N/A", 0];
     return Object.entries(salesByCategory).sort((a, b) => b[1] - a[1])[0];
   }, [salesByCategory]);
 
-  const displayDate = date ?? {
-    from: new Date(2023, 0, 1),
-    to: addDays(new Date(2023, 11, 31), 0),
-  };
+  const displayDate = date;
 
   return (
     <div className="flex min-h-screen w-full flex-col">
@@ -181,14 +180,14 @@ export default function DashboardPage() {
                         {displayDate?.from ? (
                           displayDate.to ? (
                             <>
-                              {format(displayDate.from, "LLL dd, y")} -{" "}
-                              {format(displayDate.to, "LLL dd, y")}
+                              {format(displayDate.from, "dd/MM/y")} -{" "}
+                              {format(displayDate.to, "dd/MM/y")}
                             </>
                           ) : (
-                            format(displayDate.from, "LLL dd, y")
+                            format(displayDate.from, "dd/MM/y")
                           )
                         ) : (
-                          <span>Selecione uma data</span>
+                          <span>Selecione um período</span>
                         )}
                       </Button>
                     </PopoverTrigger>
@@ -206,7 +205,7 @@ export default function DashboardPage() {
                 </div>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" className="relative h-8 w-8 rounded-full">
+                    <Button variant="secondary" size="icon" className="rounded-full">
                       <Avatar className="h-9 w-9">
                         <AvatarImage src="https://picsum.photos/100/100" data-ai-hint="person" alt="@usuario" />
                         <AvatarFallback>UV</AvatarFallback>
@@ -246,14 +245,14 @@ export default function DashboardPage() {
             icon={<DollarSign className="text-primary" />}
           />
           <KpiCard
-            title="Vendas"
-            value={`+${totalSales.toLocaleString("pt-BR")}`}
+            title="Pedidos"
+            value={`+${totalOrders.toLocaleString("pt-BR")}`}
             change="+180.1% do último mês"
             icon={<ShoppingBag className="text-primary" />}
           />
           <KpiCard
             title="Ticket Médio"
-            value={(totalRevenue / totalSales || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL"})}
+            value={(totalRevenue / totalOrders || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL"})}
             change="-2.1% do último mês"
             changeType="negative"
             icon={<DollarSign className="text-primary" />}
@@ -275,26 +274,13 @@ export default function DashboardPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="pl-2">
-              <SalesChart data={filteredSales} />
+              <SalesChart data={filteredSales.map(s => ({...s, receita: s.final, data: toDate(s.data)?.toISOString() || ''}))} />
             </CardContent>
           </Card>
-          <InsightsGenerator data={filteredSales} />
+          <InsightsGenerator data={filteredSales.map(s => ({...s, receita: s.final, data: toDate(s.data)?.toISOString() || ''})) as any} />
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="font-headline text-h3">Histórico de Vendas</CardTitle>
-            <CardDescription>
-              Uma lista detalhada das vendas recentes na sua loja.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <SalesHistoryTable data={filteredSales} />
-          </CardContent>
-        </Card>
       </main>
     </div>
   );
 }
-
-    
