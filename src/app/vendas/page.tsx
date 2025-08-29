@@ -136,6 +136,7 @@ const columnLabels: Record<string, string> = {
   valorDescontos: 'Valor Descontos',
   entregador: 'Entregador',
   valor: 'Valor',
+  origemCliente: 'Origem Cliente',
 };
 const getLabel = (key: string) => columnLabels[key] || key;
 
@@ -159,6 +160,7 @@ const headerMappingNormalized: Record<string, string> = {
   "valor entrega": "custoFrete",
   "valor credito": "valorCredito",
   "valor descontos": "valorDescontos",
+  "origem cliente": "origemCliente",
 };
 
 /* ========== limpadores ========= */
@@ -308,7 +310,7 @@ const mergeForHeader = (base: any, row: any) => {
   // preenche primeiro valor não-vazio para campos do header
   const headerFields = [
     "data","codigo","tipo","nomeCliente","vendedor","cidade",
-    "origem","logistica","final","custoFrete","mov_estoque"
+    "origem","logistica","final","custoFrete","mov_estoque", "origemCliente"
   ];
   for (const k of headerFields) {
     if (isEmptyCell(out[k]) && !isEmptyCell(row[k])) out[k] = row[k];
@@ -865,3 +867,5 @@ export default function VendasPage() {
     </div>
   );
 }
+
+    
