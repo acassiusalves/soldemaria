@@ -65,6 +65,9 @@ export async function organizeLogistics(input: OrganizeLogisticsInput): Promise<
               
               const valor = parseFloat(valorStr);
               processedItem.valor = isNaN(valor) ? 0 : valor;
+              
+              // SUBSTITUIR LOGÍSTICA POR "DELIVERY"
+              processedItem.logistica = 'Delivery';
             }
           }
           // Caso 3: Outros formatos - manter como está

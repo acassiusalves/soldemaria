@@ -76,7 +76,7 @@ import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
 import { Progress } from "@/components/ui/progress";
 import { Logo } from "@/components/icons";
-import { organizeLogistics, debugDataLoss } from "@/ai/flows/organize-logistics";
+import { organizeLogistics } from "@/ai/flows/organize-logistics";
 
 /* ========== helpers de datas e normalização ========== */
 const toDate = (value: unknown): Date | null => {
@@ -556,54 +556,6 @@ export default function LogisticaPage() {
     }
   };
 
-  const handleDebugLoss = async () => {
-    const apiKey = localStorage.getItem("gemini_api_key") || "test";
-    
-    try {
-      const result = await debugDataLoss({ 
-        logisticsData: stagedData, // TODOS os dados
-        apiKey 
-      });
-      console.log('🔍 Debug resultado:', result);
-      toast({
-        title: "Resultado da Depuração",
-        description: `Originais: ${result.originalLength}, Válidos: ${result.validItems}, Inválidos: ${result.invalidItems}`,
-      });
-    } catch (error: any) {
-      console.error('❌ Debug falhou:', error);
-      toast({ title: `Debug falhou: ${error.message}`, variant: "destructive"});
-    }
-  };
-
-  const handleTestFixed = async () => {
-    const apiKey = localStorage.getItem("gemini_api_key") || "test";
-    
-    console.log('📊 Dados antes do teste:', stagedData.length);
-    
-    try {
-      setIsOrganizing(true);
-      const result = await organizeLogistics({ 
-        logisticsData: stagedData, // TODOS os dados
-        apiKey 
-      });
-      
-      console.log('✅ Teste corrigido:', result.organizedData.length, 'itens');
-      toast({
-        title: "Teste Concluído!",
-        description: `Entrada: ${stagedData.length} → Saída: ${result.organizedData.length} itens.`
-      });
-      
-      // Atualizar os dados com o resultado
-      setStagedData(result.organizedData);
-      
-    } catch (error: any) {
-      console.error('❌ Teste corrigido falhou:', error);
-      toast({ title: `Teste falhou: ${error.message}`, variant: "destructive" });
-    } finally {
-      setIsOrganizing(false);
-    }
-  };
-
   return (
     <div className="flex min-h-screen w-full flex-col">
       <header className="sticky top-0 flex h-16 items-center gap-4 border-b bg-background px-4 md:px-6">
@@ -784,17 +736,6 @@ export default function LogisticaPage() {
             </div>
           )}
         </Card>
-        
-        {stagedData.length > 0 && (
-          <div className="flex gap-2 p-4 bg-blue-50 border border-blue-200 rounded">
-            <Button onClick={handleDebugLoss} size="sm" variant="outline">
-              🔍 Debug Perda
-            </Button>
-            <Button onClick={handleTestFixed} size="sm" variant="default">
-              ✅ Teste Corrigido
-            </Button>
-          </div>
-        )}
 
         <DetailedSalesHistoryTable data={groupedForView} columns={columns} />
       </main>
