@@ -325,6 +325,8 @@ const mergeForHeader = (base: any, row: any) => {
       modo: row.modo_de_pagamento ?? row.modoPagamento2,
       bandeira: row.bandeira1 ?? row.bandeira2,
       instituicao: row.instituicao_financeira,
+      tipo_pagamento: row.tipo_pagamento,
+      parcela: row.parcela,
     });
   }
 
@@ -338,6 +340,7 @@ type IncomingDataset = { rows: any[]; fileName: string; assocKey?: string };
 export default function VendasPage() {
   const [salesFromDb, setSalesFromDb] = React.useState<VendaDetalhada[]>([]);
   const [logisticsFromDb, setLogisticsFromDb] = React.useState<VendaDetalhada[]>([]);
+  const [costsFromDb, setCostsFromDb] = React.useState<VendaDetalhada[]>([]);
   const [stagedSales, setStagedSales] = React.useState<VendaDetalhada[]>([]);
   const [stagedFileNames, setStagedFileNames] = React.useState<string[]>([]);
   const [columns, setColumns] = React.useState<ColumnDef[]>([]);
@@ -383,6 +386,13 @@ export default function VendasPage() {
         setLogisticsFromDb(snapshot.docs.map(doc => ({...doc.data(), id: doc.id} as VendaDetalhada)));
     });
 
+    // Listener for costs
+    const costsQuery = query(collection(db, "custos"));
+    const costsUnsub = onSnapshot(costsQuery, (snapshot) => {
+        if (snapshot.metadata.hasPendingWrites) return;
+        setCostsFromDb(snapshot.docs.map(doc => ({...doc.data(), id: doc.id} as VendaDetalhada)));
+    });
+
     // Listener for metadata
     const metaUnsub = onSnapshot(doc(db, "metadata", "vendas"), (docSnap) => {
       if (docSnap.exists()) {
@@ -392,36 +402,49 @@ export default function VendasPage() {
       }
     });
 
-    return () => { salesUnsub(); logisticsUnsub(); metaUnsub(); };
+    return () => { salesUnsub(); logisticsUnsub(); costsUnsub(); metaUnsub(); };
   }, []);
   
-  /* ======= Mescla Vendas + Logistica + Staged (staged tem prioridade) ======= */
+  /* ======= Mescla Vendas + Logistica + Custos + Staged ======= */
   const allSales = React.useMemo(() => {
-    // Map logistics data by code for efficient lookup
+    // Group logistics data by code for efficient lookup
     const logisticsMap = new Map();
     logisticsFromDb.forEach(log => {
       const code = normCode((log as any).codigo);
       if (code) {
-        // We only care about logistics specific fields
         const logisticsInfo = {
           logistica: log.logistica,
           entregador: (log as any).entregador,
           valor: (log as any).valor,
         };
-        // Avoid overwriting with empty data
         if (!logisticsMap.has(code) || log.uploadTimestamp > logisticsMap.get(code).uploadTimestamp) {
              logisticsMap.set(code, { ...logisticsInfo, uploadTimestamp: log.uploadTimestamp });
         }
       }
     });
+      
+    // Group costs data by code
+    const costsMap = new Map<string, any[]>();
+    costsFromDb.forEach(cost => {
+        const code = normCode((cost as any).codigo);
+        if(code) {
+            if(!costsMap.has(code)) costsMap.set(code, []);
+            costsMap.get(code)!.push(cost);
+        }
+    });
 
-    // Merge DB sales with logistics data
+    // Merge DB sales with logistics and costs data
     const mergedSales = salesFromDb.map(sale => {
       const code = normCode((sale as any).codigo);
+      const finalSale = { ...sale };
+
       if (code && logisticsMap.has(code)) {
-        return { ...sale, ...logisticsMap.get(code) };
+        Object.assign(finalSale, logisticsMap.get(code));
       }
-      return sale;
+      if (code && costsMap.has(code)) {
+        (finalSale as any).costs = costsMap.get(code);
+      }
+      return finalSale;
     });
 
     // Merge with staged sales
@@ -432,7 +455,7 @@ export default function VendasPage() {
     });
     
     return Array.from(salesMap.values());
-  }, [salesFromDb, logisticsFromDb, stagedSales]);
+  }, [salesFromDb, logisticsFromDb, costsFromDb, stagedSales]);
 
 
   /* ======= Filtro por período ======= */
@@ -454,7 +477,7 @@ export default function VendasPage() {
       if (!code) continue;
 
       if (!groups.has(code)) {
-        groups.set(code, { header: { ...row, subRows: [] as any[] } });
+        groups.set(code, { header: { ...row, subRows: [] as any[], costs: (row as any).costs || [] } });
       }
       const g = groups.get(code);
 
@@ -476,7 +499,7 @@ export default function VendasPage() {
     if (!datasets || datasets.length === 0) return;
 
     const dbByCode = new Map(
-      [...salesFromDb, ...logisticsFromDb] // Combine both sources
+      [...salesFromDb, ...logisticsFromDb, ...costsFromDb] // Combine all sources
         .filter(s => (s as any).codigo != null)
         .map(s => [normCode((s as any).codigo), s])
     );

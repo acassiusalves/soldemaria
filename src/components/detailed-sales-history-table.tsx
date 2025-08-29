@@ -31,6 +31,8 @@ import { ScrollArea } from "./ui/scroll-area";
 import type { Timestamp } from "firebase/firestore";
 import { cn, showBlank } from "@/lib/utils";
 import PaymentPanel from "./payment-panel";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
 
 const ITEMS_PER_PAGE = 10;
 const DEFAULT_MAIN_COUNT = 8; 
@@ -118,7 +120,7 @@ export default function DetailedSalesHistoryTable({ data, columns, tableTitle = 
     const systemColumnsToHide = [
         "id", "sourceFile", "uploadTimestamp", "subRows", "parcelas", 
         "total_valor_parcelas", "mov_estoque", "valor_da_parcela", "tipo_de_pagamento",
-        "quantidade_movimentada",
+        "quantidade_movimentada", "costs",
     ];
     const base = (columns && columns.length > 0) ? columns : FIXED_COLUMNS;
 
@@ -144,6 +146,15 @@ export default function DetailedSalesHistoryTable({ data, columns, tableTitle = 
     const detailKeys = ['item', 'descricao', 'quantidade', 'custoUnitario', 'valorUnitario', 'valorCredito', 'valorDescontos'];
     return effectiveColumns.filter(c => detailKeys.includes(c.id));
   }, [effectiveColumns]);
+  
+  const paymentDetailColumns: ColumnDef[] = useMemo(() => [
+    { id: "modo_de_pagamento", label: "Modo Pagamento", isSortable: false },
+    { id: "tipo_pagamento", label: "Tipo Pagamento", isSortable: false },
+    { id: "parcela", label: "Parcela", isSortable: false },
+    { id: "valor", label: "Valor", isSortable: false },
+    { id: "instituicao_financeira", label: "Instituição Financeira", isSortable: false },
+  ], []);
+
 
   const mainColumns = useMemo(() => {
     const detailKeys = detailColumns.map(c => c.id);
@@ -316,11 +327,11 @@ export default function DetailedSalesHistoryTable({ data, columns, tableTitle = 
       return null;
     };
 
-    if(typeof value === 'number' && ['final', 'custoUnitario', 'valorUnitario', 'valorCredito', 'valorDescontos'].includes(columnId)) {
+    if(typeof value === 'number' && ['final', 'custoUnitario', 'valorUnitario', 'valorCredito', 'valorDescontos', 'valor'].includes(columnId)) {
       return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
     }
 
-    if (["final","custoFrete","imposto","embalagem","comissao","custoUnitario","valorUnitario","valorCredito","valorDescontos"]
+    if (["final","custoFrete","imposto","embalagem","comissao","custoUnitario","valorUnitario","valorCredito","valorDescontos", "valor"]
         .includes(columnId)) {
       const n = toNumber(value);
       if (n !== null) {
@@ -404,7 +415,7 @@ export default function DetailedSalesHistoryTable({ data, columns, tableTitle = 
                   <React.Fragment key={row.id}>
                     <TableRow>
                        <TableCell>
-                          {(row.subRows?.length > 0 || row.parcelas?.length > 0) && (
+                          {(row.subRows?.length > 0 || row.parcelas?.length > 0 || row.costs?.length > 0) && (
                             <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => toggleRowExpansion(row.id)}>
                                 <ChevronRight className={cn("h-4 w-4 transition-transform", expandedRows.has(row.id) && "rotate-90")} />
                             </Button>
@@ -419,28 +430,52 @@ export default function DetailedSalesHistoryTable({ data, columns, tableTitle = 
                     {expandedRows.has(row.id) && (
                         <TableRow>
                             <TableCell colSpan={visibleColumns.length + 1} className="p-2 bg-muted/50">
-                              <div className="space-y-2">
-                                {row.subRows && row.subRows.length > 0 && (
-                                  <div className="p-2 rounded-md bg-background">
-                                    <h4 className="font-semibold p-2">Itens do Pedido</h4>
-                                     <Table>
-                                       <TableHeader>
-                                         <TableRow>
-                                            {detailColumns.map(col => <TableHead key={col.id}>{col.label}</TableHead>)}
-                                         </TableRow>
-                                       </TableHeader>
-                                       <TableBody>
-                                          {row.subRows.map((item: VendaDetalhada, index: number) => (
-                                            <TableRow key={`${item.id}-${index}`}>
-                                                {detailColumns.map(col => <TableCell key={col.id}>{renderDetailCell(item, col.id)}</TableCell>)}
-                                            </TableRow>
-                                          ))}
-                                       </TableBody>
-                                     </Table>
-                                  </div>
-                                )}
-                                {row.parcelas?.length > 0 && <PaymentPanel row={row} />}
-                              </div>
+                                <Tabs defaultValue="items" className="w-full">
+                                    <TabsList>
+                                        <TabsTrigger value="items" disabled={!row.subRows || row.subRows.length === 0}>Itens do Pedido</TabsTrigger>
+                                        <TabsTrigger value="payment" disabled={!row.costs || row.costs.length === 0}>Detalhes do Pagamento</TabsTrigger>
+                                    </TabsList>
+                                    <TabsContent value="items">
+                                      {row.subRows && row.subRows.length > 0 && (
+                                        <div className="p-2 rounded-md bg-background">
+                                           <Table>
+                                             <TableHeader>
+                                               <TableRow>
+                                                  {detailColumns.map(col => <TableHead key={col.id}>{col.label}</TableHead>)}
+                                               </TableRow>
+                                             </TableHeader>
+                                             <TableBody>
+                                                {row.subRows.map((item: VendaDetalhada, index: number) => (
+                                                  <TableRow key={`${item.id}-${index}`}>
+                                                      {detailColumns.map(col => <TableCell key={col.id}>{renderDetailCell(item, col.id)}</TableCell>)}
+                                                  </TableRow>
+                                                ))}
+                                             </TableBody>
+                                           </Table>
+                                        </div>
+                                      )}
+                                    </TabsContent>
+                                    <TabsContent value="payment">
+                                       {row.costs && row.costs.length > 0 && (
+                                          <div className="p-2 rounded-md bg-background">
+                                           <Table>
+                                             <TableHeader>
+                                               <TableRow>
+                                                  {paymentDetailColumns.map(col => <TableHead key={col.id}>{col.label}</TableHead>)}
+                                               </TableRow>
+                                             </TableHeader>
+                                             <TableBody>
+                                                {row.costs.map((cost: any, index: number) => (
+                                                  <TableRow key={`${cost.id}-${index}`}>
+                                                      {paymentDetailColumns.map(col => <TableCell key={col.id}>{renderDetailCell(cost, col.id)}</TableCell>)}
+                                                  </TableRow>
+                                                ))}
+                                             </TableBody>
+                                           </Table>
+                                          </div>
+                                       )}
+                                    </TabsContent>
+                                </Tabs>
                             </TableCell>
                         </TableRow>
                     )}
@@ -481,5 +516,3 @@ export default function DetailedSalesHistoryTable({ data, columns, tableTitle = 
     </Card>
   );
 }
-
-    
