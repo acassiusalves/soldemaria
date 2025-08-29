@@ -35,8 +35,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 
 const ITEMS_PER_PAGE = 10;
-const DEFAULT_MAIN_COUNT = 8; 
-const STORAGE_KEY = 'vendas_columns_visibility';
+const STORAGE_KEY_PREFIX = 'vendas_columns_visibility_';
 
 const columnLabels: Record<string, string> = {
   data: 'Data',
@@ -86,9 +85,9 @@ export type ColumnDef = {
   isSortable?: boolean;
 }
 
-function loadVisibility(keys: string[]): Record<string, boolean> | null {
+function loadVisibility(keys: string[], storageKey: string): Record<string, boolean> | null {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(storageKey);
     if (!raw) return null;
     const saved = JSON.parse(raw) as Record<string, boolean>;
     const view: Record<string, boolean> = {};
@@ -97,8 +96,8 @@ function loadVisibility(keys: string[]): Record<string, boolean> | null {
   } catch { return null; }
 }
 
-function saveVisibility(state: Record<string, boolean>) {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch {}
+function saveVisibility(state: Record<string, boolean>, storageKey: string) {
+  try { localStorage.setItem(storageKey, JSON.stringify(state)); } catch {}
 }
 
 
@@ -115,6 +114,9 @@ export default function DetailedSalesHistoryTable({ data, columns, tableTitle = 
   const [filter, setFilter] = useState('');
   const [columnVisibility, setColumnVisibility] = useState<Record<string, boolean>>({});
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+
+  const storageKey = useMemo(() => `${STORAGE_KEY_PREFIX}${tableTitle.replace(/\s+/g, '_')}`, [tableTitle]);
+
 
   const effectiveColumns = useMemo(() => {
     const systemColumnsToHide = [
@@ -165,47 +167,30 @@ export default function DetailedSalesHistoryTable({ data, columns, tableTitle = 
     if (mainColumns.length === 0) return;
 
     const keys = mainColumns.map(c => c.id);
-    const loaded = loadVisibility(keys);
+    const loaded = loadVisibility(keys, storageKey);
     
     if (loaded) {
-      const mergedVisibility = { ...loaded };
-      keys.forEach(k => {
-        if (mergedVisibility[k] === undefined) {
-          const detailKeys = ['item', 'descricao', 'quantidade', 'custoUnitario', 'valorUnitario', 'valorCredito', 'valorDescontos'];
-          const defaultVisibleKeys = mainColumns.filter(c => !detailKeys.includes(c.id) && c.id !== 'origemCliente').slice(0, DEFAULT_MAIN_COUNT).map(c => c.id);
-          mergedVisibility[k] = defaultVisibleKeys.includes(k); 
-        }
+      setColumnVisibility(loaded);
+    } else {
+      // First visit: set all columns to visible
+      const initialVisibility: Record<string, boolean> = {};
+      keys.forEach(key => {
+        initialVisibility[key] = true;
       });
-      REQUIRED_ALWAYS_ON.forEach(k => { if (k in mergedVisibility) mergedVisibility[k] = true; });
-      setColumnVisibility(mergedVisibility);
-      return;
+      setColumnVisibility(initialVisibility);
     }
-
-    const initial: Record<string, boolean> = {};
-    const detailKeys = ['item', 'descricao', 'quantidade', 'custoUnitario', 'valorUnitario', 'valorCredito', 'valorDescontos'];
-    const defaultVisibleKeys = mainColumns.filter(c => !detailKeys.includes(c.id) && c.id !== 'origemCliente').slice(0, DEFAULT_MAIN_COUNT).map(c => c.id);
-
-    keys.forEach((k) => { 
-        initial[k] = defaultVisibleKeys.includes(k);
-    });
-    REQUIRED_ALWAYS_ON.forEach(k => { if (k in initial) initial[k] = true; });
-    setColumnVisibility(initial);
-  }, [mainColumns]);
+  }, [mainColumns, storageKey]);
 
 
   useEffect(() => {
     if (Object.keys(columnVisibility).length > 0) {
-      saveVisibility(columnVisibility);
+      saveVisibility(columnVisibility, storageKey);
     }
-  }, [columnVisibility]);
+  }, [columnVisibility, storageKey]);
   
   const handleResetColumns = () => {
-    try { localStorage.removeItem(STORAGE_KEY); } catch {}
     const next: Record<string, boolean> = {};
-    mainColumns.forEach(c => { next[c.id] = false; });
-    const detailKeys = ['item', 'descricao', 'quantidade', 'custoUnitario', 'valorUnitario', 'valorCredito', 'valorDescontos'];
-    const defaultVisibleKeys = mainColumns.filter(c => !detailKeys.includes(c.id) && c.id !== 'origemCliente').slice(0, DEFAULT_MAIN_COUNT).map(c => c.id);
-    defaultVisibleKeys.forEach(k => { next[k] = true; });
+    mainColumns.forEach(c => { next[c.id] = true; }); // Reset to all visible
     REQUIRED_ALWAYS_ON.forEach(k => { if (k in next) next[k] = true; });
     setColumnVisibility(next);
   };
