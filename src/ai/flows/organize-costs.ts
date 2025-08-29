@@ -39,24 +39,37 @@ export async function organizeCosts(input: OrganizeCostsInput): Promise<Organize
         // Criar uma cópia completa do item original
         const processedItem = JSON.parse(JSON.stringify(item));
         
-        // Garantir campos essenciais
-        if (!processedItem.codigo) {
-          processedItem.codigo = `CUSTO-${Date.now()}-${index}`;
+        // MAPEAMENTO CORRETO PARA SUA PLANILHA
+        
+        // 1. Mapear mov_estoque → codigo (é o código no seu sistema)
+        if (processedItem.mov_estoque) {
+          processedItem.codigo = String(processedItem.mov_estoque);
         }
         
+        // 2. Mapear valor_da_parcela → valor
+        if (processedItem.valor_da_parcela) {
+          processedItem.valor = processedItem.valor_da_parcela;
+        }
+        
+        // 3. Garantir que valor é numérico
+        if (processedItem.valor && typeof processedItem.valor === 'string') {
+          const valorStr = processedItem.valor.replace(/[R$\s]/gi, '').replace(/,/g, '.');
+          const valor = parseFloat(valorStr);
+          processedItem.valor = isNaN(valor) ? 0 : valor;
+        }
+        
+        // 4. Garantir código existe (fallback caso mov_estoque não tenha valor)
+        if (!processedItem.codigo || processedItem.codigo === '') {
+          processedItem.codigo = String(index + 1).padStart(6, '0');
+        }
+        
+        // 5. Outros mapeamentos possíveis
         if (!processedItem.modo_de_pagamento && processedItem.modo_pagamento) {
           processedItem.modo_de_pagamento = processedItem.modo_pagamento;
         }
         
         if (!processedItem.instituicao_financeira && processedItem.instituicao) {
           processedItem.instituicao_financeira = processedItem.instituicao;
-        }
-        
-        // Garantir que valor é numérico
-        if (processedItem.valor && typeof processedItem.valor === 'string') {
-          const valorStr = processedItem.valor.replace(/[R$\s]/gi, '').replace(/,/g, '.');
-          const valor = parseFloat(valorStr);
-          processedItem.valor = isNaN(valor) ? 0 : valor;
         }
         
         // Campos padrão
