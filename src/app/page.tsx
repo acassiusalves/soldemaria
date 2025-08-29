@@ -25,8 +25,8 @@ import {
   ShoppingBag,
   Trophy,
 } from "lucide-react";
-import { getAuth } from "firebase/auth";
 import { useRouter } from "next/navigation";
+import { auth } from "@/lib/firebase";
 
 
 import { salesData, type Venda } from "@/lib/data";
@@ -66,7 +66,6 @@ export default function DashboardPage() {
     to: addDays(new Date(2023, 11, 31), 0),
   });
     const router = useRouter();
-    const auth = getAuth();
 
   const handleLogout = async () => {
     await auth.signOut();
