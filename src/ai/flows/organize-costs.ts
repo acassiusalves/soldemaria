@@ -1,3 +1,4 @@
+
 'use server';
 
 import { z } from 'zod';
@@ -50,6 +51,16 @@ export async function organizeCosts(input: OrganizeCostsInput): Promise<Organize
         if (processedItem.valor_da_parcela) {
           processedItem.valor = processedItem.valor_da_parcela;
         }
+
+        // Mapear tipo -> tipo_pagamento
+        if (processedItem.tipo) {
+          processedItem.tipo_pagamento = processedItem.tipo;
+        }
+        
+        // Mapear parcelas1 -> parcela
+        if (processedItem.parcelas1) {
+          processedItem.parcela = processedItem.parcelas1;
+        }
         
         // 3. Garantir que valor é numérico
         if (processedItem.valor && typeof processedItem.valor === 'string') {
@@ -76,6 +87,8 @@ export async function organizeCosts(input: OrganizeCostsInput): Promise<Organize
         processedItem.modo_de_pagamento = processedItem.modo_de_pagamento || '';
         processedItem.instituicao_financeira = processedItem.instituicao_financeira || '';
         processedItem.valor = processedItem.valor || 0;
+        processedItem.tipo_pagamento = processedItem.tipo_pagamento || '';
+        processedItem.parcela = processedItem.parcela || '';
         
         return processedItem;
         
