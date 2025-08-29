@@ -87,7 +87,7 @@ export async function organizeLogistics(input: OrganizeLogisticsInput): Promise<
         
         if (error.message.includes('AI')) {
             throw new Error('Falha na comunicação com a IA. Tente novamente.');
-        } else if (error.message.includes('network')) {
+        } else if (error.message.includes('network') || error.message.includes('request')) {
             throw new Error('Problema de conexão. Verifique sua internet.');
         } else {
             throw new Error(`Erro ao processar dados: ${error.message}`);
