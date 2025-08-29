@@ -35,26 +35,12 @@ const ITEMS_PER_PAGE = 10;
 const DEFAULT_MAIN_COUNT = 8; 
 const STORAGE_KEY = 'vendas_columns_visibility';
 const FIXED_COLUMNS: ColumnDef[] = [
-  { id: "data",           label: "Data", isSortable: true },
-  { id: "codigo",         label: "Código", isSortable: true },
-  { id: "tipo",           label: "Tipo", isSortable: true },
-  { id: "nomeCliente",    label: "Cliente", isSortable: true },
-  { id: "vendedor",       label: "Vendedor", isSortable: true },
-  { id: "cidade",         label: "Cidade", isSortable: true },
-  { id: "origem",         label: "Origem", isSortable: true },
-  { id: "fidelizacao",    label: "Fidelização", isSortable: true },
-  { id: "logistica",      label: "Logística", isSortable: true },
-  { id: "item",           label: "Item", isSortable: true },
-  { id: "descricao",      label: "Descrição", isSortable: true },
-  { id: "quantidade",     label: "Qtd.", isSortable: true },
-  { id: "custoUnitario",  label: "Custo Unitário", isSortable: true },
-  { id: "valorUnitario",  label: "Valor Unitário", isSortable: true },
-  { id: "final",          label: "Valor Final", isSortable: true, className: "text-right" },
-  { id: "custoFrete",     label: "Valor Entrega", isSortable: true },
-  { id: "valorCredito",   label: "Valor Crédito", isSortable: true },
-  { id: "valorDescontos", label: "Valor Descontos", isSortable: true },
+  { id: "codigo",       label: "Código",        isSortable: true },
+  { id: "logistica",    label: "Logística",     isSortable: true },
+  { id: "entregador",   label: "Entregador",    isSortable: true },
+  { id: "valor",        label: "Valor",         isSortable: true, className: "text-right" },
 ];
-const REQUIRED_ALWAYS_ON = ["data", "codigo", "nomeCliente", "final"];
+const REQUIRED_ALWAYS_ON = ["codigo", "logistica"];
 
 type SortKey = keyof VendaDetalhada | string | null;
 type SortDirection = "asc" | "desc";
@@ -252,7 +238,7 @@ export default function DetailedSalesHistoryTable({ data, columns }: DetailedSal
       return null;
     };
 
-    if (["final","custoFrete","imposto","embalagem","comissao","custoUnitario","valorUnitario","valorCredito","valorDescontos"]
+    if (["final","custoFrete","imposto","embalagem","comissao","custoUnitario","valorUnitario","valorCredito","valorDescontos", "valor"]
         .includes(columnId)) {
       const n = toNumber(value);
       if (n !== null) {
@@ -304,7 +290,7 @@ export default function DetailedSalesHistoryTable({ data, columns }: DetailedSal
     <Card>
       <CardContent className="p-4">
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-h3 font-headline">Detalhes das Vendas</h2>
+          <h2 className="text-h3 font-headline">Relatorio Logistico</h2>
           <div className="flex items-center gap-2">
             <Input 
               placeholder="Filtrar por Código ou Cliente..."

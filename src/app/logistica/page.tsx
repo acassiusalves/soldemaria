@@ -112,47 +112,19 @@ export const normalizeHeader = (s: string) =>
 
 /* ========== labels para colunas dinâmicas ========== */
 const columnLabels: Record<string, string> = {
-  data: 'Data',
   codigo: 'Código',
-  tipo: 'Tipo',
-  nomeCliente: 'Cliente',
-  vendedor: 'Vendedor',
-  cidade: 'Cidade',
-  origem: 'Origem',
-  fidelizacao: 'Fidelização',
   logistica: 'Logística',
-  item: 'Item',
-  descricao: 'Descrição',
-  quantidade: 'Qtd.',
-  custoUnitario: 'Custo Unitário',
-  valorUnitario: 'Valor Unitário',
-  final: 'Valor Final',
-  custoFrete: 'Valor Entrega',
-  valorCredito: 'Valor Crédito',
-  valorDescontos: 'Valor Descontos',
+  entregador: 'Entregador',
+  valor: 'Valor',
 };
 const getLabel = (key: string) => columnLabels[key] || key;
 
 /* ========== mapeamento por cabeçalho conhecido ========== */
 const headerMappingNormalized: Record<string, string> = {
-  "data": "data",
   "codigo": "codigo",
-  "tipo": "tipo",
-  "cliente": "nomeCliente",
-  "vendedor": "vendedor",
-  "cidade": "cidade",
-  "origem": "origem",
-  "fidelizacao": "fidelizacao",
   "logistica": "logistica",
-  "item": "item",
-  "descricao": "descricao",
-  "qtd": "quantidade",
-  "custo unitario": "custoUnitario",
-  "valor unitario": "valorUnitario",
-  "valor final": "final",
-  "valor entrega": "custoFrete",
-  "valor credito": "valorCredito",
-  "valor descontos": "valorDescontos",
+  "entregador": "entregador",
+  "valor": "valor",
 };
 
 /* ========== limpadores ========= */
