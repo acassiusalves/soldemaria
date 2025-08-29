@@ -29,7 +29,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "./ui/card";
 import { ScrollArea } from "./ui/scroll-area";
 import type { Timestamp } from "firebase/firestore";
-import { cn } from "@/lib/utils";
+import { cn, showBlank } from "@/lib/utils";
 import PaymentPanel from "./payment-panel";
 
 const ITEMS_PER_PAGE = 10;
@@ -225,9 +225,16 @@ export default function DetailedSalesHistoryTable({ data, columns, tableTitle = 
 
   const renderCell = (row: any, columnId: string) => {
     let value = row[columnId];
+    
+    if (columnId === 'tipo_pagamento' || columnId === 'tipo_de_pagamento') {
+        return showBlank(row.tipo_de_pagamento ?? row.tipo_pagamento);
+    }
+    if (columnId === 'parcela') {
+        return showBlank(row.parcela);
+    }
 
     if (value === null || value === undefined || (typeof value === "string" && value.trim() === "")) {
-      return "N/A";
+      return "";
     }
 
     const toNumber = (x: any) => {
@@ -250,7 +257,7 @@ export default function DetailedSalesHistoryTable({ data, columns, tableTitle = 
 
     if (columnId === "data") {
       const d = value?.toDate ? value.toDate() : (typeof value === 'string' ? parseISO(value) : value);
-      return d instanceof Date && !isNaN(d.getTime()) ? format(d, "dd/MM/yyyy", { locale: ptBR }) : "N/A";
+      return d instanceof Date && !isNaN(d.getTime()) ? format(d, "dd/MM/yyyy", { locale: ptBR }) : "";
     }
 
     return String(value);
@@ -281,7 +288,7 @@ export default function DetailedSalesHistoryTable({ data, columns, tableTitle = 
       }
     }
     
-    return value ?? "N/A";
+    return showBlank(value);
   }
 
   const visibleColumns = useMemo(() => {
