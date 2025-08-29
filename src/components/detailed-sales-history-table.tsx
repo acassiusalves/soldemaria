@@ -35,6 +35,37 @@ import PaymentPanel from "./payment-panel";
 const ITEMS_PER_PAGE = 10;
 const DEFAULT_MAIN_COUNT = 8; 
 const STORAGE_KEY = 'vendas_columns_visibility';
+
+const columnLabels: Record<string, string> = {
+  data: 'Data',
+  codigo: 'Código',
+  tipo: 'Tipo',
+  nomeCliente: 'Cliente',
+  vendedor: 'Vendedor',
+  cidade: 'Cidade',
+  origem: 'Origem',
+  fidelizacao: 'Fidelização',
+  logistica: 'Logística',
+  item: 'Item',
+  descricao: 'Descrição',
+  quantidade: 'Qtd.',
+  custoUnitario: 'Custo Unitário',
+  valorUnitario: 'Valor Unitário',
+  final: 'Valor Final',
+  custoFrete: 'Valor Entrega',
+  valorCredito: 'Valor Crédito',
+  valorDescontos: 'Valor Descontos',
+  entregador: 'Entregador',
+  valor: 'Valor',
+  origemCliente: 'Origem Cliente',
+  modo_de_pagamento: 'Modo Pagamento',
+  tipo_pagamento: 'Tipo Pagamento',
+  parcela: 'Parcela',
+  instituicao_financeira: 'Instituição Financeira',
+};
+
+const getLabel = (key: string) => columnLabels[key] || key;
+
 const FIXED_COLUMNS: ColumnDef[] = [
   { id: "codigo",       label: "Código",        isSortable: true },
   { id: "logistica",    label: "Logística",     isSortable: true },
@@ -87,7 +118,7 @@ export default function DetailedSalesHistoryTable({ data, columns, tableTitle = 
     const systemColumnsToHide = [
         "id", "sourceFile", "uploadTimestamp", "subRows", "parcelas", 
         "total_valor_parcelas", "mov_estoque", "valor_da_parcela", "tipo_de_pagamento",
-        "quantidade_movimentada", "origemCliente"
+        "quantidade_movimentada",
     ];
     const base = (columns && columns.length > 0) ? columns : FIXED_COLUMNS;
 
@@ -96,10 +127,15 @@ export default function DetailedSalesHistoryTable({ data, columns, tableTitle = 
     if (data.length > 0) {
       data.forEach(row => {
         Object.keys(row).forEach(k => {
-          if (!map.has(k)) map.set(k, { id: k, label: k, isSortable: true });
+          if (!map.has(k)) map.set(k, { id: k, label: getLabel(k), isSortable: true });
         });
       });
     }
+    // ensure all labels are correct
+    map.forEach((col, key) => {
+        col.label = getLabel(key);
+    });
+
     return Array.from(map.values()).filter(c => !systemColumnsToHide.includes(c.id));
   }, [columns, data]);
 
@@ -125,7 +161,7 @@ export default function DetailedSalesHistoryTable({ data, columns, tableTitle = 
       keys.forEach(k => {
         if (mergedVisibility[k] === undefined) {
           const detailKeys = ['item', 'descricao', 'quantidade', 'custoUnitario', 'valorUnitario', 'valorCredito', 'valorDescontos'];
-          const defaultVisibleKeys = mainColumns.filter(c => !detailKeys.includes(c.id)).slice(0, DEFAULT_MAIN_COUNT).map(c => c.id);
+          const defaultVisibleKeys = mainColumns.filter(c => !detailKeys.includes(c.id) && c.id !== 'origemCliente').slice(0, DEFAULT_MAIN_COUNT).map(c => c.id);
           mergedVisibility[k] = defaultVisibleKeys.includes(k); 
         }
       });
@@ -136,7 +172,7 @@ export default function DetailedSalesHistoryTable({ data, columns, tableTitle = 
 
     const initial: Record<string, boolean> = {};
     const detailKeys = ['item', 'descricao', 'quantidade', 'custoUnitario', 'valorUnitario', 'valorCredito', 'valorDescontos'];
-    const defaultVisibleKeys = mainColumns.filter(c => !detailKeys.includes(c.id)).slice(0, DEFAULT_MAIN_COUNT).map(c => c.id);
+    const defaultVisibleKeys = mainColumns.filter(c => !detailKeys.includes(c.id) && c.id !== 'origemCliente').slice(0, DEFAULT_MAIN_COUNT).map(c => c.id);
 
     keys.forEach((k) => { 
         initial[k] = defaultVisibleKeys.includes(k);
@@ -157,7 +193,7 @@ export default function DetailedSalesHistoryTable({ data, columns, tableTitle = 
     const next: Record<string, boolean> = {};
     mainColumns.forEach(c => { next[c.id] = false; });
     const detailKeys = ['item', 'descricao', 'quantidade', 'custoUnitario', 'valorUnitario', 'valorCredito', 'valorDescontos'];
-    const defaultVisibleKeys = mainColumns.filter(c => !detailKeys.includes(c.id)).slice(0, DEFAULT_MAIN_COUNT).map(c => c.id);
+    const defaultVisibleKeys = mainColumns.filter(c => !detailKeys.includes(c.id) && c.id !== 'origemCliente').slice(0, DEFAULT_MAIN_COUNT).map(c => c.id);
     defaultVisibleKeys.forEach(k => { next[k] = true; });
     REQUIRED_ALWAYS_ON.forEach(k => { if (k in next) next[k] = true; });
     setColumnVisibility(next);
