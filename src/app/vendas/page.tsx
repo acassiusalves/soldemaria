@@ -1,3 +1,4 @@
+
 "use client";
 
 import * as React from "react";
@@ -331,6 +332,7 @@ type IncomingDataset = { rows: any[]; fileName: string; assocKey?: string };
 
 export default function VendasPage() {
   const [salesFromDb, setSalesFromDb] = React.useState<VendaDetalhada[]>([]);
+  const [logisticsFromDb, setLogisticsFromDb] = React.useState<VendaDetalhada[]>([]);
   const [stagedSales, setStagedSales] = React.useState<VendaDetalhada[]>([]);
   const [stagedFileNames, setStagedFileNames] = React.useState<string[]>([]);
   const [columns, setColumns] = React.useState<ColumnDef[]>([]);
@@ -343,16 +345,16 @@ export default function VendasPage() {
 
   /* ======= Realtime listeners ======= */
   React.useEffect(() => {
-    const qy = query(collection(db, "vendas"));
-    const unsub = onSnapshot(qy, (snapshot) => {
+    // Listener for sales
+    const salesQuery = query(collection(db, "vendas"));
+    const salesUnsub = onSnapshot(salesQuery, (snapshot) => {
       if (snapshot.metadata.hasPendingWrites) return;
       let newSales: VendaDetalhada[] = [];
       let modifiedSales: VendaDetalhada[] = [];
       snapshot.docChanges().forEach((change) => {
-        if (change.type === "added")
-          newSales.push({ ...change.doc.data(), id: change.doc.id } as VendaDetalhada);
-        if (change.type === "modified")
-          modifiedSales.push({ ...change.doc.data(), id: change.doc.id } as VendaDetalhada);
+        const saleData = { ...change.doc.data(), id: change.doc.id } as VendaDetalhada;
+        if (change.type === "added") newSales.push(saleData);
+        if (change.type === "modified") modifiedSales.push(saleData);
       });
       if (newSales.length || modifiedSales.length) {
         setSalesFromDb((curr) => {
@@ -369,6 +371,14 @@ export default function VendasPage() {
       });
     });
 
+    // Listener for logistics
+    const logisticsQuery = query(collection(db, "logistica"));
+    const logisticsUnsub = onSnapshot(logisticsQuery, (snapshot) => {
+        if (snapshot.metadata.hasPendingWrites) return;
+        setLogisticsFromDb(snapshot.docs.map(doc => ({...doc.data(), id: doc.id} as VendaDetalhada)));
+    });
+
+    // Listener for metadata
     const metaUnsub = onSnapshot(doc(db, "metadata", "vendas"), (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
@@ -377,18 +387,48 @@ export default function VendasPage() {
       }
     });
 
-    return () => { unsub(); metaUnsub(); };
+    return () => { salesUnsub(); logisticsUnsub(); metaUnsub(); };
   }, []);
-
-  /* ======= Mescla banco + staged (staged tem prioridade) ======= */
+  
+  /* ======= Mescla Vendas + Logistica + Staged (staged tem prioridade) ======= */
   const allSales = React.useMemo(() => {
-    const map = new Map(salesFromDb.map(s => [s.id, s]));
-    stagedSales.forEach(s => {
-        const existing = map.get(s.id) || {};
-        map.set(s.id, { ...existing, ...s });
+    // Map logistics data by code for efficient lookup
+    const logisticsMap = new Map();
+    logisticsFromDb.forEach(log => {
+      const code = normCode((log as any).codigo);
+      if (code) {
+        // We only care about logistics specific fields
+        const logisticsInfo = {
+          logistica: log.logistica,
+          entregador: (log as any).entregador,
+          valor: (log as any).valor,
+        };
+        // Avoid overwriting with empty data
+        if (!logisticsMap.has(code) || log.uploadTimestamp > logisticsMap.get(code).uploadTimestamp) {
+             logisticsMap.set(code, { ...logisticsInfo, uploadTimestamp: log.uploadTimestamp });
+        }
+      }
     });
-    return Array.from(map.values());
-  }, [salesFromDb, stagedSales]);
+
+    // Merge DB sales with logistics data
+    const mergedSales = salesFromDb.map(sale => {
+      const code = normCode((sale as any).codigo);
+      if (code && logisticsMap.has(code)) {
+        return { ...sale, ...logisticsMap.get(code) };
+      }
+      return sale;
+    });
+
+    // Merge with staged sales
+    const salesMap = new Map(mergedSales.map(s => [s.id, s]));
+    stagedSales.forEach(s => {
+        const existing = salesMap.get(s.id) || {};
+        salesMap.set(s.id, { ...existing, ...s });
+    });
+    
+    return Array.from(salesMap.values());
+  }, [salesFromDb, logisticsFromDb, stagedSales]);
+
 
   /* ======= Filtro por período ======= */
   const filteredSales = React.useMemo(() => {
@@ -431,10 +471,11 @@ export default function VendasPage() {
     if (!datasets || datasets.length === 0) return;
 
     const dbByCode = new Map(
-      salesFromDb
+      [...salesFromDb, ...logisticsFromDb] // Combine both sources
         .filter(s => (s as any).codigo != null)
         .map(s => [normCode((s as any).codigo), s])
     );
+
 
     const uploadTimestamp = Date.now();
     const stagedUpdates = new Map<string, any>();
