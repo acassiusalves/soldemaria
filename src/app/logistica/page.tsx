@@ -17,6 +17,7 @@ import {
   Loader2,
   Percent,
   Wand2,
+  Plug,
 } from "lucide-react";
 import {
   collection,
@@ -410,9 +411,9 @@ export default function LogisticaPage() {
       } else {
         throw new Error("A IA não retornou dados organizados.");
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error organizing data with AI:", error);
-      toast({ title: "Erro na Organização", description: "Houve um problema ao comunicar com a IA.", variant: "destructive" });
+      toast({ title: "Erro na Organização", description: error.message || "Houve um problema ao comunicar com a IA.", variant: "destructive" });
     } finally {
       setIsOrganizing(false);
     }
@@ -582,6 +583,12 @@ export default function LogisticaPage() {
           >
             Taxas
           </Link>
+           <Link
+            href="/conexoes"
+            className="text-muted-foreground transition-colors hover:text-foreground"
+          >
+            Conexões
+          </Link>
         </nav>
         <div className="flex w-full items-center gap-4 md:ml-auto md:gap-2 lg:gap-4">
             <div className="ml-auto flex-1 sm:flex-initial">
@@ -727,5 +734,3 @@ export default function LogisticaPage() {
     </div>
   );
 }
-
-    

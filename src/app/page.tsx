@@ -17,6 +17,7 @@ import {
   LogOut,
   MoreHorizontal,
   Percent,
+  Plug,
   Settings,
   ShoppingBag,
   Trophy,
@@ -153,6 +154,14 @@ export default function DashboardPage() {
                 <SidebarMenuButton>
                   <Percent />
                   Taxas
+                </SidebarMenuButton>
+              </Link>
+            </SidebarMenuItem>
+             <SidebarMenuItem>
+              <Link href="/conexoes">
+                <SidebarMenuButton>
+                  <Plug />
+                  Conexões
                 </SidebarMenuButton>
               </Link>
             </SidebarMenuItem>

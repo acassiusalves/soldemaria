@@ -16,6 +16,7 @@ import {
   Trash2,
   Loader2,
   Percent,
+  Plug,
 } from "lucide-react";
 import {
   collection,
@@ -673,6 +674,12 @@ export default function VendasPage() {
           >
             Taxas
           </Link>
+           <Link
+            href="/conexoes"
+            className="text-muted-foreground transition-colors hover:text-foreground"
+          >
+            Conexões
+          </Link>
         </nav>
         <div className="flex w-full items-center gap-4 md:ml-auto md:gap-2 lg:gap-4">
             <div className="ml-auto flex-1 sm:flex-initial">
@@ -804,5 +811,3 @@ export default function VendasPage() {
     </div>
   );
 }
-
-    
