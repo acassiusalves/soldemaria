@@ -4,7 +4,7 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { ArrowUpDown, Columns, ChevronRight } from "lucide-react";
+import { ArrowUpDown, Columns, ChevronRight, X } from "lucide-react";
 import { VendaDetalhada } from "@/lib/data";
 import {
   Table,
@@ -24,18 +24,21 @@ import {
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "./ui/card";
 import { ScrollArea } from "./ui/scroll-area";
 import type { Timestamp } from "firebase/firestore";
 import { cn, showBlank } from "@/lib/utils";
-import PaymentPanel from "./payment-panel";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
+import { Badge } from "./ui/badge";
 
 
 const ITEMS_PER_PAGE = 10;
-const STORAGE_KEY_PREFIX = 'vendas_columns_visibility_';
+const PREF_KEY = "hist_detalhado_vendas:v1"; // chave estável p/ esta tabela
+const STORAGE_KEY = `vendas_columns_visibility:${PREF_KEY}`;
+
 
 const columnLabels: Record<string, string> = {
   data: 'Data',
@@ -100,14 +103,99 @@ function saveVisibility(state: Record<string, boolean>, storageKey: string) {
   try { localStorage.setItem(storageKey, JSON.stringify(state)); } catch {}
 }
 
+function mergeVisibilityWithColumns(
+  currentCols: string[],
+  saved: Record<string, boolean> | null,
+  computeDefault: (k: string) => boolean
+): Record<string, boolean> {
+  const out: Record<string, boolean> = {};
+  currentCols.forEach(k => { out[k] = saved?.[k] ?? computeDefault(k); });
+  REQUIRED_ALWAYS_ON.forEach(k => { if (k in out) out[k] = true; });
+  return out;
+}
 
 interface DetailedSalesHistoryTableProps {
     data: any[]; // Data is now grouped data
     columns: ColumnDef[];
     tableTitle?: string;
+    showAdvancedFilters?: boolean;
 }
 
-export default function DetailedSalesHistoryTable({ data, columns, tableTitle = "Histórico Detalhado de Vendas" }: DetailedSalesHistoryTableProps) {
+const MultiSelectFilter = ({
+    title,
+    options,
+    selectedValues,
+    onSelectionChange
+}: {
+    title: string;
+    options: string[];
+    selectedValues: Set<string>;
+    onSelectionChange: (newSelection: Set<string>) => void;
+}) => {
+
+    const handleToggle = (value: string) => {
+        const newSet = new Set(selectedValues);
+        if (newSet.has(value)) {
+            newSet.delete(value);
+        } else {
+            newSet.add(value);
+        }
+        onSelectionChange(newSet);
+    };
+
+    const handleClear = () => {
+        onSelectionChange(new Set());
+    }
+
+    const isFiltered = selectedValues.size > 0;
+
+    return (
+        <Popover>
+            <PopoverTrigger asChild>
+                <Button variant="outline" className="border-dashed">
+                    {title}
+                    {isFiltered && (
+                        <>
+                            <div className="mx-2 h-4 w-px bg-muted-foreground" />
+                            <Badge variant="secondary">{selectedValues.size}</Badge>
+                        </>
+                    )}
+                </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-60 p-0" align="start">
+                <div className="p-2 border-b border-border">
+                    <p className="text-sm font-semibold">{title}</p>
+                </div>
+                <ScrollArea className="h-64">
+                    <div className="p-2 space-y-1">
+                        {options.map(option => (
+                            <div key={option} className="flex items-center space-x-2 p-1 rounded-md hover:bg-accent">
+                                <Checkbox
+                                    id={`filter-${title}-${option}`}
+                                    checked={selectedValues.has(option)}
+                                    onCheckedChange={() => handleToggle(option)}
+                                />
+                                <label htmlFor={`filter-${title}-${option}`} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 flex-1">
+                                    {option}
+                                </label>
+                            </div>
+                        ))}
+                    </div>
+                </ScrollArea>
+                {isFiltered && (
+                    <div className="p-2 border-t border-border">
+                        <Button onClick={handleClear} variant="ghost" size="sm" className="w-full justify-center">
+                            Limpar Filtro
+                        </Button>
+                    </div>
+                )}
+            </PopoverContent>
+        </Popover>
+    )
+};
+
+
+export default function DetailedSalesHistoryTable({ data, columns, tableTitle = "Histórico Detalhado de Vendas", showAdvancedFilters = false }: DetailedSalesHistoryTableProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const [sortKey, setSortKey] = useState<SortKey>("data");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
@@ -115,7 +203,10 @@ export default function DetailedSalesHistoryTable({ data, columns, tableTitle = 
   const [columnVisibility, setColumnVisibility] = useState<Record<string, boolean>>({});
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
-  const storageKey = useMemo(() => `${STORAGE_KEY_PREFIX}${tableTitle.replace(/\s+/g, '_')}`, [tableTitle]);
+  const [vendorFilter, setVendorFilter] = useState<Set<string>>(new Set());
+  const [deliverymanFilter, setDeliverymanFilter] = useState<Set<string>>(new Set());
+  const [logisticsFilter, setLogisticsFilter] = useState<Set<string>>(new Set());
+  const [cityFilter, setCityFilter] = useState<Set<string>>(new Set());
 
 
   const effectiveColumns = useMemo(() => {
@@ -162,46 +253,86 @@ export default function DetailedSalesHistoryTable({ data, columns, tableTitle = 
     const detailKeys = detailColumns.map(c => c.id);
     return effectiveColumns.filter(c => !detailKeys.includes(c.id));
   }, [effectiveColumns, detailColumns]);
-  
+
   useEffect(() => {
     if (mainColumns.length === 0) return;
 
     const keys = mainColumns.map(c => c.id);
-    const loaded = loadVisibility(keys, storageKey);
-    
-    if (loaded) {
-      setColumnVisibility(loaded);
-    } else {
-      // First visit: set all columns to visible
-      const initialVisibility: Record<string, boolean> = {};
-      keys.forEach(key => {
-        initialVisibility[key] = true;
-      });
-      setColumnVisibility(initialVisibility);
-    }
-  }, [mainColumns, storageKey]);
+
+    // defina seu default (ex.: primeira página toda visível; ou as X principais)
+    const defaultVisibleKeys = keys; // aqui: todas visíveis por padrão
+    const computeDefault = (k: string) => defaultVisibleKeys.includes(k);
+
+    const saved = loadVisibility(keys, STORAGE_KEY);
+    const merged = mergeVisibilityWithColumns(keys, saved, computeDefault);
+    setColumnVisibility(merged);
+  }, [mainColumns]);
 
 
   useEffect(() => {
     if (Object.keys(columnVisibility).length > 0) {
-      saveVisibility(columnVisibility, storageKey);
+      saveVisibility(columnVisibility, STORAGE_KEY);
     }
-  }, [columnVisibility, storageKey]);
+  }, [columnVisibility]);
+
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key !== STORAGE_KEY || !e.newValue) return;
+      try {
+        const parsed = JSON.parse(e.newValue) as Record<string, boolean>;
+        setColumnVisibility(prev => ({ ...prev, ...parsed }));
+      } catch {}
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
   
   const handleResetColumns = () => {
+    const keys = mainColumns.map(c => c.id);
+    const defaultVisibleKeys = keys; // todas on por padrão
     const next: Record<string, boolean> = {};
-    mainColumns.forEach(c => { next[c.id] = true; }); // Reset to all visible
+    keys.forEach(k => { next[k] = defaultVisibleKeys.includes(k); });
     REQUIRED_ALWAYS_ON.forEach(k => { if (k in next) next[k] = true; });
     setColumnVisibility(next);
   };
   
+  const { uniqueVendores, uniqueEntregadores, uniqueLogisticas, uniqueCidades } = useMemo(() => {
+    const vendores = new Set<string>();
+    const entregadores = new Set<string>();
+    const logisticas = new Set<string>();
+    const cidades = new Set<string>();
+
+    data.forEach(item => {
+        if (item.vendedor) vendores.add(item.vendedor);
+        if (item.entregador) entregadores.add(item.entregador);
+        if (item.logistica) logisticas.add(item.logistica);
+        if (item.cidade) cidades.add(item.cidade);
+    });
+
+    return {
+        uniqueVendores: Array.from(vendores).sort(),
+        uniqueEntregadores: Array.from(entregadores).sort(),
+        uniqueLogisticas: Array.from(logisticas).sort(),
+        uniqueCidades: Array.from(cidades).sort(),
+    };
+}, [data]);
+
+
   const filteredData = useMemo(() => {
-    if(!filter) return data;
-    return data.filter(group =>
-       String(group.codigo).toLowerCase().includes(filter.toLowerCase()) ||
-       String(group.nomeCliente).toLowerCase().includes(filter.toLowerCase())
-    );
-  }, [data, filter]);
+    return data.filter(group => {
+      const textMatch = !filter ||
+                        String(group.codigo).toLowerCase().includes(filter.toLowerCase()) ||
+                        String(group.nomeCliente).toLowerCase().includes(filter.toLowerCase());
+      
+      const vendorMatch = vendorFilter.size === 0 || vendorFilter.has(group.vendedor);
+      const deliverymanMatch = deliverymanFilter.size === 0 || deliverymanFilter.has(group.entregador);
+      const logisticsMatch = logisticsFilter.size === 0 || logisticsFilter.has(group.logistica);
+      const cityMatch = cityFilter.size === 0 || cityFilter.has(group.cidade);
+
+      return textMatch && vendorMatch && deliverymanMatch && logisticsMatch && cityMatch;
+    });
+  }, [data, filter, vendorFilter, deliverymanFilter, logisticsFilter, cityFilter]);
+
 
   const sortedData = useMemo(() => {
     if (!sortKey) return filteredData;
@@ -331,6 +462,17 @@ export default function DetailedSalesHistoryTable({ data, columns, tableTitle = 
     return mainColumns.filter(c => columnVisibility[c.id]);
   }, [mainColumns, columnVisibility]);
 
+  const hasActiveAdvancedFilter = useMemo(() => {
+    return vendorFilter.size > 0 || deliverymanFilter.size > 0 || logisticsFilter.size > 0 || cityFilter.size > 0;
+  }, [vendorFilter, deliverymanFilter, logisticsFilter, cityFilter]);
+
+  const clearAllAdvancedFilters = () => {
+    setVendorFilter(new Set());
+    setDeliverymanFilter(new Set());
+    setLogisticsFilter(new Set());
+    setCityFilter(new Set());
+  }
+
   return (
     <Card>
       <CardContent className="p-4">
@@ -376,6 +518,20 @@ export default function DetailedSalesHistoryTable({ data, columns, tableTitle = 
             </DropdownMenu>
           </div>
         </div>
+        {showAdvancedFilters && (
+            <div className="flex items-center gap-2 mb-4">
+                <MultiSelectFilter title="Vendedor" options={uniqueVendores} selectedValues={vendorFilter} onSelectionChange={setVendorFilter} />
+                <MultiSelectFilter title="Entregador" options={uniqueEntregadores} selectedValues={deliverymanFilter} onSelectionChange={setDeliverymanFilter} />
+                <MultiSelectFilter title="Logística" options={uniqueLogisticas} selectedValues={logisticsFilter} onSelectionChange={setLogisticsFilter} />
+                <MultiSelectFilter title="Cidade" options={uniqueCidades} selectedValues={cityFilter} onSelectionChange={setCityFilter} />
+                {hasActiveAdvancedFilter && (
+                    <Button variant="ghost" onClick={clearAllAdvancedFilters} className="text-muted-foreground">
+                        <X className="mr-2 h-4 w-4" />
+                        Limpar Filtros
+                    </Button>
+                )}
+            </div>
+        )}
         <div className="rounded-md border">
           <Table>
             <TableHeader>
@@ -501,3 +657,5 @@ export default function DetailedSalesHistoryTable({ data, columns, tableTitle = 
     </Card>
   );
 }
+
+    
