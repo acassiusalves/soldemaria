@@ -84,7 +84,10 @@ export default function DetailedSalesHistoryTable({ data, columns, tableTitle = 
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
   const effectiveColumns = useMemo(() => {
-    const systemColumnsToHide = ["id", "sourceFile", "uploadTimestamp", "subRows", "parcelas", "total_valor_parcelas"];
+    const systemColumnsToHide = [
+        "id", "sourceFile", "uploadTimestamp", "subRows", "parcelas", 
+        "total_valor_parcelas", "mov_estoque", "valor_da_parcela", "tipo_de_pagamento"
+    ];
     const base = (columns && columns.length > 0) ? columns : FIXED_COLUMNS;
 
     const map = new Map<string, ColumnDef>();
