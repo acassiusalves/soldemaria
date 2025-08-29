@@ -25,6 +25,7 @@ import {
   writeBatch,
   Timestamp,
   updateDoc,
+  setDoc,
   arrayRemove,
   query,
   getDocsFromServer,
@@ -481,7 +482,7 @@ export default function LogisticaPage() {
 
       const newUploadedFileNames = [...new Set([...uploadedFileNames, ...stagedFileNames])];
       const metaRef = doc(db, "metadata", "logistica");
-      await updateDoc(metaRef, { columns: newColumns, uploadedFileNames: newUploadedFileNames });
+      await setDoc(metaRef, { columns: newColumns, uploadedFileNames: newUploadedFileNames }, { merge: true });
 
       setStagedData([]);
       setStagedFileNames([]);
@@ -536,7 +537,7 @@ export default function LogisticaPage() {
       }
 
       const metaRef = doc(db, "metadata", "logistica");
-      await updateDoc(metaRef, { uploadedFileNames: [], columns: [] });
+      await setDoc(metaRef, { uploadedFileNames: [], columns: [] }, { merge: true });
 
       setLogisticaData([]);
       _t({ title: "Limpeza Concluída!", description: "Todos os dados de logística foram apagados do banco de dados." });
@@ -726,3 +727,5 @@ export default function LogisticaPage() {
     </div>
   );
 }
+
+    

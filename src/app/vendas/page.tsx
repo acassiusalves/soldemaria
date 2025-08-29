@@ -24,6 +24,7 @@ import {
   writeBatch,
   Timestamp,
   updateDoc,
+  setDoc,
   arrayRemove,
   query,
   getDocsFromServer,
@@ -572,7 +573,7 @@ export default function VendasPage() {
 
       const newUploadedFileNames = [...new Set([...uploadedFileNames, ...stagedFileNames])];
       const metaRef = doc(db, "metadata", "vendas");
-      await updateDoc(metaRef, { columns: newColumns, uploadedFileNames: newUploadedFileNames });
+      await setDoc(metaRef, { columns: newColumns, uploadedFileNames: newUploadedFileNames }, { merge: true });
 
       setStagedSales([]);
       setStagedFileNames([]);
@@ -627,7 +628,7 @@ export default function VendasPage() {
       }
 
       const metaRef = doc(db, "metadata", "vendas");
-      await updateDoc(metaRef, { uploadedFileNames: [], columns: [] });
+      await setDoc(metaRef, { uploadedFileNames: [], columns: [] }, { merge: true });
 
       setSalesFromDb([]);
       _t({ title: "Limpeza Concluída!", description: "Todos os dados de vendas foram apagados do banco de dados." });
@@ -803,3 +804,5 @@ export default function VendasPage() {
     </div>
   );
 }
+
+    
