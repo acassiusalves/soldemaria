@@ -39,7 +39,7 @@ export async function organizeCosts(input: OrganizeCostsInput): Promise<Organize
         // Criar uma cópia completa do item original
         const processedItem = JSON.parse(JSON.stringify(item));
         
-        // MAPEAMENTO CORRETO PARA SUA PLANILHA
+        // REGRAS DE ORGANIZAÇÃO ESPECÍFICAS PARA CUSTOS
         
         // 1. Mapear mov_estoque → codigo (é o código no seu sistema)
         if (processedItem.mov_estoque) {
@@ -50,44 +50,77 @@ export async function organizeCosts(input: OrganizeCostsInput): Promise<Organize
         if (processedItem.valor_da_parcela) {
           processedItem.valor = processedItem.valor_da_parcela;
         }
-
-        // Mapear tipo -> tipo_pagamento
-        if (processedItem.tipo) {
-          processedItem.tipo_pagamento = processedItem.tipo;
+        
+        // 3. ORGANIZAR MODO DE PAGAMENTO COM AS REGRAS ESPECÍFICAS
+        if (processedItem.modo_de_pagamento && typeof processedItem.modo_de_pagamento === 'string') {
+          const modoPagamento = processedItem.modo_de_pagamento.trim().toLowerCase();
+          
+          // REGRA 1: PIX - manter como está
+          if (modoPagamento.includes('pix')) {
+            processedItem.modo_de_pagamento = 'PIX';
+            processedItem.tipo_de_pagamento = '';
+            processedItem.parcela = '';
+          }
+          // REGRA 2: Cartao/Debito
+          else if (modoPagamento.includes('cartao') && modoPagamento.includes('debito')) {
+            processedItem.modo_de_pagamento = 'Cartao';
+            processedItem.tipo_de_pagamento = 'Debito';
+            processedItem.parcela = '';
+          }
+          // REGRA 3: Cartao/Credito com parcelas (ex: "Cartao/Credito 3x")
+          else if (modoPagamento.includes('cartao') && modoPagamento.includes('credito')) {
+            processedItem.modo_de_pagamento = 'Cartao';
+            processedItem.tipo_de_pagamento = 'Credito';
+            
+            // Extrair número de parcelas (ex: "3x" → "3")
+            const parcelaMatch = modoPagamento.match(/(\d+)x?/);
+            if (parcelaMatch) {
+              processedItem.parcela = parcelaMatch[1];
+            } else {
+              processedItem.parcela = '1'; // Default para crédito sem especificar parcelas
+            }
+          }
+          // CASO GENÉRICO: Cartao sem especificação
+          else if (modoPagamento.includes('cartao')) {
+            processedItem.modo_de_pagamento = 'Cartao';
+            processedItem.tipo_de_pagamento = 'Credito'; // Default
+            processedItem.parcela = '1'; // Default
+          }
+          // OUTROS CASOS: manter original mas limpar
+          else {
+            // Manter valor original mas capitalizado
+            const originalValue = processedItem.modo_de_pagamento.trim();
+            processedItem.modo_de_pagamento = originalValue.charAt(0).toUpperCase() + originalValue.slice(1).toLowerCase();
+            processedItem.tipo_de_pagamento = '';
+            processedItem.parcela = '';
+          }
+        } else {
+          // Se não tem modo de pagamento, definir campos vazios
+          processedItem.modo_de_pagamento = processedItem.modo_de_pagamento || '';
+          processedItem.tipo_de_pagamento = '';
+          processedItem.parcela = '';
         }
         
-        // Mapear parcelas1 -> parcela
-        if (processedItem.parcelas1) {
-          processedItem.parcela = processedItem.parcelas1;
-        }
-        
-        // 3. Garantir que valor é numérico
+        // 4. Garantir que valor é numérico
         if (processedItem.valor && typeof processedItem.valor === 'string') {
           const valorStr = processedItem.valor.replace(/[R$\s]/gi, '').replace(/,/g, '.');
           const valor = parseFloat(valorStr);
           processedItem.valor = isNaN(valor) ? 0 : valor;
         }
         
-        // 4. Garantir código existe (fallback caso mov_estoque não tenha valor)
+        // 5. Garantir código existe (fallback caso mov_estoque não tenha valor)
         if (!processedItem.codigo || processedItem.codigo === '') {
           processedItem.codigo = String(index + 1).padStart(6, '0');
         }
         
-        // 5. Outros mapeamentos possíveis
-        if (!processedItem.modo_de_pagamento && processedItem.modo_pagamento) {
-          processedItem.modo_de_pagamento = processedItem.modo_pagamento;
-        }
-        
-        if (!processedItem.instituicao_financeira && processedItem.instituicao) {
-          processedItem.instituicao_financeira = processedItem.instituicao;
-        }
+        // 6. Outros mapeamentos necessários
+        processedItem.instituicao_financeira = processedItem.instituicao_financeira || '';
+        processedItem.valor = processedItem.valor || 0;
         
         // Campos padrão
         processedItem.modo_de_pagamento = processedItem.modo_de_pagamento || '';
         processedItem.instituicao_financeira = processedItem.instituicao_financeira || '';
         processedItem.valor = processedItem.valor || 0;
-        processedItem.tipo_pagamento = processedItem.tipo_pagamento || '';
-        processedItem.parcela = processedItem.parcela || '';
         
         return processedItem;
         
@@ -156,7 +189,7 @@ export async function debugCostsDetailed(input: OrganizeCostsInput): Promise<any
   
   console.log('🔍 Análise dos campos:', fieldAnalysis);
   
-  // Testar o mapeamento manually
+  // Testar o mapeamento manualmente
   const testMapping: any = {};
   
   // Testar mapeamento do código
