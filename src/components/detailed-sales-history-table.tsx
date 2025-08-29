@@ -95,12 +95,12 @@ interface DetailedSalesHistoryTableProps {
     columns: ColumnDef[];
     tableTitle?: string;
     showAdvancedFilters?: boolean;
-    // New props for controlled visibility
-    columnVisibility: ColumnVisibility;
-    onVisibilityChange: (newVisibility: ColumnVisibility) => void;
-    onSavePreferences: (visibilityToSave: ColumnVisibility) => void;
-    isLoadingPreferences: boolean;
-    isSavingPreferences: boolean;
+    // Props for controlled visibility are now optional
+    columnVisibility?: ColumnVisibility;
+    onVisibilityChange?: (newVisibility: ColumnVisibility) => void;
+    onSavePreferences?: (visibilityToSave: ColumnVisibility) => void;
+    isLoadingPreferences?: boolean;
+    isSavingPreferences?: boolean;
 }
 
 const MultiSelectFilter = ({
@@ -182,11 +182,11 @@ export default function DetailedSalesHistoryTable({
     columns, 
     tableTitle = "Histórico Detalhado de Vendas", 
     showAdvancedFilters = false,
-    columnVisibility,
+    columnVisibility = {}, // Default to empty object
     onVisibilityChange,
     onSavePreferences,
-    isLoadingPreferences,
-    isSavingPreferences,
+    isLoadingPreferences = false,
+    isSavingPreferences = false,
 }: DetailedSalesHistoryTableProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const [sortKey, setSortKey] = useState<SortKey>("data");
@@ -243,18 +243,6 @@ export default function DetailedSalesHistoryTable({
     const detailKeys = detailColumns.map(c => c.id);
     return effectiveColumns.filter(c => !detailKeys.includes(c.id));
   }, [effectiveColumns, detailColumns]);
-
-  useEffect(() => {
-    // When the component initializes and we don't have preferences loaded yet,
-    // and there are columns to show, set all to visible as a default.
-    if (!isLoadingPreferences && Object.keys(columnVisibility).length === 0 && mainColumns.length > 0) {
-        const allVisible = mainColumns.reduce((acc, col) => {
-            acc[col.id] = true;
-            return acc;
-        }, {} as ColumnVisibility);
-        onVisibilityChange(allVisible);
-    }
-  }, [isLoadingPreferences, columnVisibility, mainColumns, onVisibilityChange]);
 
   const { uniqueVendores, uniqueEntregadores, uniqueLogisticas, uniqueCidades } = useMemo(() => {
     const vendores = new Set<string>();
@@ -418,9 +406,16 @@ export default function DetailedSalesHistoryTable({
     return showBlank(value);
   }
 
+    // When visibility is not controlled from outside, all columns are visible.
+  const isVisibilityManaged = !!onVisibilityChange && !!onSavePreferences;
+
   const visibleColumns = useMemo(() => {
+    if (!isVisibilityManaged) {
+      return mainColumns;
+    }
     return mainColumns.filter(c => columnVisibility[c.id]);
-  }, [mainColumns, columnVisibility]);
+  }, [mainColumns, columnVisibility, isVisibilityManaged]);
+
 
   const hasActiveAdvancedFilter = useMemo(() => {
     return vendorFilter.size > 0 || deliverymanFilter.size > 0 || logisticsFilter.size > 0 || cityFilter.size > 0;
@@ -434,6 +429,7 @@ export default function DetailedSalesHistoryTable({
   }
 
   const handleSetAllVisibility = (visible: boolean) => {
+    if (!onVisibilityChange) return;
     const next = mainColumns.reduce((acc, col) => {
         if (!REQUIRED_ALWAYS_ON.includes(col.id)) {
             acc[col.id] = visible;
@@ -446,6 +442,7 @@ export default function DetailedSalesHistoryTable({
   };
 
   const handleResetToDefault = () => {
+    if (!onVisibilityChange) return;
     const defaultConfig = mainColumns.reduce((acc, col) => {
         acc[col.id] = true;
         return acc;
@@ -465,6 +462,7 @@ export default function DetailedSalesHistoryTable({
               onChange={(e) => setFilter(e.target.value)}
               className="w-auto"
             />
+            {isVisibilityManaged && onVisibilityChange && onSavePreferences && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline">
@@ -496,22 +494,20 @@ export default function DetailedSalesHistoryTable({
                           className="capitalize"
                           checked={!!columnVisibility[column.id]}
                           disabled={REQUIRED_ALWAYS_ON.includes(column.id)}
-                          onCheckedChange={(value) => {
-                            const newVisibility = { ...columnVisibility, [column.id]: !!value };
-                            onVisibilityChange(newVisibility);
-                          }}
+                          onCheckedChange={(value) => onVisibilityChange!({ ...columnVisibility, [column.id]: !!value })}
                       >
                           {column.label}
                       </DropdownMenuCheckboxItem>
                   ))}
                 </ScrollArea>
                 <DropdownMenuSeparator />
-                 <DropdownMenuItem onSelect={() => onSavePreferences(columnVisibility)} disabled={isSavingPreferences}>
+                 <DropdownMenuItem onSelect={() => onSavePreferences!(columnVisibility)} disabled={isSavingPreferences}>
                     {isSavingPreferences ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
                     Salvar esta visão
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
+            )}
           </div>
         </div>
         {showAdvancedFilters && (
@@ -540,7 +536,7 @@ export default function DetailedSalesHistoryTable({
                           Carregando suas preferências...
                         </div>
                     </TableHead>
-                ) : visibleColumns.length === 0 ? (
+                ) : visibleColumns.length === 0 && isVisibilityManaged ? (
                   <TableHead className="text-muted-foreground">
                     Nenhuma coluna visível — abra “Exibir Colunas” ou clique em “Resetar preferências”.
                   </TableHead>
