@@ -12,7 +12,7 @@ import { VendaDetalhada } from '@/lib/data';
 import { z } from 'genkit';
 
 const LogisticsEntrySchema = z.object({
-  id: z.string().describe('The unique identifier for the entry.'),
+  id: z.string().describe('The unique identifier for the entry. This MUST be returned unmodified.'),
   logistica: z.string().optional().describe('The original logistics string.'),
   entregador: z.string().optional().describe('The name of the delivery person.'),
   valor: z.number().optional().describe('The freight cost.'),
@@ -64,6 +64,7 @@ For each entry, examine the 'logistica' field:
   - The 'valor' field should be 0.
   - The 'logistica' field should remain "Loja".
 - For any other case, try your best to extract the information. If you cannot determine the 'entregador' or 'valor', leave the corresponding fields empty.
+- Crucially, you MUST return the original 'id' for each record.
 
 Analyze the following data and return the organized list.
 
