@@ -11,6 +11,25 @@ export type OrganizeCostsOutput = {
   organizedData: any[];
 };
 
+// helper: remover acentos e “lixo” comum
+function normalizePayStr(s: string) {
+  return s
+    .normalize('NFD').replace(/\p{Diacritic}/gu, '') // remove acentos
+    .toLowerCase()
+    .replace(/\s+/g, ' ')                            // normaliza espaços
+    .trim();
+}
+
+// helper: extrair número de parcelas
+function extractParcelas(s: string): string {
+  // pega "3x", "3 x", "em 3x", "3/10" (usa o primeiro número como qtd de parcelas)
+  const m = s.match(/(?:^|\D)(\d{1,2})\s*(?:x|\/\d{1,2})/i);
+  if (m && m[1]) return m[1];
+  // se mencionar "credito" mas não encontrou, assume 1x
+  if (s.includes('credito') || s.includes('cartao')) return '1';
+  return '';
+}
+
 // FUNÇÃO PRINCIPAL - Organizar Custos
 export async function organizeCosts(input: OrganizeCostsInput): Promise<OrganizeCostsOutput> {
   console.log('💰 CUSTOS: Iniciando organização');
@@ -52,81 +71,59 @@ export async function organizeCosts(input: OrganizeCostsInput): Promise<Organize
         }
         
         // 3. ORGANIZAR MODO DE PAGAMENTO COM AS REGRAS ESPECÍFICAS
-        if (processedItem.modo_de_pagamento && typeof processedItem.modo_de_pagamento === 'string') {
-          const modoPagamento = processedItem.modo_de_pagamento.trim().toLowerCase();
-          
-          console.log(`🔍 Processando: "${processedItem.modo_de_pagamento}" → "${modoPagamento}"`);
-          
-          // REGRA 1: PIX simples
-          if (modoPagamento === 'pix') {
-            processedItem.modo_de_pagamento = 'PIX';
-            processedItem.tipo_pagamento = '';  // CORRIGIDO: sem "de"
-            processedItem.parcela = '';
-            console.log('✅ Regra PIX aplicada');
+        if (typeof processedItem.modo_de_pagamento === 'string' && processedItem.modo_de_pagamento.trim() !== '') {
+          const raw = processedItem.modo_de_pagamento;
+          const norm = normalizePayStr(raw); // ex: "cartao/credito 3x"
+          console.log(`🔍 Processando: "${raw}" → "${norm}"`);
+
+          // defaults
+          let modo = '';
+          let tipo = '';
+          let parcela = '';
+
+          if (norm === 'pix' || norm.includes('pix ') || norm.includes(' pix')) {
+            modo = 'PIX';
+            tipo = '';
+            parcela = '';
+          } else if (norm.includes('pix') && (norm.includes('qr') || norm.includes('code'))) {
+            modo = 'PIX';
+            tipo = 'QR Code';
+            parcela = '';
+          } else if (norm === 'dinheiro') {
+            modo = 'Dinheiro';
+            tipo = '';
+            parcela = '';
+          } else if (norm.includes('cartao') && norm.includes('debito')) {
+            modo = 'Cartão';
+            tipo = 'Débito';
+            parcela = '';
+          } else if (norm.includes('cartao') && norm.includes('credito')) {
+            modo = 'Cartão';
+            tipo = 'Crédito';
+            parcela = extractParcelas(norm) || '1';
+          } else if (norm.includes('cartao')) {
+            modo = 'Cartão';
+            tipo = 'Crédito';
+            parcela = extractParcelas(norm) || '1';
+          } else {
+            // fallback: capitaliza a primeira letra
+            modo = raw.trim().charAt(0).toUpperCase() + raw.trim().slice(1);
+            tipo = '';
+            parcela = '';
           }
-          // REGRA 2: Cartao/Debito
-          else if (modoPagamento.includes('cartao') && modoPagamento.includes('debito')) {
-            processedItem.modo_de_pagamento = 'Cartao';
-            processedItem.tipo_pagamento = 'Debito';  // CORRIGIDO: sem "de"
-            processedItem.parcela = '';
-            console.log('✅ Regra Cartao/Debito aplicada');
-          }
-          // REGRA 3: Cartao/Credito com parcelas
-          else if (modoPagamento.includes('cartao') && modoPagamento.includes('credito')) {
-            processedItem.modo_de_pagamento = 'Cartao';
-            processedItem.tipo_pagamento = 'Credito';  // CORRIGIDO: sem "de"
-            
-            // Extrair número de parcelas
-            const parcelaMatch = modoPagamento.match(/(\d+)x?/);
-            if (parcelaMatch) {
-              processedItem.parcela = parcelaMatch[1];
-              console.log(`✅ Regra Cartao/Credito aplicada com ${parcelaMatch[1]} parcelas`);
-            } else {
-              processedItem.parcela = '1';
-              console.log('✅ Regra Cartao/Credito aplicada (default 1 parcela)');
-            }
-          }
-          // REGRA 4: Pix/QR Code
-          else if (modoPagamento.includes('pix') && (modoPagamento.includes('qr') || modoPagamento.includes('code'))) {
-            processedItem.modo_de_pagamento = 'Pix';
-            processedItem.tipo_pagamento = 'QR Code';  // CORRIGIDO: sem "de"
-            processedItem.parcela = '';
-            console.log('✅ Regra Pix/QR Code aplicada');
-          }
-          // REGRA 5: Dinheiro
-          else if (modoPagamento === 'dinheiro') {
-            processedItem.modo_de_pagamento = 'Dinheiro';
-            processedItem.tipo_pagamento = '';  // CORRIGIDO: sem "de"
-            processedItem.parcela = '';
-            console.log('✅ Regra Dinheiro aplicada');
-          }
-          // CASO GENÉRICO: Cartao sem especificação
-          else if (modoPagamento.includes('cartao')) {
-            processedItem.modo_de_pagamento = 'Cartao';
-            processedItem.tipo_pagamento = 'Credito';  // CORRIGIDO: sem "de"
-            processedItem.parcela = '1';
-            console.log('✅ Regra Cartao genérico aplicada');
-          }
-          // PIX genérico
-          else if (modoPagamento.includes('pix')) {
-            processedItem.modo_de_pagamento = 'PIX';
-            processedItem.tipo_pagamento = '';  // CORRIGIDO: sem "de"
-            processedItem.parcela = '';
-            console.log('✅ Regra PIX genérico aplicada');
-          }
-          // OUTROS CASOS
-          else {
-            const originalValue = processedItem.modo_de_pagamento.trim();
-            processedItem.modo_de_pagamento = originalValue.charAt(0).toUpperCase() + originalValue.slice(1).toLowerCase();
-            processedItem.tipo_pagamento = '';  // CORRIGIDO: sem "de"
-            processedItem.parcela = '';
-            console.log('⚪ Mantendo original:', processedItem.modo_de_pagamento);
-          }
+
+          processedItem.modo_de_pagamento = modo;
+
+          // >>> preenche os DOIS nomes de campo por segurança <<<
+          processedItem.tipo_pagamento = tipo;
+          processedItem.tipo_de_pagamento = tipo;
+
+          processedItem.parcela = parcela;
         } else {
           processedItem.modo_de_pagamento = processedItem.modo_de_pagamento || '';
-          processedItem.tipo_pagamento = '';  // CORRIGIDO: sem "de"
+          processedItem.tipo_pagamento = '';
+          processedItem.tipo_de_pagamento = '';
           processedItem.parcela = '';
-          console.log('⚠️ Modo de pagamento vazio');
         }
         
         // 4. Garantir que valor é numérico
@@ -142,11 +139,6 @@ export async function organizeCosts(input: OrganizeCostsInput): Promise<Organize
         }
         
         // 6. Outros mapeamentos necessários
-        processedItem.instituicao_financeira = processedItem.instituicao_financeira || '';
-        processedItem.valor = processedItem.valor || 0;
-        
-        // Campos padrão
-        processedItem.modo_de_pagamento = processedItem.modo_de_pagamento || '';
         processedItem.instituicao_financeira = processedItem.instituicao_financeira || '';
         processedItem.valor = processedItem.valor || 0;
         
@@ -217,7 +209,7 @@ export async function debugCostsDetailed(input: OrganizeCostsInput): Promise<any
   
   console.log('🔍 Análise dos campos:', fieldAnalysis);
   
-  // Testar o mapeamento manualmente
+  // Testar o mapeamento manually
   const testMapping: any = {};
   
   // Testar mapeamento do código
