@@ -80,27 +80,10 @@ export const normalizeHeader = (s: string) =>
     .replace(/\s+/g, " ")
     .trim();
 
-/* ========== labels para colunas dinâmicas ========== */
-const columnLabels: Record<string, string> = {
-  codigo: 'Código',
-  modo_de_pagamento: 'Modo de Pagamento',
-  valor: 'Valor',
-  instituicao_financeira: 'Instituição Financeira',
-};
-const getLabel = (key: string) => columnLabels[key] || key;
-
-/* ========== mapeamento por cabeçalho conhecido ========== */
-const headerMappingNormalized: Record<string, string> = {
-  "codigo": "codigo",
-  "modo de pagamento": "modo_de_pagamento",
-  "valor": "valor",
-  "instituicao financeira": "instituicao_financeira",
-};
-
 /* ========== limpadores ========= */
 const isDateLike = (s: string) =>
-  /^\d{4}[-/]\d{2}[-/]\d{2}$/.test(s) ||
-  /^\d{2}[-/]\d{2}[-/]\d{4}$/.test(s);
+  /^\d{4}[-\/]\d{2}[-\/]\d{2}$/.test(s) ||
+  /^\d{2}[-\/]\d{2}[-\/]\d{4}$/.test(s);
 
 const cleanNumericValue = (value: any): number | string => {
   if (typeof value === "number") return value;
@@ -238,6 +221,14 @@ const fixedColumns: ColumnDef[] = [
     { id: "instituicao_financeira", label: "Instituição Financeira", isSortable: true },
 ];
 
+/* ========== mapeamento por cabeçalho conhecido ========== */
+const headerMappingNormalized: Record<string, string> = {
+  "codigo": "codigo",
+  "modo de pagamento": "modo_de_pagamento",
+  "valor": "valor",
+  "instituicao financeira": "instituicao_financeira",
+};
+
 export default function CustosVendasPage() {
   const [custosData, setCustosData] = React.useState<VendaDetalhada[]>([]);
   const [stagedData, setStagedData] = React.useState<VendaDetalhada[]>([]);
@@ -298,30 +289,14 @@ export default function CustosVendasPage() {
   }, [custosData, stagedData]);
 
 
-  /* ======= AGRUPAMENTO por código + subRows ======= */
-  const groupedForView = React.useMemo(() => {
-    const groups = new Map<string, any>();
-    for (const row of allData) {
-      const code = normCode((row as any).codigo);
-      if (!code) continue;
-
-      if (!groups.has(code)) {
-        groups.set(code, { header: { ...row, subRows: [] as any[] } });
-      }
-      const g = groups.get(code);
-
-      if (isDetailRow(row)) g.header.subRows.push(row); // detalhe
-      g.header = mergeForHeader(g.header, row);         // enriquece header
-    }
-
-    for (const g of groups.values()) {
-      g.header.subRows.sort((a: any, b: any) =>
-        ((a.item || 0) as number) - ((b.item || 0) as number)
-      );
-    }
-
-    return Array.from(groups.values()).map(g => g.header);
-  }, [allData]);
+  /* ======= DADOS SIMPLES SEM AGRUPAMENTO ======= */
+    const groupedForView = React.useMemo(() => {
+    // Para custos, não agrupamos - exibimos lista simples
+    return allData.map(row => ({
+        ...row,
+        subRows: [] // array vazio para compatibilidade com a tabela
+    }));
+    }, [allData]);
 
   /* ======= UPLOAD / PROCESSAMENTO ======= */
   const handleDataUpload = async (datasets: IncomingDataset[]) => {
