@@ -51,7 +51,7 @@ export async function organizeLogistics(input: OrganizeLogisticsInput): Promise<
 
 const prompt = ai.definePrompt({
   name: 'organizeLogisticsPrompt',
-  input: { schema: z.object({ logisticsData: z.array(LogisticsEntrySchema) }) },
+  input: { schema: z.object({ logisticsData: z.array(z.object({ id: z.string(), logistica: z.string().optional() })) }) },
   output: { schema: OrganizeLogisticsOutputSchema },
   prompt: `You are an intelligent data processing agent. Your task is to analyze a list of logistics entries and extract structured information.
 
@@ -85,8 +85,6 @@ const organizeLogisticsFlow = ai.defineFlow(
     const dataForAI = input.logisticsData.map(item => ({
         id: item.id,
         logistica: item.logistica,
-        entregador: item.entregador,
-        valor: item.valor,
     }));
 
     const { output } = await prompt({ logisticsData: dataForAI });
