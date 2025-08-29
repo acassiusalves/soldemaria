@@ -59,7 +59,7 @@ export default function LoginPage() {
     } catch (error: any) {
       console.error("Erro de login:", error);
       let description = "Ocorreu um erro ao tentar fazer login. Tente novamente.";
-      if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+      if (error.code === 'auth/invalid-credential') {
         description = "Credenciais inválidas. Verifique seu e-mail e senha.";
       }
       toast({
