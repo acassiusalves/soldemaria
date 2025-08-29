@@ -82,18 +82,18 @@ export const normalizeHeader = (s: string) =>
 /* ========== labels para colunas dinâmicas ========== */
 const columnLabels: Record<string, string> = {
   codigo: 'Código',
-  logistica: 'Logística',
-  entregador: 'Entregador',
+  modo_de_pagamento: 'Modo de Pagamento',
   valor: 'Valor',
+  instituicao_financeira: 'Instituição Financeira',
 };
 const getLabel = (key: string) => columnLabels[key] || key;
 
 /* ========== mapeamento por cabeçalho conhecido ========== */
 const headerMappingNormalized: Record<string, string> = {
   "codigo": "codigo",
-  "custo": "custo",
-  "descricao": "descricao",
+  "modo de pagamento": "modo_de_pagamento",
   "valor": "valor",
+  "instituicao financeira": "instituicao_financeira",
 };
 
 /* ========== limpadores ========= */
@@ -229,12 +229,18 @@ const MotionCard = motion(Card);
 type IncomingDataset = { rows: any[]; fileName: string; assocKey?: string };
 const API_KEY_STORAGE_KEY = "gemini_api_key";
 
+// Colunas fixas para a tela de Custos
+const fixedColumns: ColumnDef[] = [
+    { id: "codigo", label: "Código", isSortable: true },
+    { id: "modo_de_pagamento", label: "Modo de Pagamento", isSortable: true },
+    { id: "valor", label: "Valor", isSortable: true, className: "text-right" },
+    { id: "instituicao_financeira", label: "Instituição Financeira", isSortable: true },
+];
 
 export default function CustosVendasPage() {
   const [custosData, setCustosData] = React.useState<VendaDetalhada[]>([]);
   const [stagedData, setStagedData] = React.useState<VendaDetalhada[]>([]);
   const [stagedFileNames, setStagedFileNames] = React.useState<string[]>([]);
-  const [columns, setColumns] = React.useState<ColumnDef[]>([]);
   const [uploadedFileNames, setUploadedFileNames] = React.useState<string[]>([]);
   const { toast } = useToast();
 
@@ -273,7 +279,6 @@ export default function CustosVendasPage() {
     const metaUnsub = onSnapshot(doc(db, "metadata", "custos"), (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
-        setColumns(data.columns || []);
         setUploadedFileNames(data.uploadedFileNames || []);
       }
     });
@@ -419,8 +424,6 @@ export default function CustosVendasPage() {
           const map = new Map(prev.map(s => [s.id, s]));
           dataToSave.forEach(s => {
               const newRecord = { ...s };
-              // We assign a real ID after saving, so this might be tricky
-              // For now, let's just add them, Firestore listener will sync eventually
               if (!map.has(s.id)) {
                   map.set(s.id, newRecord);
               }
@@ -428,19 +431,9 @@ export default function CustosVendasPage() {
           return Array.from(map.values());
       });
 
-
-      const allKeys = new Set<string>();
-      dataToSave.forEach(row => Object.keys(row).forEach(k => allKeys.add(k)));
-      custosData.forEach(row => Object.keys(row).forEach(k => allKeys.add(k)));
-      if (!allKeys.has("data") && dataToSave.some(r => (r as any).data)) allKeys.add("data");
-
-      const current = new Map(columns.map(c => [c.id, c]));
-      allKeys.forEach(key => { if (!current.has(key)) current.set(key, { id: key, label: getLabel(key), isSortable: true }); });
-      const newColumns = Array.from(current.values());
-
       const newUploadedFileNames = [...new Set([...uploadedFileNames, ...stagedFileNames])];
       const metaRef = doc(db, "metadata", "custos");
-      await setDoc(metaRef, { columns: newColumns, uploadedFileNames: newUploadedFileNames }, { merge: true });
+      await setDoc(metaRef, { columns: fixedColumns, uploadedFileNames: newUploadedFileNames }, { merge: true });
 
       setStagedData([]);
       setStagedFileNames([]);
@@ -677,7 +670,7 @@ export default function CustosVendasPage() {
           )}
         </Card>
 
-        <DetailedSalesHistoryTable data={groupedForView} columns={columns} tableTitle="Relatório de Custos" />
+        <DetailedSalesHistoryTable data={groupedForView} columns={fixedColumns} tableTitle="Relatório de Custos" />
       </main>
     </div>
   );
