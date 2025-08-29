@@ -197,20 +197,6 @@ const isEmptyCell = (v: any) => {
   return false;
 };
 
-const mergeNonEmpty = (existing: Record<string, any>, incoming: Record<string, any>) => {
-  const out: Record<string, any> = { ...existing };
-  for (const k of Object.keys(incoming)) {
-    const v = incoming[k];
-    if (k === "data") {
-      const d = toDate(v);
-      if (d) out.data = d;
-      continue;
-    }
-    if (!isEmptyCell(v)) out[k] = v;
-  }
-  return out;
-};
-
 /* ========== reconhecer linhas de detalhe ========== */
 const ITEM_KEYS = [
   "item","descricao","quantidade","custoUnitario","valorUnitario",
@@ -243,28 +229,6 @@ const mapRowToSystem = (row: Record<string, any>) => {
     if (d) out.data = d; else delete out.data;
   }
   return out;
-};
-
-/* ========== extrair chave (código) de uma linha, seguindo a assocKey ========= */
-const pickCodeFromRow = (
-  rawRow: Record<string, any>,
-  mappedRow: Record<string, any>,
-  assocKey?: string
-) => {
-  if (assocKey) {
-    if (rawRow[assocKey] != null) return normCode(rawRow[assocKey]);
-    const assocNorm = normalizeHeader(assocKey).replace(/\s+/g, "_");
-    if (mappedRow[assocNorm] != null) return normCode(mappedRow[assocNorm]);
-    const resolved = resolveSystemKey(normalizeHeader(assocKey));
-    if (resolved === "codigo" && mappedRow.codigo != null) return normCode(mappedRow.codigo);
-  }
-  if (mappedRow.codigo != null) return normCode(mappedRow.codigo);
-  const candidates = ["codigo","cod","documento","nf","numero_documento","mov_estoque","movestoque", "pedido"];
-  for (const c of candidates) {
-    if (mappedRow[c] != null) return normCode(mappedRow[c]);
-    if (rawRow[c] != null) return normCode(rawRow[c]);
-  }
-  return "";
 };
 
 /* ========== agrega valores para compor o cabeçalho do pedido ========== */
@@ -396,76 +360,37 @@ export default function LogisticaPage() {
     return Array.from(groups.values()).map(g => g.header);
   }, [filteredData]);
 
-  /* ======= UPLOAD / ASSOCIAÇÃO ======= */
+  /* ======= UPLOAD / PROCESSAMENTO ======= */
   const handleDataUpload = async (datasets: IncomingDataset[]) => {
     if (!datasets || datasets.length === 0) return;
 
-    const dbByCode = new Map(
-      logisticaData
-        .filter(s => (s as any).codigo != null)
-        .map(s => [normCode((s as any).codigo), s])
-    );
-
     const uploadTimestamp = Date.now();
-    const stagedUpdates = new Map<string, any>();
     const stagedInserts: any[] = [];
-
-    let updated = 0, notFound = 0, skippedNoKey = 0, inserted = 0;
+    let processedCount = 0;
 
     for (const ds of datasets) {
-      const { rows, fileName, assocKey } = ds;
+      const { rows, fileName } = ds;
       if (!rows?.length) continue;
 
       const mapped = rows.map(mapRowToSystem);
 
-      for (let i = 0; i < rows.length; i++) {
-        const rawRow = rows[i];
+      for (let i = 0; i < mapped.length; i++) {
         const mappedRow = mapped[i];
-
-        const code = pickCodeFromRow(rawRow, mappedRow, assocKey);
-        if (!code) { skippedNoKey++; continue; }
-
-        const fromDb = dbByCode.get(code);
-
-        if (fromDb) {
-          const merged = mergeNonEmpty(fromDb as any, { ...mappedRow, codigo: code });
-          merged.id = (fromDb as any).id;
-          merged.sourceFile = fileName;
-          merged.uploadTimestamp = new Date(uploadTimestamp);
-
-          stagedUpdates.set(merged.id, merged);
-          updated++;
-        } else {
-          // Upsert
-          const docId = `staged-${uploadTimestamp}-${inserted}`;
-          stagedInserts.push({ ...mappedRow, codigo: code, id: docId, sourceFile: fileName, uploadTimestamp: new Date(uploadTimestamp) });
-          inserted++;
-        }
+        const docId = `staged-${uploadTimestamp}-${processedCount}`;
+        stagedInserts.push({ ...mappedRow, id: docId, sourceFile: fileName, uploadTimestamp: new Date(uploadTimestamp) });
+        processedCount++;
       }
     }
 
-    const stagedArray = [...Array.from(stagedUpdates.values()), ...stagedInserts];
-
-    setStagedData(prev => [...prev, ...stagedArray]);
+    setStagedData(prev => [...prev, ...stagedInserts]);
     setStagedFileNames(prev => [...new Set([...prev, ...datasets.map(d => d.fileName)])]);
 
     toast({
-      title: "Associação concluída",
-      description: [
-        `${updated} registro(s) atualizado(s)`,
-        `${inserted > 0 ? `${inserted} novo(s) registro(s) criado(s)`: ''}`,
-        `${notFound} não encontrado(s)`,
-        `${skippedNoKey} linha(s) ignoradas (sem chave)`,
-      ].filter(Boolean).join(" • "),
+      title: "Arquivos Prontos para Revisão",
+      description: `${processedCount} registro(s) adicionados à fila.`,
     });
-
-    if (stagedArray.length > 0) {
-        toast({
-            title: "Dados Prontos para Revisão",
-            description: `${stagedArray.length} registro(s) adicionados à revisão.`,
-        });
-    }
   };
+
 
   /* ======= Salvar no Firestore ======= */
   const handleSaveChangesToDb = async () => {
@@ -489,18 +414,16 @@ export default function LogisticaPage() {
         const batch = writeBatch(db);
 
         chunk.forEach((item) => {
-          const isUpdate = !String(item.id).startsWith('staged-');
-          const docId = isUpdate ? item.id : doc(collection(db, "logistica")).id;
+          const docId = doc(collection(db, "logistica")).id;
           const logisticaRef = doc(db, "logistica", docId);
           const { id, ...payload } = item;
           
-          if(!isUpdate) payload.id = docId;
+          payload.id = docId;
 
           if (payload.data instanceof Date) payload.data = Timestamp.fromDate(payload.data);
           if (payload.uploadTimestamp instanceof Date) payload.uploadTimestamp = Timestamp.fromDate(payload.uploadTimestamp);
 
-          if (isUpdate) batch.update(logisticaRef, payload);
-          else batch.set(logisticaRef, payload);
+          batch.set(logisticaRef, payload);
         });
 
         await batch.commit();
@@ -511,17 +434,13 @@ export default function LogisticaPage() {
       setLogisticaData(prev => {
           const map = new Map(prev.map(s => [s.id, s]));
           dataToSave.forEach(s => {
-              const existing = map.get(s.id) || {};
-              const newRecord = { ...existing, ...s };
-              if (!String(s.id).startsWith('staged-')) {
-                 newRecord.id = s.id;
+              const newRecord = { ...s };
+              // We assign a real ID after saving, so this might be tricky
+              // For now, let's just add them, Firestore listener will sync eventually
+              if (!map.has(s.id)) {
+                  map.set(s.id, newRecord);
               }
-              map.set(newRecord.id, newRecord);
           });
-          stagedData.forEach(s => {
-            if (String(s.id).startsWith('staged-')) map.delete(s.id);
-          });
-
           return Array.from(map.values());
       });
 
@@ -768,3 +687,4 @@ export default function LogisticaPage() {
     </div>
   );
 }
+
