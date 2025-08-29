@@ -28,11 +28,10 @@ import {
   deleteDoc,
   updateDoc,
 } from "firebase/firestore";
-import { getAuth } from "firebase/auth";
 import { useRouter } from "next/navigation";
+import { auth, db } from "@/lib/firebase";
 
 
-import { db } from "@/lib/firebase";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
@@ -103,7 +102,6 @@ export default function TaxasCartaoPage() {
   const [editingId, setEditingId] = React.useState<string | null>(null);
   const { toast } = useToast();
   const router = useRouter();
-  const auth = getAuth();
 
 
   React.useEffect(() => {

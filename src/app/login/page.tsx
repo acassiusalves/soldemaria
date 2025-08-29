@@ -4,8 +4,8 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, User } from "firebase/auth";
-import { db } from "@/lib/firebase"; // Make sure db is initialized
+import { signInWithEmailAndPassword, onAuthStateChanged } from "firebase/auth";
+import { auth } from "@/lib/firebase"; 
 import { Logo } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,9 +20,6 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
 
-// Initialize Firebase Auth here to ensure it's ready
-const auth = getAuth();
-
 export default function LoginPage() {
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
@@ -34,9 +31,9 @@ export default function LoginPage() {
   React.useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
-        router.replace("/"); // Redirect to dashboard if already logged in
+        router.replace("/");
       } else {
-        setIsLoading(false); // Only show page when auth state is resolved and no user
+        setIsLoading(false);
       }
     });
 

@@ -1,17 +1,33 @@
-import { initializeApp, getApp, getApps } from "firebase/app";
+"use client";
+
+import { initializeApp, getApps, getApp, type FirebaseApp } from "firebase/app";
+import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
+import { getAnalytics, isSupported } from "firebase/analytics";
 
 const firebaseConfig = {
-  "projectId": "viso-de-vendas-32ft6",
-  "appId": "1:563190339627:web:a2c99ef59327adfe61726e",
-  "storageBucket": "viso-de-vendas-32ft6.firebasestorage.app",
-  "apiKey": "AIzaSyB0A8yd2GW389jU9nSDB_ofiVMm4eiR7wQ",
-  "authDomain": "viso-de-vendas-32ft6.firebaseapp.com",
-  "measurementId": "",
-  "messagingSenderId": "563190339627"
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY!,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN!,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID!,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET!,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID!,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID!,
+  measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
 };
 
-const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+// Initialize Firebase
+const app: FirebaseApp = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+const auth = getAuth(app);
 const db = getFirestore(app);
 
-export { db };
+// Analytics (conditionally)
+let analytics: ReturnType<typeof getAnalytics> | null = null;
+if (typeof window !== 'undefined') {
+  isSupported().then(yes => {
+    if (yes) {
+      analytics = getAnalytics(app);
+    }
+  });
+}
+
+export { app, db, auth, analytics };

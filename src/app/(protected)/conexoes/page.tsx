@@ -18,8 +18,8 @@ import {
   CheckCircle,
   ChevronDown,
 } from "lucide-react";
-import { getAuth } from "firebase/auth";
 import { useRouter } from "next/navigation";
+import { auth } from "@/lib/firebase";
 
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -53,7 +53,6 @@ export default function ConexoesPage() {
   const [isKeyValid, setIsKeyValid] = React.useState<boolean | null>(null);
   const { toast } = useToast();
   const router = useRouter();
-  const auth = getAuth();
 
 
   React.useEffect(() => {

@@ -3,9 +3,9 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { getAuth, onAuthStateChanged } from "firebase/auth";
+import { onAuthStateChanged } from "firebase/auth";
 import { Loader2 } from "lucide-react";
-import { db } from "@/lib/firebase";
+import { auth } from "@/lib/firebase";
 
 export default function ProtectedLayout({
   children,
@@ -16,7 +16,6 @@ export default function ProtectedLayout({
   const [isLoading, setIsLoading] = React.useState(true);
 
   React.useEffect(() => {
-    const auth = getAuth();
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (!user) {
         router.replace("/login");

@@ -35,8 +35,8 @@ import {
   getDocsFromServer,
 } from "firebase/firestore";
 import { motion } from "framer-motion";
-import { getAuth } from "firebase/auth";
 import { useRouter } from "next/navigation";
+import { auth, db } from "@/lib/firebase";
 
 
 import { cn } from "@/lib/utils";
@@ -77,7 +77,6 @@ import {
 import DetailedSalesHistoryTable, { ColumnDef } from "@/components/detailed-sales-history-table";
 import type { VendaDetalhada } from "@/lib/data";
 import { SupportDataDialog } from "@/components/support-data-dialog";
-import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
 import { Progress } from "@/components/ui/progress";
 import { Logo } from "@/components/icons";
@@ -288,7 +287,6 @@ export default function LogisticaPage() {
   const [isOrganizing, setIsOrganizing] = React.useState(false);
   const [saveProgress, setSaveProgress] = React.useState(0);
   const router = useRouter();
-  const auth = getAuth();
 
 
     const handleLogout = async () => {
