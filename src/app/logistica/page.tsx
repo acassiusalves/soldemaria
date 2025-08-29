@@ -76,7 +76,7 @@ import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
 import { Progress } from "@/components/ui/progress";
 import { Logo } from "@/components/icons";
-import { organizeLogisticsWithAI, organizeLogisticsTest, organizeLogisticsManual } from "@/ai/flows/organize-logistics";
+import { organizeLogistics, debugDataLoss } from "@/ai/flows/organize-logistics";
 
 /* ========== helpers de datas e normalização ========== */
 const toDate = (value: unknown): Date | null => {
@@ -412,16 +412,16 @@ export default function LogisticaPage() {
     }
     setIsOrganizing(true);
     try {
-      const result = await organizeLogisticsWithAI({ logisticsData: stagedData, apiKey });
+      const result = await organizeLogistics({ logisticsData: stagedData, apiKey });
       if (result.organizedData) {
         setStagedData(result.organizedData);
-        toast({ title: "Sucesso!", description: "Os dados foram organizados pela IA." });
+        toast({ title: "Sucesso!", description: "Os dados foram organizados." });
       } else {
-        throw new Error("A IA não retornou dados organizados.");
+        throw new Error("A organização não retornou dados.");
       }
     } catch (error: any) {
-      console.error("Error organizing data with AI:", error);
-      toast({ title: "Erro na Organização", description: error.message || "Houve um problema ao comunicar com a IA.", variant: "destructive" });
+      console.error("Error organizing data:", error);
+      toast({ title: "Erro na Organização", description: error.message || "Houve um problema ao organizar os dados.", variant: "destructive" });
     } finally {
       setIsOrganizing(false);
     }
@@ -556,65 +556,49 @@ export default function LogisticaPage() {
     }
   };
 
-  // Funções de teste
-  const handleTestBasic = async () => {
+  const handleDebugLoss = async () => {
     const apiKey = localStorage.getItem("gemini_api_key") || "test";
     
     try {
-      setIsOrganizing(true);
-      const result = await organizeLogisticsTest({ 
-        logisticsData: stagedData.slice(0, 2), // Só 2 itens
+      const result = await debugDataLoss({ 
+        logisticsData: stagedData, // TODOS os dados
         apiKey 
       });
-      console.log('✅ Teste básico passou:', result);
-      toast({ title: 'Teste básico funcionou!' });
+      console.log('🔍 Debug resultado:', result);
+      toast({
+        title: "Resultado da Depuração",
+        description: `Originais: ${result.originalLength}, Válidos: ${result.validItems}, Inválidos: ${result.invalidItems}`,
+      });
     } catch (error: any) {
-      console.error('❌ Teste básico falhou:', error);
-      toast({ title: `Teste básico falhou: ${error.message}`, variant: 'destructive' });
-    } finally {
-      setIsOrganizing(false);
+      console.error('❌ Debug falhou:', error);
+      toast({ title: `Debug falhou: ${error.message}`, variant: "destructive"});
     }
   };
 
-  const handleTestManual = async () => {
+  const handleTestFixed = async () => {
     const apiKey = localStorage.getItem("gemini_api_key") || "test";
     
-    try {
-      setIsOrganizing(true);
-      const result = await organizeLogisticsManual({ 
-        logisticsData: stagedData.slice(0, 2),
-        apiKey 
-      });
-      console.log('✅ Teste manual passou:', result);
-      setStagedData(result.organizedData);
-      toast({ title: 'Processamento manual funcionou!' });
-    } catch (error: any) {
-      console.error('❌ Teste manual falhou:', error);
-      toast({ title: `Teste manual falhou: ${error.message}`, variant: 'destructive' });
-    } finally {
-      setIsOrganizing(false);
-    }
-  };
-
-  const handleTestAI = async () => {
-    const apiKey = localStorage.getItem("gemini_api_key");
-    if (!apiKey) {
-      toast({ title: 'Configure a API Key primeiro!', variant: 'destructive' });
-      return;
-    }
+    console.log('📊 Dados antes do teste:', stagedData.length);
     
     try {
       setIsOrganizing(true);
-      const result = await organizeLogisticsWithAI({ 
-        logisticsData: stagedData.slice(0, 2),
+      const result = await organizeLogistics({ 
+        logisticsData: stagedData, // TODOS os dados
         apiKey 
       });
-      console.log('✅ Teste IA passou:', result);
+      
+      console.log('✅ Teste corrigido:', result.organizedData.length, 'itens');
+      toast({
+        title: "Teste Concluído!",
+        description: `Entrada: ${stagedData.length} → Saída: ${result.organizedData.length} itens.`
+      });
+      
+      // Atualizar os dados com o resultado
       setStagedData(result.organizedData);
-      toast({ title: 'IA funcionou!' });
+      
     } catch (error: any) {
-      console.error('❌ Teste IA falhou:', error);
-      toast({ title: `Teste IA falhou: ${error.message}`, variant: 'destructive' });
+      console.error('❌ Teste corrigido falhou:', error);
+      toast({ title: `Teste falhou: ${error.message}`, variant: "destructive" });
     } finally {
       setIsOrganizing(false);
     }
@@ -801,18 +785,16 @@ export default function LogisticaPage() {
           )}
         </Card>
         
-        {/* BOTÕES DE TESTE - REMOVER DEPOIS */}
-        <div className="flex gap-2 p-4 bg-yellow-50 border border-yellow-200 rounded">
-          <Button onClick={handleTestBasic} size="sm" variant="outline">
-            🧪 Teste Básico
-          </Button>
-          <Button onClick={handleTestManual} size="sm" variant="outline">
-            🔧 Teste Manual
-          </Button>
-          <Button onClick={handleTestAI} size="sm" variant="outline">
-            🤖 Teste IA
-          </Button>
-        </div>
+        {stagedData.length > 0 && (
+          <div className="flex gap-2 p-4 bg-blue-50 border border-blue-200 rounded">
+            <Button onClick={handleDebugLoss} size="sm" variant="outline">
+              🔍 Debug Perda
+            </Button>
+            <Button onClick={handleTestFixed} size="sm" variant="default">
+              ✅ Teste Corrigido
+            </Button>
+          </div>
+        )}
 
         <DetailedSalesHistoryTable data={groupedForView} columns={columns} />
       </main>
