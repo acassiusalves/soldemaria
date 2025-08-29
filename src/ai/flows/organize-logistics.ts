@@ -7,10 +7,9 @@
  * - OrganizeLogisticsOutput - The return type for the organizeLogistics function.
  */
 
-import { ai } from '@/ai/genkit';
 import { VendaDetalhada } from '@/lib/data';
 import { googleAI } from '@genkit-ai/googleai';
-import { z } from 'genkit';
+import { genkit, z } from 'genkit';
 
 const LogisticsEntrySchema = z.object({
   id: z.string().describe('The unique identifier for the entry. This MUST be returned unmodified.'),
@@ -95,7 +94,7 @@ export async function organizeLogistics(input: OrganizeLogisticsInput): Promise<
 }
 
 
-const prompt = ai.definePrompt({
+const prompt = genkit.definePrompt({
   name: 'organizeLogisticsPrompt',
   input: { schema: z.object({ logisticsData: z.array(z.object({ id: z.string(), logistica: z.string().optional() })) }) },
   output: { schema: OrganizeLogisticsOutputSchema },
@@ -117,7 +116,7 @@ Data to analyze:
 \`\`\``,
 });
 
-const organizeLogisticsFlow = ai.defineFlow(
+const organizeLogisticsFlow = genkit.defineFlow(
   {
     name: 'organizeLogisticsFlow',
     inputSchema: z.object({ 
@@ -127,7 +126,7 @@ const organizeLogisticsFlow = ai.defineFlow(
     outputSchema: OrganizeLogisticsOutputSchema,
   },
   async (input) => {
-    const customAI = ai.configure({
+    const customAI = genkit({
       plugins: [googleAI({ apiKey: input.apiKey })],
     });
 
