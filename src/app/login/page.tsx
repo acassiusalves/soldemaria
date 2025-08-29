@@ -1,0 +1,135 @@
+
+"use client";
+
+import * as React from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, User } from "firebase/auth";
+import { db } from "@/lib/firebase"; // Make sure db is initialized
+import { Logo } from "@/components/icons";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { useToast } from "@/hooks/use-toast";
+import { Loader2 } from "lucide-react";
+
+export default function LoginPage() {
+  const [email, setEmail] = React.useState("");
+  const [password, setPassword] = React.useState("");
+  const [isLoading, setIsLoading] = React.useState(true);
+  const [isLoggingIn, setIsLoggingIn] = React.useState(false);
+  const router = useRouter();
+  const { toast } = useToast();
+  const auth = getAuth();
+
+  React.useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        router.replace("/"); // Redirect to dashboard if already logged in
+      } else {
+        setIsLoading(false); // Only show page when auth state is resolved and no user
+      }
+    });
+
+    return () => unsubscribe();
+  }, [auth, router]);
+
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email || !password) {
+      toast({
+        title: "Campos obrigatórios",
+        description: "Por favor, preencha o e-mail e a senha.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsLoggingIn(true);
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+      router.push("/");
+    } catch (error: any) {
+      console.error("Erro de login:", error);
+      let description = "Ocorreu um erro ao tentar fazer login. Tente novamente.";
+      if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+        description = "Credenciais inválidas. Verifique seu e-mail e senha.";
+      }
+      toast({
+        title: "Falha no Login",
+        description,
+        variant: "destructive",
+      });
+    } finally {
+        setIsLoggingIn(false);
+    }
+  };
+
+  if (isLoading) {
+    return (
+        <div className="flex min-h-screen w-full flex-col items-center justify-center">
+            <Loader2 className="h-10 w-10 animate-spin text-primary" />
+        </div>
+    );
+  }
+
+  return (
+    <div className="flex min-h-screen w-full flex-col items-center justify-center bg-muted/40">
+       <div className="mb-8 flex items-center gap-4 text-center">
+            <Logo className="size-12 text-primary" />
+            <div>
+                <h1 className="text-3xl font-headline font-bold">Visão de Vendas</h1>
+                <p className="text-muted-foreground">Bem-vindo de volta!</p>
+            </div>
+        </div>
+      <Card className="w-full max-w-sm">
+        <CardHeader>
+          <CardTitle className="text-2xl font-headline">Login</CardTitle>
+          <CardDescription>
+            Entre com suas credenciais para acessar o painel.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleLogin} className="grid gap-4">
+            <div className="grid gap-2">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                type="email"
+                placeholder="seu@email.com"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                disabled={isLoggingIn}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="password">Senha</Label>
+              <Input
+                id="password"
+                type="password"
+                required
+                placeholder="********"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                disabled={isLoggingIn}
+              />
+            </div>
+            <Button type="submit" className="w-full" disabled={isLoggingIn}>
+               {isLoggingIn && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Entrar
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}

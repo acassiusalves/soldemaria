@@ -1,11 +1,15 @@
 
+
 "use client";
 
 import * as React from "react";
 import Link from "next/link";
+import { format, parse, parseISO, endOfDay, isValid } from "date-fns";
+import type { DateRange } from "react-day-picker";
 import {
   AlertTriangle,
   Box,
+  Calendar as CalendarIcon,
   LayoutDashboard,
   LogOut,
   Save,
@@ -31,7 +35,11 @@ import {
   getDocsFromServer,
 } from "firebase/firestore";
 import { motion } from "framer-motion";
+import { getAuth } from "firebase/auth";
+import { useRouter } from "next/navigation";
 
+
+import { cn } from "@/lib/utils";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -45,6 +53,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
 import {
   Card,
   CardContent,
@@ -60,6 +69,11 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import DetailedSalesHistoryTable, { ColumnDef } from "@/components/detailed-sales-history-table";
 import type { VendaDetalhada } from "@/lib/data";
 import { SupportDataDialog } from "@/components/support-data-dialog";
@@ -67,9 +81,36 @@ import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
 import { Progress } from "@/components/ui/progress";
 import { Logo } from "@/components/icons";
-import { organizeCosts } from "@/ai/flows/organize-costs";
+import { organizeLogistics } from "@/ai/flows/organize-logistics";
 
-/* ========== helpers de normalização ========== */
+/* ========== helpers de datas e normalização ========== */
+const toDate = (value: unknown): Date | null => {
+  if (!value) return null;
+  if (value instanceof Date && isValid(value)) return value;
+  if (value instanceof Timestamp) return value.toDate();
+
+  if (typeof value === "number") {
+    if (value > 20000 && value < 60000) {
+      const excelEpoch = new Date(Date.UTC(1899, 11, 30));
+      const d = new Date(excelEpoch.getTime() + value * 86400000);
+      return isValid(d) ? d : null;
+    }
+    return null;
+  }
+
+  if (typeof value === "string") {
+    const s = value.trim();
+    const iso = parseISO(s.replace(/\//g, "-"));
+    if (isValid(iso)) return iso;
+    const br = parse(s, "dd/MM/yyyy", new Date());
+    if (isValid(br)) return br;
+    const ymdSlash = parse(s, "yyyy/MM/dd", new Date());
+    if (isValid(ymdSlash)) return ymdSlash;
+  }
+
+  return null;
+};
+
 export const normalizeHeader = (s: string) =>
   String(s)
     .toLowerCase()
@@ -79,10 +120,27 @@ export const normalizeHeader = (s: string) =>
     .replace(/\s+/g, " ")
     .trim();
 
+/* ========== labels para colunas dinâmicas ========== */
+const columnLabels: Record<string, string> = {
+  codigo: 'Código',
+  logistica: 'Logística',
+  entregador: 'Entregador',
+  valor: 'Valor',
+};
+const getLabel = (key: string) => columnLabels[key] || key;
+
+/* ========== mapeamento por cabeçalho conhecido ========== */
+const headerMappingNormalized: Record<string, string> = {
+  "codigo": "codigo",
+  "logistica": "logistica",
+  "entregador": "entregador",
+  "valor": "valor",
+};
+
 /* ========== limpadores ========= */
 const isDateLike = (s: string) =>
-  /^\d{4}[-\/]\d{2}[-\/]\d{2}$/.test(s) ||
-  /^\d{2}[-\/]\d{2}[-\/]\d{4}$/.test(s);
+  /^\d{4}[-/]\d{2}[-/]\d{2}$/.test(s) ||
+  /^\d{2}[-/]\d{2}[-/]\d{4}$/.test(s);
 
 const cleanNumericValue = (value: any): number | string => {
   if (typeof value === "number") return value;
@@ -176,6 +234,10 @@ const mapRowToSystem = (row: Record<string, any>) => {
     else out[normalized.replace(/\s+/g, "_")] = val; // fallback snake_case
   }
   if (out.codigo != null) out.codigo = normCode(out.codigo);
+  if (out.data != null) {
+    const d = toDate(out.data);
+    if (d) out.data = d; else delete out.data;
+  }
   return out;
 };
 
@@ -212,44 +274,32 @@ const MotionCard = motion(Card);
 type IncomingDataset = { rows: any[]; fileName: string; assocKey?: string };
 const API_KEY_STORAGE_KEY = "gemini_api_key";
 
-// Colunas fixas para a tela de Custos
-const fixedColumns: ColumnDef[] = [
-    { id: "codigo", label: "Código", isSortable: true },
-    { id: "modo_de_pagamento", label: "Modo de Pagamento", isSortable: true },
-    { id: "tipo_pagamento", label: "Tipo de Pagamento", isSortable: true },
-    { id: "parcela", label: "Parcela", isSortable: true },
-    { id: "valor", label: "Valor", isSortable: true, className: "text-right" },
-    { id: "instituicao_financeira", label: "Instituição Financeira", isSortable: true },
-];
 
-/* ========== mapeamento por cabeçalho conhecido ========== */
-const headerMappingNormalized: Record<string, string> = {
-  "codigo": "codigo",
-  "modo de pagamento": "modo_de_pagamento",
-  "valor": "valor",
-  "instituicao financeira": "instituicao_financeira",
-  "tipo de pagamento": "tipo_pagamento",
-  "parcelas": "parcela",
-  "mov_estoque": "codigo",
-  "valor_da_parcela": "valor",
-  "tipo": "tipo_pagamento",
-  "parcelas1": "parcela"
-};
-
-export default function CustosVendasPage() {
-  const [custosData, setCustosData] = React.useState<VendaDetalhada[]>([]);
+export default function LogisticaPage() {
+  const [logisticaData, setLogisticaData] = React.useState<VendaDetalhada[]>([]);
   const [stagedData, setStagedData] = React.useState<VendaDetalhada[]>([]);
   const [stagedFileNames, setStagedFileNames] = React.useState<string[]>([]);
+  const [columns, setColumns] = React.useState<ColumnDef[]>([]);
   const [uploadedFileNames, setUploadedFileNames] = React.useState<string[]>([]);
   const { toast } = useToast();
 
+  const [date, setDate] = React.useState<DateRange | undefined>(undefined);
   const [isSaving, setIsSaving] = React.useState(false);
   const [isOrganizing, setIsOrganizing] = React.useState(false);
   const [saveProgress, setSaveProgress] = React.useState(0);
+  const router = useRouter();
+  const auth = getAuth();
+
+
+    const handleLogout = async () => {
+    await auth.signOut();
+    router.push('/login');
+  };
+
 
   /* ======= Realtime listeners ======= */
   React.useEffect(() => {
-    const qy = query(collection(db, "custos"));
+    const qy = query(collection(db, "logistica"));
     const unsub = onSnapshot(qy, (snapshot) => {
       if (snapshot.metadata.hasPendingWrites) return;
       let newData: VendaDetalhada[] = [];
@@ -261,7 +311,7 @@ export default function CustosVendasPage() {
           modifiedData.push({ ...change.doc.data(), id: change.doc.id } as VendaDetalhada);
       });
       if (newData.length || modifiedData.length) {
-        setCustosData((curr) => {
+        setLogisticaData((curr) => {
           const map = new Map(curr.map((s) => [s.id, s]));
           newData.forEach((s) => map.set(s.id, s));
           modifiedData.forEach((s) => map.set(s.id, s));
@@ -270,14 +320,15 @@ export default function CustosVendasPage() {
       }
       snapshot.docChanges().forEach((change) => {
         if (change.type === "removed") {
-          setCustosData((curr) => curr.filter((s) => s.id !== change.doc.id));
+          setLogisticaData((curr) => curr.filter((s) => s.id !== change.doc.id));
         }
       });
     });
 
-    const metaUnsub = onSnapshot(doc(db, "metadata", "custos"), (docSnap) => {
+    const metaUnsub = onSnapshot(doc(db, "metadata", "logistica"), (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
+        setColumns(data.columns || []);
         setUploadedFileNames(data.uploadedFileNames || []);
       }
     });
@@ -287,23 +338,49 @@ export default function CustosVendasPage() {
 
   /* ======= Mescla banco + staged (staged tem prioridade) ======= */
   const allData = React.useMemo(() => {
-    const map = new Map(custosData.map(s => [s.id, s]));
+    const map = new Map(logisticaData.map(s => [s.id, s]));
     stagedData.forEach(s => {
         const existing = map.get(s.id) || {};
         map.set(s.id, { ...existing, ...s });
     });
     return Array.from(map.values());
-  }, [custosData, stagedData]);
+  }, [logisticaData, stagedData]);
 
+  /* ======= Filtro por período ======= */
+  const filteredData = React.useMemo(() => {
+    if (!date?.from) return allData;
+    const fromDate = date.from;
+    const toDate = date.to ? endOfDay(date.to) : endOfDay(fromDate);
+    return allData.filter((item) => {
+      const itemDate = toDate(item.data);
+      return itemDate && itemDate >= fromDate && itemDate <= toDate;
+    });
+  }, [date, allData]);
 
-  /* ======= DADOS SIMPLES SEM AGRUPAMENTO ======= */
-    const groupedForView = React.useMemo(() => {
-    // Para custos, não agrupamos - exibimos lista simples
-    return allData.map(row => ({
-        ...row,
-        subRows: [] // array vazio para compatibilidade com a tabela
-    }));
-    }, [allData]);
+  /* ======= AGRUPAMENTO por código + subRows ======= */
+  const groupedForView = React.useMemo(() => {
+    const groups = new Map<string, any>();
+    for (const row of filteredData) {
+      const code = normCode((row as any).codigo);
+      if (!code) continue;
+
+      if (!groups.has(code)) {
+        groups.set(code, { header: { ...row, subRows: [] as any[] } });
+      }
+      const g = groups.get(code);
+
+      if (isDetailRow(row)) g.header.subRows.push(row); // detalhe
+      g.header = mergeForHeader(g.header, row);         // enriquece header
+    }
+
+    for (const g of groups.values()) {
+      g.header.subRows.sort((a: any, b: any) =>
+        (toDate(a.data)?.getTime() ?? 0) - (toDate(b.data)?.getTime() ?? 0)
+      );
+    }
+
+    return Array.from(groups.values()).map(g => g.header);
+  }, [filteredData]);
 
   /* ======= UPLOAD / PROCESSAMENTO ======= */
   const handleDataUpload = async (datasets: IncomingDataset[]) => {
@@ -349,7 +426,7 @@ export default function CustosVendasPage() {
     }
     setIsOrganizing(true);
     try {
-      const result = await organizeCosts({ costsData: stagedData, apiKey });
+      const result = await organizeLogistics({ logisticsData: stagedData, apiKey });
       if (result.organizedData) {
         setStagedData(result.organizedData);
         toast({ title: "Sucesso!", description: "Os dados foram organizados." });
@@ -386,8 +463,8 @@ export default function CustosVendasPage() {
         const batch = writeBatch(db);
 
         chunk.forEach((item) => {
-          const docId = doc(collection(db, "custos")).id;
-          const custoRef = doc(db, "custos", docId);
+          const docId = doc(collection(db, "logistica")).id;
+          const logisticaRef = doc(db, "logistica", docId);
           const { id, ...payload } = item;
           
           payload.id = docId;
@@ -395,7 +472,7 @@ export default function CustosVendasPage() {
           if (payload.data instanceof Date) payload.data = Timestamp.fromDate(payload.data);
           if (payload.uploadTimestamp instanceof Date) payload.uploadTimestamp = Timestamp.fromDate(payload.uploadTimestamp);
 
-          batch.set(custoRef, payload);
+          batch.set(logisticaRef, payload);
         });
 
         await batch.commit();
@@ -403,10 +480,12 @@ export default function CustosVendasPage() {
       }
 
       // Optimistic update
-      setCustosData(prev => {
+      setLogisticaData(prev => {
           const map = new Map(prev.map(s => [s.id, s]));
           dataToSave.forEach(s => {
               const newRecord = { ...s };
+              // We assign a real ID after saving, so this might be tricky
+              // For now, let's just add them, Firestore listener will sync eventually
               if (!map.has(s.id)) {
                   map.set(s.id, newRecord);
               }
@@ -414,9 +493,19 @@ export default function CustosVendasPage() {
           return Array.from(map.values());
       });
 
+
+      const allKeys = new Set<string>();
+      dataToSave.forEach(row => Object.keys(row).forEach(k => allKeys.add(k)));
+      logisticaData.forEach(row => Object.keys(row).forEach(k => allKeys.add(k)));
+      if (!allKeys.has("data") && dataToSave.some(r => (r as any).data)) allKeys.add("data");
+
+      const current = new Map(columns.map(c => [c.id, c]));
+      allKeys.forEach(key => { if (!current.has(key)) current.set(key, { id: key, label: getLabel(key), isSortable: true }); });
+      const newColumns = Array.from(current.values());
+
       const newUploadedFileNames = [...new Set([...uploadedFileNames, ...stagedFileNames])];
-      const metaRef = doc(db, "metadata", "custos");
-      await setDoc(metaRef, { columns: fixedColumns, uploadedFileNames: newUploadedFileNames }, { merge: true });
+      const metaRef = doc(db, "metadata", "logistica");
+      await setDoc(metaRef, { columns: newColumns, uploadedFileNames: newUploadedFileNames }, { merge: true });
 
       setStagedData([]);
       setStagedFileNames([]);
@@ -441,7 +530,7 @@ export default function CustosVendasPage() {
       return;
     }
     try {
-      const metaRef = doc(db, "metadata", "custos");
+      const metaRef = doc(db, "metadata", "logistica");
       await updateDoc(metaRef, { uploadedFileNames: arrayRemove(fileName) });
       _t({ title: "Removido do Histórico", description: `O arquivo ${fileName} foi removido da lista.` });
     } catch (e) {
@@ -458,11 +547,11 @@ export default function CustosVendasPage() {
 
   const handleClearAllData = async () => {
     try {
-      const custosQuery = query(collection(db, "custos"));
-      const custosSnapshot = await getDocsFromServer(custosQuery);
-      if (custosSnapshot.empty) { _t({ title: "Banco já está limpo" }); return; }
+      const logisticaQuery = query(collection(db, "logistica"));
+      const logisticaSnapshot = await getDocsFromServer(logisticaQuery);
+      if (logisticaSnapshot.empty) { _t({ title: "Banco já está limpo" }); return; }
 
-      const docsToDelete = custosSnapshot.docs;
+      const docsToDelete = logisticaSnapshot.docs;
       for (let i = 0; i < docsToDelete.length; i += 450) {
         const chunk = docsToDelete.slice(i, i + 450);
         const batch = writeBatch(db);
@@ -470,11 +559,11 @@ export default function CustosVendasPage() {
         await batch.commit();
       }
 
-      const metaRef = doc(db, "metadata", "custos");
+      const metaRef = doc(db, "metadata", "logistica");
       await setDoc(metaRef, { uploadedFileNames: [], columns: [] }, { merge: true });
 
-      setCustosData([]);
-      _t({ title: "Limpeza Concluída!", description: "Todos os dados de custos foram apagados do banco de dados." });
+      setLogisticaData([]);
+      _t({ title: "Limpeza Concluída!", description: "Todos os dados de logística foram apagados do banco de dados." });
     } catch (error) {
       console.error("Error clearing all data:", error);
       _t({ title: "Erro na Limpeza", description: "Não foi possível apagar todos os dados. Verifique o console.", variant: "destructive" });
@@ -506,13 +595,13 @@ export default function CustosVendasPage() {
           </Link>
           <Link
             href="/logistica"
-            className="text-muted-foreground transition-colors hover:text-foreground"
+            className="text-foreground transition-colors hover:text-foreground"
           >
             Logística
           </Link>
            <DropdownMenu>
             <DropdownMenuTrigger asChild>
-               <Button variant="ghost" className="flex items-center gap-1 text-foreground transition-colors hover:text-foreground data-[state=open]:bg-accent px-3">
+               <Button variant="ghost" className="flex items-center gap-1 text-muted-foreground transition-colors hover:text-foreground data-[state=open]:bg-accent px-3">
                 Taxas
                 <ChevronDown className="h-4 w-4" />
               </Button>
@@ -547,12 +636,15 @@ export default function CustosVendasPage() {
                   <span className="sr-only">Toggle user menu</span>
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
+             <DropdownMenuContent align="end">
                 <DropdownMenuLabel>Minha Conta</DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem>Configurações</DropdownMenuItem>
+                <DropdownMenuItem disabled>Configurações</DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem>Sair</DropdownMenuItem>
+                <DropdownMenuItem onClick={handleLogout}>
+                  <LogOut className="mr-2 h-4 w-4" />
+                  Sair
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
         </div>
@@ -563,8 +655,8 @@ export default function CustosVendasPage() {
           <CardHeader>
             <div className="flex justify-between items-start">
                 <div>
-                  <CardTitle className="font-headline text-h3">Custos sobre Vendas</CardTitle>
-                  <CardDescription>Carregue e organize suas planilhas de custos.</CardDescription>
+                  <CardTitle className="font-headline text-h3">Seleção de Período</CardTitle>
+                  <CardDescription>Filtre os dados de logística que você deseja analisar.</CardDescription>
                 </div>
                  <div className="flex items-center gap-2">
                     <SupportDataDialog
@@ -615,7 +707,7 @@ export default function CustosVendasPage() {
                       )}
                       {isSaving ? "Salvando..." : `Salvar no Banco ${stagedData.length > 0 ? `(${stagedData.length})` : ""}`}
                     </Button>
-                     {custosData.length > 0 && uploadedFileNames.length === 0 && (
+                     {logisticaData.length > 0 && uploadedFileNames.length === 0 && (
                         <AlertDialog>
                             <AlertDialogTrigger asChild>
                                 <Button variant="destructive">
@@ -628,7 +720,7 @@ export default function CustosVendasPage() {
                                     <AlertDialogTitle>Você tem certeza absoluta?</AlertDialogTitle>
                                     <AlertDialogDescription>
                                         Esta ação não pode ser desfeita. Isso irá apagar permanentemente
-                                        TODOS os dados de custos do seu banco de dados.
+                                        TODOS os dados de logística do seu banco de dados.
                                     </AlertDialogDescription>
                                 </AlertDialogHeader>
                                 <AlertDialogFooter>
@@ -643,17 +735,36 @@ export default function CustosVendasPage() {
                  </div>
               </div>
           </CardHeader>
+          <CardContent>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  id="date"
+                  variant={"outline"}
+                  className={cn("w-[300px] justify-start text-left font-normal", !date && "text-muted-foreground")}
+                >
+                  <CalendarIcon className="mr-2 h-4 w-4" />
+                  {date?.from ? (
+                    date.to ? (<>{format(date.from, "dd/MM/y")} - {format(date.to, "dd/MM/y")}</>) : (format(date.from, "dd/MM/y"))
+                  ) : (<span>Selecione uma data</span>)}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <Calendar initialFocus mode="range" defaultMonth={date?.from} selected={date} onSelect={setDate} numberOfMonths={2} />
+              </PopoverContent>
+            </Popover>
+          </CardContent>
           {isSaving && (
-            <CardContent className="pb-4">
+            <div className="px-6 pb-4">
               <Progress value={saveProgress} className="w-full" />
               <p className="text-sm text-muted-foreground mt-2 text-center">
                 Salvando {stagedData.length} registros. Isso pode levar um momento...
               </p>
-            </CardContent>
+            </div>
           )}
         </Card>
 
-        <DetailedSalesHistoryTable data={groupedForView} columns={fixedColumns} tableTitle="Relatório de Custos" />
+        <DetailedSalesHistoryTable data={groupedForView} columns={columns} />
       </main>
     </div>
   );

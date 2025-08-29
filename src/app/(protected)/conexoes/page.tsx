@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import * as React from "react";
@@ -17,6 +18,9 @@ import {
   CheckCircle,
   ChevronDown,
 } from "lucide-react";
+import { getAuth } from "firebase/auth";
+import { useRouter } from "next/navigation";
+
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -48,6 +52,9 @@ export default function ConexoesPage() {
   const [showApiKey, setShowApiKey] = React.useState(false);
   const [isKeyValid, setIsKeyValid] = React.useState<boolean | null>(null);
   const { toast } = useToast();
+  const router = useRouter();
+  const auth = getAuth();
+
 
   React.useEffect(() => {
     const storedKey = localStorage.getItem(API_KEY_STORAGE_KEY);
@@ -56,6 +63,11 @@ export default function ConexoesPage() {
         setIsKeyValid(true); // Assume stored key is valid
     }
   }, []);
+
+    const handleLogout = async () => {
+    await auth.signOut();
+    router.push('/login');
+  };
 
 
   const handleSaveApiKey = () => {
@@ -150,12 +162,15 @@ export default function ConexoesPage() {
                   <span className="sr-only">Toggle user menu</span>
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
+             <DropdownMenuContent align="end">
                 <DropdownMenuLabel>Minha Conta</DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem>Configurações</DropdownMenuItem>
+                <DropdownMenuItem disabled>Configurações</DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem>Sair</DropdownMenuItem>
+                <DropdownMenuItem onClick={handleLogout}>
+                  <LogOut className="mr-2 h-4 w-4" />
+                  Sair
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
         </div>

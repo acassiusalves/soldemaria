@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import * as React from "react";
@@ -17,7 +18,6 @@ import {
   Trash2,
   Loader2,
   Percent,
-  Wand2,
   Plug,
   ChevronDown,
 } from "lucide-react";
@@ -34,6 +34,9 @@ import {
   getDocsFromServer,
 } from "firebase/firestore";
 import { motion } from "framer-motion";
+import { getAuth } from "firebase/auth";
+import { useRouter } from "next/navigation";
+
 
 import { cn } from "@/lib/utils";
 import {
@@ -77,7 +80,6 @@ import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
 import { Progress } from "@/components/ui/progress";
 import { Logo } from "@/components/icons";
-import { organizeLogistics } from "@/ai/flows/organize-logistics";
 
 /* ========== helpers de datas e normalização ========== */
 const toDate = (value: unknown): Date | null => {
@@ -118,19 +120,51 @@ export const normalizeHeader = (s: string) =>
 
 /* ========== labels para colunas dinâmicas ========== */
 const columnLabels: Record<string, string> = {
+  data: 'Data',
   codigo: 'Código',
+  tipo: 'Tipo',
+  nomeCliente: 'Cliente',
+  vendedor: 'Vendedor',
+  cidade: 'Cidade',
+  origem: 'Origem',
+  fidelizacao: 'Fidelização',
   logistica: 'Logística',
+  item: 'Item',
+  descricao: 'Descrição',
+  quantidade: 'Qtd.',
+  custoUnitario: 'Custo Unitário',
+  valorUnitario: 'Valor Unitário',
+  final: 'Valor Final',
+  custoFrete: 'Valor Entrega',
+  valorCredito: 'Valor Crédito',
+  valorDescontos: 'Valor Descontos',
   entregador: 'Entregador',
   valor: 'Valor',
+  origemCliente: 'Origem Cliente',
 };
 const getLabel = (key: string) => columnLabels[key] || key;
 
 /* ========== mapeamento por cabeçalho conhecido ========== */
 const headerMappingNormalized: Record<string, string> = {
+  "data": "data",
   "codigo": "codigo",
+  "tipo": "tipo",
+  "cliente": "nomeCliente",
+  "vendedor": "vendedor",
+  "cidade": "cidade",
+  "origem": "origem",
+  "fidelizacao": "fidelizacao",
   "logistica": "logistica",
-  "entregador": "entregador",
-  "valor": "valor",
+  "item": "item",
+  "descricao": "descricao",
+  "qtd": "quantidade",
+  "custo unitario": "custoUnitario",
+  "valor unitario": "valorUnitario",
+  "valor final": "final",
+  "valor entrega": "custoFrete",
+  "valor credito": "valorCredito",
+  "valor descontos": "valorDescontos",
+  "origem cliente": "origemCliente",
 };
 
 /* ========== limpadores ========= */
@@ -203,6 +237,20 @@ const isEmptyCell = (v: any) => {
   return false;
 };
 
+const mergeNonEmpty = (existing: Record<string, any>, incoming: Record<string, any>) => {
+  const out: Record<string, any> = { ...existing };
+  for (const k of Object.keys(incoming)) {
+    const v = incoming[k];
+    if (k === "data") {
+      const d = toDate(v);
+      if (d) out.data = d;
+      continue;
+    }
+    if (!isEmptyCell(v)) out[k] = v;
+  }
+  return out;
+};
+
 /* ========== reconhecer linhas de detalhe ========== */
 const ITEM_KEYS = [
   "item","descricao","quantidade","custoUnitario","valorUnitario",
@@ -237,6 +285,28 @@ const mapRowToSystem = (row: Record<string, any>) => {
   return out;
 };
 
+/* ========== extrair chave (código) de uma linha, seguindo a assocKey ========= */
+const pickCodeFromRow = (
+  rawRow: Record<string, any>,
+  mappedRow: Record<string, any>,
+  assocKey?: string
+) => {
+  if (assocKey) {
+    if (rawRow[assocKey] != null) return normCode(rawRow[assocKey]);
+    const assocNorm = normalizeHeader(assocKey).replace(/\s+/g, "_");
+    if (mappedRow[assocNorm] != null) return normCode(mappedRow[assocNorm]);
+    const resolved = resolveSystemKey(normalizeHeader(assocKey));
+    if (resolved === "codigo" && mappedRow.codigo != null) return normCode(mappedRow.codigo);
+  }
+  if (mappedRow.codigo != null) return normCode(mappedRow.codigo);
+  const candidates = ["codigo","cod","documento","nf","numero_documento","mov_estoque","movestoque", "pedido"];
+  for (const c of candidates) {
+    if (mappedRow[c] != null) return normCode(mappedRow[c]);
+    if (rawRow[c] != null) return normCode(rawRow[c]);
+  }
+  return "";
+};
+
 /* ========== agrega valores para compor o cabeçalho do pedido ========== */
 const mergeForHeader = (base: any, row: any) => {
   const out = { ...base };
@@ -244,7 +314,7 @@ const mergeForHeader = (base: any, row: any) => {
   // preenche primeiro valor não-vazio para campos do header
   const headerFields = [
     "data","codigo","tipo","nomeCliente","vendedor","cidade",
-    "origem","logistica","final","custoFrete","mov_estoque"
+    "origem","logistica","final","custoFrete","mov_estoque", "origemCliente"
   ];
   for (const k of headerFields) {
     if (isEmptyCell(out[k]) && !isEmptyCell(row[k])) out[k] = row[k];
@@ -259,6 +329,8 @@ const mergeForHeader = (base: any, row: any) => {
       modo: row.modo_de_pagamento ?? row.modoPagamento2,
       bandeira: row.bandeira1 ?? row.bandeira2,
       instituicao: row.instituicao_financeira,
+      tipo_pagamento: row.tipo_pagamento,
+      parcela: row.parcela,
     });
   }
 
@@ -268,12 +340,12 @@ const mergeForHeader = (base: any, row: any) => {
 const MotionCard = motion(Card);
 
 type IncomingDataset = { rows: any[]; fileName: string; assocKey?: string };
-const API_KEY_STORAGE_KEY = "gemini_api_key";
 
-
-export default function LogisticaPage() {
-  const [logisticaData, setLogisticaData] = React.useState<VendaDetalhada[]>([]);
-  const [stagedData, setStagedData] = React.useState<VendaDetalhada[]>([]);
+export default function VendasPage() {
+  const [salesFromDb, setSalesFromDb] = React.useState<VendaDetalhada[]>([]);
+  const [logisticsFromDb, setLogisticsFromDb] = React.useState<VendaDetalhada[]>([]);
+  const [costsFromDb, setCostsFromDb] = React.useState<VendaDetalhada[]>([]);
+  const [stagedSales, setStagedSales] = React.useState<VendaDetalhada[]>([]);
   const [stagedFileNames, setStagedFileNames] = React.useState<string[]>([]);
   const [columns, setColumns] = React.useState<ColumnDef[]>([]);
   const [uploadedFileNames, setUploadedFileNames] = React.useState<string[]>([]);
@@ -281,38 +353,61 @@ export default function LogisticaPage() {
 
   const [date, setDate] = React.useState<DateRange | undefined>(undefined);
   const [isSaving, setIsSaving] = React.useState(false);
-  const [isOrganizing, setIsOrganizing] = React.useState(false);
   const [saveProgress, setSaveProgress] = React.useState(0);
+  const router = useRouter();
+  const auth = getAuth();
+
+
+    const handleLogout = async () => {
+    await auth.signOut();
+    router.push('/login');
+  };
+
 
   /* ======= Realtime listeners ======= */
   React.useEffect(() => {
-    const qy = query(collection(db, "logistica"));
-    const unsub = onSnapshot(qy, (snapshot) => {
+    // Listener for sales
+    const salesQuery = query(collection(db, "vendas"));
+    const salesUnsub = onSnapshot(salesQuery, (snapshot) => {
       if (snapshot.metadata.hasPendingWrites) return;
-      let newData: VendaDetalhada[] = [];
-      let modifiedData: VendaDetalhada[] = [];
+      let newSales: VendaDetalhada[] = [];
+      let modifiedSales: VendaDetalhada[] = [];
       snapshot.docChanges().forEach((change) => {
-        if (change.type === "added")
-          newData.push({ ...change.doc.data(), id: change.doc.id } as VendaDetalhada);
-        if (change.type === "modified")
-          modifiedData.push({ ...change.doc.data(), id: change.doc.id } as VendaDetalhada);
+        const saleData = { ...change.doc.data(), id: change.doc.id } as VendaDetalhada;
+        if (change.type === "added") newSales.push(saleData);
+        if (change.type === "modified") modifiedSales.push(saleData);
       });
-      if (newData.length || modifiedData.length) {
-        setLogisticaData((curr) => {
+      if (newSales.length || modifiedSales.length) {
+        setSalesFromDb((curr) => {
           const map = new Map(curr.map((s) => [s.id, s]));
-          newData.forEach((s) => map.set(s.id, s));
-          modifiedData.forEach((s) => map.set(s.id, s));
+          newSales.forEach((s) => map.set(s.id, s));
+          modifiedSales.forEach((s) => map.set(s.id, s));
           return Array.from(map.values());
         });
       }
       snapshot.docChanges().forEach((change) => {
         if (change.type === "removed") {
-          setLogisticaData((curr) => curr.filter((s) => s.id !== change.doc.id));
+          setSalesFromDb((curr) => curr.filter((s) => s.id !== change.doc.id));
         }
       });
     });
 
-    const metaUnsub = onSnapshot(doc(db, "metadata", "logistica"), (docSnap) => {
+    // Listener for logistics
+    const logisticsQuery = query(collection(db, "logistica"));
+    const logisticsUnsub = onSnapshot(logisticsQuery, (snapshot) => {
+        if (snapshot.metadata.hasPendingWrites) return;
+        setLogisticsFromDb(snapshot.docs.map(doc => ({...doc.data(), id: doc.id} as VendaDetalhada)));
+    });
+
+    // Listener for costs
+    const costsQuery = query(collection(db, "custos"));
+    const costsUnsub = onSnapshot(costsQuery, (snapshot) => {
+        if (snapshot.metadata.hasPendingWrites) return;
+        setCostsFromDb(snapshot.docs.map(doc => ({...doc.data(), id: doc.id} as VendaDetalhada)));
+    });
+
+    // Listener for metadata
+    const metaUnsub = onSnapshot(doc(db, "metadata", "vendas"), (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
         setColumns(data.columns || []);
@@ -320,39 +415,82 @@ export default function LogisticaPage() {
       }
     });
 
-    return () => { unsub(); metaUnsub(); };
+    return () => { salesUnsub(); logisticsUnsub(); costsUnsub(); metaUnsub(); };
   }, []);
-
-  /* ======= Mescla banco + staged (staged tem prioridade) ======= */
-  const allData = React.useMemo(() => {
-    const map = new Map(logisticaData.map(s => [s.id, s]));
-    stagedData.forEach(s => {
-        const existing = map.get(s.id) || {};
-        map.set(s.id, { ...existing, ...s });
+  
+  /* ======= Mescla Vendas + Logistica + Custos + Staged ======= */
+  const allSales = React.useMemo(() => {
+    // Group logistics data by code for efficient lookup
+    const logisticsMap = new Map();
+    logisticsFromDb.forEach(log => {
+      const code = normCode((log as any).codigo);
+      if (code) {
+        const logisticsInfo = {
+          logistica: log.logistica,
+          entregador: (log as any).entregador,
+          valor: (log as any).valor,
+        };
+        if (!logisticsMap.has(code) || log.uploadTimestamp > logisticsMap.get(code).uploadTimestamp) {
+             logisticsMap.set(code, { ...logisticsInfo, uploadTimestamp: log.uploadTimestamp });
+        }
+      }
     });
-    return Array.from(map.values());
-  }, [logisticaData, stagedData]);
+      
+    // Group costs data by code
+    const costsMap = new Map<string, any[]>();
+    costsFromDb.forEach(cost => {
+        const code = normCode((cost as any).codigo);
+        if(code) {
+            if(!costsMap.has(code)) costsMap.set(code, []);
+            costsMap.get(code)!.push(cost);
+        }
+    });
+
+    // Merge DB sales with logistics and costs data
+    const mergedSales = salesFromDb.map(sale => {
+      const code = normCode((sale as any).codigo);
+      const finalSale = { ...sale };
+
+      if (code && logisticsMap.has(code)) {
+        Object.assign(finalSale, logisticsMap.get(code));
+      }
+      if (code && costsMap.has(code)) {
+        (finalSale as any).costs = costsMap.get(code);
+      }
+      return finalSale;
+    });
+
+    // Merge with staged sales
+    const salesMap = new Map(mergedSales.map(s => [s.id, s]));
+    stagedSales.forEach(s => {
+        const existing = salesMap.get(s.id) || {};
+        salesMap.set(s.id, { ...existing, ...s });
+    });
+    
+    return Array.from(salesMap.values());
+  }, [salesFromDb, logisticsFromDb, costsFromDb, stagedSales]);
+
 
   /* ======= Filtro por período ======= */
-  const filteredData = React.useMemo(() => {
-    if (!date?.from) return allData;
+  const filteredSales = React.useMemo(() => {
+    if (!date?.from) return allSales;
     const fromDate = date.from;
     const toDate = date.to ? endOfDay(date.to) : endOfDay(fromDate);
-    return allData.filter((item) => {
-      const itemDate = toDate(item.data);
-      return itemDate && itemDate >= fromDate && itemDate <= toDate;
+    return allSales.filter((sale) => {
+      const saleDate = toDate(sale.data);
+      return saleDate && saleDate >= fromDate && saleDate <= toDate;
     });
-  }, [date, allData]);
+  }, [date, allSales]);
 
   /* ======= AGRUPAMENTO por código + subRows ======= */
   const groupedForView = React.useMemo(() => {
     const groups = new Map<string, any>();
-    for (const row of filteredData) {
+    for (const row of filteredSales) {
       const code = normCode((row as any).codigo);
       if (!code) continue;
 
       if (!groups.has(code)) {
-        groups.set(code, { header: { ...row, subRows: [] as any[] } });
+        groups.set(code, { header: { ...row, subRows: [] as any[], costs: (row as any).costs || [] } });
       }
       const g = groups.get(code);
 
@@ -367,70 +505,88 @@ export default function LogisticaPage() {
     }
 
     return Array.from(groups.values()).map(g => g.header);
-  }, [filteredData]);
+  }, [filteredSales]);
 
-  /* ======= UPLOAD / PROCESSAMENTO ======= */
+  /* ======= UPLOAD / ASSOCIAÇÃO ======= */
   const handleDataUpload = async (datasets: IncomingDataset[]) => {
     if (!datasets || datasets.length === 0) return;
 
+    const dbByCode = new Map(
+      [...salesFromDb, ...logisticsFromDb, ...costsFromDb] // Combine all sources
+        .filter(s => (s as any).codigo != null)
+        .map(s => [normCode((s as any).codigo), s])
+    );
+
+
     const uploadTimestamp = Date.now();
+    const stagedUpdates = new Map<string, any>();
     const stagedInserts: any[] = [];
-    let processedCount = 0;
+
+    let updated = 0, notFound = 0, skippedNoKey = 0, inserted = 0;
 
     for (const ds of datasets) {
-      const { rows, fileName } = ds;
+      const { rows, fileName, assocKey } = ds;
       if (!rows?.length) continue;
 
       const mapped = rows.map(mapRowToSystem);
 
-      for (let i = 0; i < mapped.length; i++) {
+      console.log("[apoio] arquivo:", fileName);
+      console.log("[apoio] assocKey marcada:", assocKey);
+      console.log("[apoio] headers brutos:", Object.keys(rows[0] ?? {}));
+      console.log("[apoio] headers mapeados:", Object.keys(mapped[0] ?? {}));
+
+      for (let i = 0; i < rows.length; i++) {
+        const rawRow = rows[i];
         const mappedRow = mapped[i];
-        const docId = `staged-${uploadTimestamp}-${processedCount}`;
-        stagedInserts.push({ ...mappedRow, id: docId, sourceFile: fileName, uploadTimestamp: new Date(uploadTimestamp) });
-        processedCount++;
+
+        const code = pickCodeFromRow(rawRow, mappedRow, assocKey);
+        if (!code) { skippedNoKey++; continue; }
+
+        const fromDb = dbByCode.get(code);
+
+        if (fromDb) {
+          const merged = mergeNonEmpty(fromDb as any, { ...mappedRow, codigo: code });
+          merged.id = (fromDb as any).id;
+          merged.sourceFile = fileName;
+          merged.uploadTimestamp = new Date(uploadTimestamp);
+
+          stagedUpdates.set(merged.id, merged);
+          updated++;
+        } else {
+          // Upsert
+          const docId = `staged-${uploadTimestamp}-${inserted}`;
+          stagedInserts.push({ ...mappedRow, codigo: code, id: docId, sourceFile: fileName, uploadTimestamp: new Date(uploadTimestamp) });
+          inserted++;
+        }
       }
     }
 
-    setStagedData(prev => [...prev, ...stagedInserts]);
+    const stagedArray = [...Array.from(stagedUpdates.values()), ...stagedInserts];
+
+    setStagedSales(prev => [...prev, ...stagedArray]);
     setStagedFileNames(prev => [...new Set([...prev, ...datasets.map(d => d.fileName)])]);
 
     toast({
-      title: "Arquivos Prontos para Revisão",
-      description: `${processedCount} registro(s) adicionados à fila.`,
+      title: "Associação concluída",
+      description: [
+        `${updated} pedido(s) atualizado(s)`,
+        `${inserted > 0 ? `${inserted} novo(s) pedido(s) criado(s)`: ''}`,
+        `${notFound} não encontrado(s)`,
+        `${skippedNoKey} linha(s) ignoradas (sem chave)`,
+      ].filter(Boolean).join(" • "),
     });
-  };
 
-  /* ======= Organizar com IA ======= */
-  const handleOrganizeWithAI = async () => {
-    const apiKey = localStorage.getItem(API_KEY_STORAGE_KEY);
-    if (!apiKey) {
-      toast({ title: "Chave de API não encontrada", description: "Por favor, adicione sua chave de API na página de Conexões.", variant: "destructive" });
-      return;
-    }
-    if (stagedData.length === 0) {
-      toast({ title: "Nenhum dado para organizar", description: "Adicione dados à área de revisão primeiro.", variant: "default" });
-      return;
-    }
-    setIsOrganizing(true);
-    try {
-      const result = await organizeLogistics({ logisticsData: stagedData, apiKey });
-      if (result.organizedData) {
-        setStagedData(result.organizedData);
-        toast({ title: "Sucesso!", description: "Os dados foram organizados." });
-      } else {
-        throw new Error("A organização não retornou dados.");
-      }
-    } catch (error: any) {
-      console.error("Error organizing data:", error);
-      toast({ title: "Erro na Organização", description: error.message || "Houve um problema ao organizar os dados.", variant: "destructive" });
-    } finally {
-      setIsOrganizing(false);
+    if (stagedArray.length > 0) {
+        toast({
+            title: "Dados Prontos para Revisão",
+            description: `${stagedArray.length} registro(s) adicionados à revisão.`,
+        });
     }
   };
 
   /* ======= Salvar no Firestore ======= */
   const handleSaveChangesToDb = async () => {
-    if (stagedData.length === 0) {
+    if (stagedSales.length === 0) {
       toast({ title: "Nenhum dado novo para salvar", variant: "default" });
       return;
     }
@@ -440,9 +596,9 @@ export default function LogisticaPage() {
 
     try {
       const chunks = [];
-      const dataToSave = [...stagedData];
-      for (let i = 0; i < dataToSave.length; i += 450) {
-        chunks.push(dataToSave.slice(i, i + 450));
+      const salesToSave = [...stagedSales];
+      for (let i = 0; i < salesToSave.length; i += 450) {
+        chunks.push(salesToSave.slice(i, i + 450));
       }
 
       for (let i = 0; i < chunks.length; i++) {
@@ -450,16 +606,18 @@ export default function LogisticaPage() {
         const batch = writeBatch(db);
 
         chunk.forEach((item) => {
-          const docId = doc(collection(db, "logistica")).id;
-          const logisticaRef = doc(db, "logistica", docId);
+          const isStaged = String(item.id).startsWith('staged-');
+          const docId = isStaged ? doc(collection(db, "vendas")).id : item.id;
+          const saleRef = doc(db, "vendas", docId);
           const { id, ...payload } = item;
           
-          payload.id = docId;
+          if(isStaged) payload.id = docId;
 
           if (payload.data instanceof Date) payload.data = Timestamp.fromDate(payload.data);
           if (payload.uploadTimestamp instanceof Date) payload.uploadTimestamp = Timestamp.fromDate(payload.uploadTimestamp);
 
-          batch.set(logisticaRef, payload);
+          // Use set with merge to handle both new and existing documents safely
+          batch.set(saleRef, payload, { merge: true });
         });
 
         await batch.commit();
@@ -467,34 +625,40 @@ export default function LogisticaPage() {
       }
 
       // Optimistic update
-      setLogisticaData(prev => {
+      setSalesFromDb(prev => {
           const map = new Map(prev.map(s => [s.id, s]));
-          dataToSave.forEach(s => {
-              const newRecord = { ...s };
-              // We assign a real ID after saving, so this might be tricky
-              // For now, let's just add them, Firestore listener will sync eventually
-              if (!map.has(s.id)) {
-                  map.set(s.id, newRecord);
+          salesToSave.forEach(s => {
+              const existing = map.get(s.id) || {};
+              const newRecord = { ...existing, ...s };
+              // Ensure the final ID is the one from DB, not the staged one
+              if (!String(s.id).startsWith('staged-')) {
+                 newRecord.id = s.id;
               }
+              map.set(newRecord.id, newRecord);
           });
+           // Clean up any remaining staged-id entries
+          stagedSales.forEach(s => {
+            if (String(s.id).startsWith('staged-')) map.delete(s.id);
+          });
+
           return Array.from(map.values());
       });
 
 
       const allKeys = new Set<string>();
-      dataToSave.forEach(row => Object.keys(row).forEach(k => allKeys.add(k)));
-      logisticaData.forEach(row => Object.keys(row).forEach(k => allKeys.add(k)));
-      if (!allKeys.has("data") && dataToSave.some(r => (r as any).data)) allKeys.add("data");
+      salesToSave.forEach(row => Object.keys(row).forEach(k => allKeys.add(k)));
+      salesFromDb.forEach(row => Object.keys(row).forEach(k => allKeys.add(k)));
+      if (!allKeys.has("data") && salesToSave.some(r => (r as any).data)) allKeys.add("data");
 
       const current = new Map(columns.map(c => [c.id, c]));
       allKeys.forEach(key => { if (!current.has(key)) current.set(key, { id: key, label: getLabel(key), isSortable: true }); });
       const newColumns = Array.from(current.values());
 
       const newUploadedFileNames = [...new Set([...uploadedFileNames, ...stagedFileNames])];
-      const metaRef = doc(db, "metadata", "logistica");
+      const metaRef = doc(db, "metadata", "vendas");
       await setDoc(metaRef, { columns: newColumns, uploadedFileNames: newUploadedFileNames }, { merge: true });
 
-      setStagedData([]);
+      setStagedSales([]);
       setStagedFileNames([]);
 
       toast({ title: "Sucesso!", description: "Os dados foram salvos no banco de dados." });
@@ -511,13 +675,13 @@ export default function LogisticaPage() {
 
   const handleRemoveUploadedFileName = async (fileName: string) => {
     if (stagedFileNames.includes(fileName)) {
-      setStagedData(prev => prev.filter(s => s.sourceFile?.split(', ').includes(fileName)));
+      setStagedSales(prev => prev.filter(s => s.sourceFile?.split(', ').includes(fileName)));
       setStagedFileNames(prev => prev.filter(f => f !== fileName));
       _t({ title: "Removido da Fila", description: `Dados do arquivo ${fileName} não serão salvos.` });
       return;
     }
     try {
-      const metaRef = doc(db, "metadata", "logistica");
+      const metaRef = doc(db, "metadata", "vendas");
       await updateDoc(metaRef, { uploadedFileNames: arrayRemove(fileName) });
       _t({ title: "Removido do Histórico", description: `O arquivo ${fileName} foi removido da lista.` });
     } catch (e) {
@@ -527,18 +691,18 @@ export default function LogisticaPage() {
   };
 
   const handleClearStagedData = () => {
-    setStagedData([]);
+    setStagedSales([]);
     setStagedFileNames([]);
     _t({ title: "Dados em revisão removidos" });
   };
 
   const handleClearAllData = async () => {
     try {
-      const logisticaQuery = query(collection(db, "logistica"));
-      const logisticaSnapshot = await getDocsFromServer(logisticaQuery);
-      if (logisticaSnapshot.empty) { _t({ title: "Banco já está limpo" }); return; }
+      const salesQuery = query(collection(db, "vendas"));
+      const salesSnapshot = await getDocsFromServer(salesQuery);
+      if (salesSnapshot.empty) { _t({ title: "Banco já está limpo" }); return; }
 
-      const docsToDelete = logisticaSnapshot.docs;
+      const docsToDelete = salesSnapshot.docs;
       for (let i = 0; i < docsToDelete.length; i += 450) {
         const chunk = docsToDelete.slice(i, i + 450);
         const batch = writeBatch(db);
@@ -546,11 +710,11 @@ export default function LogisticaPage() {
         await batch.commit();
       }
 
-      const metaRef = doc(db, "metadata", "logistica");
+      const metaRef = doc(db, "metadata", "vendas");
       await setDoc(metaRef, { uploadedFileNames: [], columns: [] }, { merge: true });
 
-      setLogisticaData([]);
-      _t({ title: "Limpeza Concluída!", description: "Todos os dados de logística foram apagados do banco de dados." });
+      setSalesFromDb([]);
+      _t({ title: "Limpeza Concluída!", description: "Todos os dados de vendas foram apagados do banco de dados." });
     } catch (error) {
       console.error("Error clearing all data:", error);
       _t({ title: "Erro na Limpeza", description: "Não foi possível apagar todos os dados. Verifique o console.", variant: "destructive" });
@@ -576,13 +740,13 @@ export default function LogisticaPage() {
           </Link>
           <Link
             href="/vendas"
-            className="text-muted-foreground transition-colors hover:text-foreground"
+            className="text-foreground transition-colors hover:text-foreground"
           >
             Vendas
           </Link>
           <Link
             href="/logistica"
-            className="text-foreground transition-colors hover:text-foreground"
+            className="text-muted-foreground transition-colors hover:text-foreground"
           >
             Logística
           </Link>
@@ -623,12 +787,15 @@ export default function LogisticaPage() {
                   <span className="sr-only">Toggle user menu</span>
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
+             <DropdownMenuContent align="end">
                 <DropdownMenuLabel>Minha Conta</DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem>Configurações</DropdownMenuItem>
+                <DropdownMenuItem disabled>Configurações</DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem>Sair</DropdownMenuItem>
+                <DropdownMenuItem onClick={handleLogout}>
+                  <LogOut className="mr-2 h-4 w-4" />
+                  Sair
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
         </div>
@@ -640,7 +807,7 @@ export default function LogisticaPage() {
             <div className="flex justify-between items-start">
                 <div>
                   <CardTitle className="font-headline text-h3">Seleção de Período</CardTitle>
-                  <CardDescription>Filtre os dados de logística que você deseja analisar.</CardDescription>
+                  <CardDescription>Filtre as vendas que você deseja analisar.</CardDescription>
                 </div>
                  <div className="flex items-center gap-2">
                     <SupportDataDialog
@@ -654,25 +821,11 @@ export default function LogisticaPage() {
                         Dados de Apoio
                       </Button>
                     </SupportDataDialog>
-                    {stagedData.length > 0 && (
-                      <Button
-                        onClick={handleOrganizeWithAI}
-                        variant="outline"
-                        disabled={isOrganizing || isSaving}
-                      >
-                        {isOrganizing ? (
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        ) : (
-                          <Wand2 className="mr-2 h-4 w-4" />
-                        )}
-                        {isOrganizing ? "Organizando..." : "Organizar"}
-                      </Button>
-                    )}
-                     {stagedData.length > 0 && (
+                     {stagedSales.length > 0 && (
                       <Button
                         onClick={handleClearStagedData}
                         variant="destructive"
-                        disabled={isSaving || isOrganizing}
+                        disabled={isSaving}
                       >
                         <Trash2 className="mr-2 h-4 w-4" />
                         Limpar Revisão
@@ -680,18 +833,18 @@ export default function LogisticaPage() {
                     )}
                     <Button
                       onClick={handleSaveChangesToDb}
-                      disabled={stagedData.length === 0 || isSaving || isOrganizing}
-                      variant={stagedData.length === 0 ? "outline" : "default"}
-                      title={stagedData.length === 0 ? "Carregue planilhas para habilitar" : "Salvar dados no Firestore"}
+                      disabled={stagedSales.length === 0 || isSaving}
+                      variant={stagedSales.length === 0 ? "outline" : "default"}
+                      title={stagedSales.length === 0 ? "Carregue planilhas para habilitar" : "Salvar dados no Firestore"}
                     >
                       {isSaving ? (
                           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                       ) : (
                           <Save className="mr-2 h-4 w-4" />
                       )}
-                      {isSaving ? "Salvando..." : `Salvar no Banco ${stagedData.length > 0 ? `(${stagedData.length})` : ""}`}
+                      {isSaving ? "Salvando..." : `Salvar no Banco ${stagedSales.length > 0 ? `(${stagedSales.length})` : ""}`}
                     </Button>
-                     {logisticaData.length > 0 && uploadedFileNames.length === 0 && (
+                     {salesFromDb.length > 0 && uploadedFileNames.length === 0 && (
                         <AlertDialog>
                             <AlertDialogTrigger asChild>
                                 <Button variant="destructive">
@@ -704,7 +857,7 @@ export default function LogisticaPage() {
                                     <AlertDialogTitle>Você tem certeza absoluta?</AlertDialogTitle>
                                     <AlertDialogDescription>
                                         Esta ação não pode ser desfeita. Isso irá apagar permanentemente
-                                        TODOS os dados de logística do seu banco de dados.
+                                        TODOS os dados de vendas do seu banco de dados.
                                     </AlertDialogDescription>
                                 </AlertDialogHeader>
                                 <AlertDialogFooter>
@@ -742,7 +895,7 @@ export default function LogisticaPage() {
             <div className="px-6 pb-4">
               <Progress value={saveProgress} className="w-full" />
               <p className="text-sm text-muted-foreground mt-2 text-center">
-                Salvando {stagedData.length} registros. Isso pode levar um momento...
+                Salvando {stagedSales.length} registros. Isso pode levar um momento...
               </p>
             </div>
           )}

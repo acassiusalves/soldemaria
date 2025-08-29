@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import * as React from "react";
@@ -27,6 +28,9 @@ import {
   deleteDoc,
   updateDoc,
 } from "firebase/firestore";
+import { getAuth } from "firebase/auth";
+import { useRouter } from "next/navigation";
+
 
 import { db } from "@/lib/firebase";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -98,6 +102,9 @@ export default function TaxasCartaoPage() {
   const [novaOperadora, setNovaOperadora] = React.useState(initialNovaOperadoraState);
   const [editingId, setEditingId] = React.useState<string | null>(null);
   const { toast } = useToast();
+  const router = useRouter();
+  const auth = getAuth();
+
 
   React.useEffect(() => {
     const unsub = onSnapshot(collection(db, "taxas"), (snapshot) => {
@@ -108,6 +115,12 @@ export default function TaxasCartaoPage() {
     });
     return () => unsub();
   }, []);
+
+    const handleLogout = async () => {
+    await auth.signOut();
+    router.push('/login');
+  };
+
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -274,13 +287,16 @@ export default function TaxasCartaoPage() {
                 <span className="sr-only">Toggle user menu</span>
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuLabel>Minha Conta</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem>Configurações</DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem>Sair</DropdownMenuItem>
-            </DropdownMenuContent>
+             <DropdownMenuContent align="end">
+                <DropdownMenuLabel>Minha Conta</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem disabled>Configurações</DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleLogout}>
+                  <LogOut className="mr-2 h-4 w-4" />
+                  Sair
+                </DropdownMenuItem>
+              </DropdownMenuContent>
           </DropdownMenu>
         </div>
       </header>
