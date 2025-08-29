@@ -12,6 +12,7 @@ import {
   Bot,
   Box,
   Calendar as CalendarIcon,
+  ChevronDown,
   DollarSign,
   History,
   LayoutDashboard,
@@ -49,20 +50,6 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import {
-  Sidebar,
-  SidebarContent,
-  SidebarHeader,
-  SidebarInset,
-  SidebarMenu,
-  SidebarMenuItem,
-  SidebarMenuButton,
-  SidebarMenuSub,
-  SidebarMenuSubButton,
-  SidebarMenuSubItem,
-  SidebarProvider,
-  SidebarTrigger,
-} from "@/components/ui/sidebar";
 import { Logo } from "@/components/icons";
 import KpiCard from "@/components/kpi-card";
 import SalesChart from "@/components/sales-chart";
@@ -116,206 +103,188 @@ export default function DashboardPage() {
   };
 
   return (
-    <SidebarProvider>
-      <Sidebar>
-        <SidebarHeader>
-          <div className="flex items-center gap-2">
+    <div className="flex min-h-screen w-full flex-col">
+      <header className="sticky top-0 flex h-16 items-center gap-4 border-b bg-background px-4 md:px-6">
+        <nav className="hidden flex-col gap-6 text-lg font-medium md:flex md:flex-row md:items-center md:gap-5 md:text-sm lg:gap-6">
+          <Link
+            href="/"
+            className="flex items-center gap-2 text-lg font-semibold md:text-base"
+          >
             <Logo className="size-8 text-primary" />
             <span className="text-xl font-semibold font-headline">Visão de Vendas</span>
-          </div>
-        </SidebarHeader>
-        <SidebarContent>
-          <SidebarMenu>
-            <SidebarMenuItem>
-              <Link href="/">
-                <SidebarMenuButton isActive>
-                  <LayoutDashboard />
-                  Painel
-                </SidebarMenuButton>
-              </Link>
-            </SidebarMenuItem>
-            <SidebarMenuItem>
-              <Link href="/vendas">
-                <SidebarMenuButton>
-                  <ShoppingBag />
-                  Vendas
-                </SidebarMenuButton>
-              </Link>
-            </SidebarMenuItem>
-            <SidebarMenuItem>
-              <Link href="/logistica">
-                <SidebarMenuButton>
-                  <Box />
-                  Logística
-                </SidebarMenuButton>
-              </Link>
-            </SidebarMenuItem>
-            <SidebarMenuItem>
-                <SidebarMenuButton>
-                  <Percent />
-                  Taxas
-                </SidebarMenuButton>
-              <SidebarMenuSub>
-                <SidebarMenuSubItem>
-                  <Link href="/taxas/cartao">
-                    <SidebarMenuSubButton>Taxas do Cartão</SidebarMenuSubButton>
-                  </Link>
-                </SidebarMenuSubItem>
-                 <SidebarMenuSubItem>
-                  <Link href="/taxas/custos">
-                    <SidebarMenuSubButton>Custos sobre Vendas</SidebarMenuSubButton>
-                  </Link>
-                </SidebarMenuSubItem>
-              </SidebarMenuSub>
-            </SidebarMenuItem>
-             <SidebarMenuItem>
-              <Link href="/conexoes">
-                <SidebarMenuButton>
-                  <Plug />
-                  Conexões
-                </SidebarMenuButton>
-              </Link>
-            </SidebarMenuItem>
-          </SidebarMenu>
-        </SidebarContent>
-      </Sidebar>
-      <SidebarInset>
-        <header className="flex items-center justify-between p-4 border-b">
-          <div className="flex items-center gap-4">
-            <SidebarTrigger className="md:hidden" />
-            <h1 className="text-h2 font-bold font-headline text-foreground/90">
-              Painel de Controle
-            </h1>
-          </div>
-          <div className="flex items-center gap-4">
-            <div className={cn("grid gap-2")}>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    id="date"
-                    variant={"outline"}
-                    className={cn(
-                      "w-[300px] justify-start text-left font-normal",
-                      !date && "text-muted-foreground"
-                    )}
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {displayDate?.from ? (
-                      displayDate.to ? (
-                        <>
-                          {format(displayDate.from, "LLL dd, y")} -{" "}
-                          {format(displayDate.to, "LLL dd, y")}
-                        </>
-                      ) : (
-                        format(displayDate.from, "LLL dd, y")
-                      )
-                    ) : (
-                      <span>Selecione uma data</span>
-                    )}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="end">
-                  <Calendar
-                    initialFocus
-                    mode="range"
-                    defaultMonth={displayDate?.from}
-                    selected={date}
-                    onSelect={setDate}
-                    numberOfMonths={2}
-                  />
-                </PopoverContent>
-              </Popover>
+          </Link>
+          <Link
+            href="/"
+            className="text-foreground transition-colors hover:text-foreground"
+          >
+            Painel
+          </Link>
+          <Link
+            href="/vendas"
+            className="text-muted-foreground transition-colors hover:text-foreground"
+          >
+            Vendas
+          </Link>
+          <Link
+            href="/logistica"
+            className="text-muted-foreground transition-colors hover:text-foreground"
+          >
+            Logística
+          </Link>
+           <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+               <Button variant="ghost" className="flex items-center gap-1 text-muted-foreground transition-colors hover:text-foreground data-[state=open]:bg-accent px-3">
+                Taxas
+                <ChevronDown className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              <DropdownMenuItem asChild>
+                <Link href="/taxas/cartao">Taxas do Cartão</Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link href="/taxas/custos">Custos sobre Vendas</Link>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <Link
+            href="/conexoes"
+            className="text-muted-foreground transition-colors hover:text-foreground"
+          >
+            Conexões
+          </Link>
+        </nav>
+        <div className="flex w-full items-center gap-4 md:ml-auto md:gap-2 lg:gap-4">
+            <div className="ml-auto flex items-center gap-4">
+               <div className={cn("grid gap-2")}>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        id="date"
+                        variant={"outline"}
+                        className={cn(
+                          "w-[300px] justify-start text-left font-normal",
+                          !date && "text-muted-foreground"
+                        )}
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {displayDate?.from ? (
+                          displayDate.to ? (
+                            <>
+                              {format(displayDate.from, "LLL dd, y")} -{" "}
+                              {format(displayDate.to, "LLL dd, y")}
+                            </>
+                          ) : (
+                            format(displayDate.from, "LLL dd, y")
+                          )
+                        ) : (
+                          <span>Selecione uma data</span>
+                        )}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="end">
+                      <Calendar
+                        initialFocus
+                        mode="range"
+                        defaultMonth={displayDate?.from}
+                        selected={date}
+                        onSelect={setDate}
+                        numberOfMonths={2}
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </div>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" className="relative h-8 w-8 rounded-full">
+                      <Avatar className="h-9 w-9">
+                        <AvatarImage src="https://picsum.photos/100/100" data-ai-hint="person" alt="@usuario" />
+                        <AvatarFallback>UV</AvatarFallback>
+                      </Avatar>
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent className="w-56" align="end" forceMount>
+                    <DropdownMenuLabel className="font-normal">
+                      <div className="flex flex-col space-y-1">
+                        <p className="text-sm font-medium leading-none">Usuário Visão</p>
+                        <p className="text-xs leading-none text-muted-foreground">
+                          usuario@visao.com
+                        </p>
+                      </div>
+                    </DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem>
+                      <Settings className="mr-2 h-4 w-4" />
+                      <span>Configurações</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem>
+                      <LogOut className="mr-2 h-4 w-4" />
+                      <span>Sair</span>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
             </div>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="relative h-8 w-8 rounded-full">
-                  <Avatar className="h-9 w-9">
-                    <AvatarImage src="https://picsum.photos/100/100" data-ai-hint="person" alt="@usuario" />
-                    <AvatarFallback>UV</AvatarFallback>
-                  </Avatar>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-56" align="end" forceMount>
-                <DropdownMenuLabel className="font-normal">
-                  <div className="flex flex-col space-y-1">
-                    <p className="text-sm font-medium leading-none">Usuário Visão</p>
-                    <p className="text-xs leading-none text-muted-foreground">
-                      usuario@visao.com
-                    </p>
-                  </div>
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem>
-                  <Settings className="mr-2 h-4 w-4" />
-                  <span>Configurações</span>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem>
-                  <LogOut className="mr-2 h-4 w-4" />
-                  <span>Sair</span>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        </header>
+        </div>
+      </header>
+      <main className="flex flex-1 flex-col gap-4 p-4 md:gap-8 md:p-8">
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+          <KpiCard
+            title="Receita Total"
+            value={totalRevenue.toLocaleString("pt-BR", { style: "currency", currency: "BRL"})}
+            change="+20.1% do último mês"
+            icon={<DollarSign className="text-primary" />}
+          />
+          <KpiCard
+            title="Vendas"
+            value={`+${totalSales.toLocaleString("pt-BR")}`}
+            change="+180.1% do último mês"
+            icon={<ShoppingBag className="text-primary" />}
+          />
+          <KpiCard
+            title="Ticket Médio"
+            value={(totalRevenue / totalSales || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL"})}
+            change="-2.1% do último mês"
+            changeType="negative"
+            icon={<DollarSign className="text-primary" />}
+          />
+          <KpiCard
+            title="Categoria Destaque"
+            value={topCategory[0]}
+            change={`${(topCategory[1] / totalRevenue * 100 || 0).toFixed(1)}% do total`}
+            icon={<Trophy className="text-primary" />}
+          />
+        </div>
 
-        <main className="flex-1 space-y-6 p-6">
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-            <KpiCard
-              title="Receita Total"
-              value={totalRevenue.toLocaleString("pt-BR", { style: "currency", currency: "BRL"})}
-              change="+20.1% do último mês"
-              icon={<DollarSign className="text-primary" />}
-            />
-            <KpiCard
-              title="Vendas"
-              value={`+${totalSales.toLocaleString("pt-BR")}`}
-              change="+180.1% do último mês"
-              icon={<ShoppingBag className="text-primary" />}
-            />
-            <KpiCard
-              title="Ticket Médio"
-              value={(totalRevenue / totalSales || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL"})}
-              change="-2.1% do último mês"
-              changeType="negative"
-              icon={<DollarSign className="text-primary" />}
-            />
-            <KpiCard
-              title="Categoria Destaque"
-              value={topCategory[0]}
-              change={`${(topCategory[1] / totalRevenue * 100 || 0).toFixed(1)}% do total`}
-              icon={<Trophy className="text-primary" />}
-            />
-          </div>
-
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-            <Card className="lg:col-span-2">
-              <CardHeader>
-                <CardTitle className="font-headline text-h3">Visão Geral das Vendas</CardTitle>
-                <CardDescription>
-                  Receita por mês no período selecionado.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="pl-2">
-                <SalesChart data={filteredSales} />
-              </CardContent>
-            </Card>
-            <InsightsGenerator data={filteredSales} />
-          </div>
-
-          <Card>
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+          <Card className="lg:col-span-2">
             <CardHeader>
-              <CardTitle className="font-headline text-h3">Histórico de Vendas</CardTitle>
+              <CardTitle className="font-headline text-h3">Visão Geral das Vendas</CardTitle>
               <CardDescription>
-                Uma lista detalhada das vendas recentes na sua loja.
+                Receita por mês no período selecionado.
               </CardDescription>
             </CardHeader>
-            <CardContent>
-              <SalesHistoryTable data={filteredSales} />
+            <CardContent className="pl-2">
+              <SalesChart data={filteredSales} />
             </CardContent>
           </Card>
-        </main>
-      </SidebarInset>
-    </SidebarProvider>
+          <InsightsGenerator data={filteredSales} />
+        </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="font-headline text-h3">Histórico de Vendas</CardTitle>
+            <CardDescription>
+              Uma lista detalhada das vendas recentes na sua loja.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <SalesHistoryTable data={filteredSales} />
+          </CardContent>
+        </Card>
+      </main>
+    </div>
   );
 }
+
+    
