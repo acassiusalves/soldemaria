@@ -1,140 +1,178 @@
 'use server';
-/**
- * @fileOverview Organizes logistics data using AI.
- *
- * - organizeLogistics - A function that analyzes and structures logistics data.
- * - OrganizeLogisticsInput - The input type for the organizeLogistics function.
- * - OrganizeLogisticsOutput - The return type for the organizeLogistics function.
- */
 
+import { z } from 'zod';
 import { VendaDetalhada } from '@/lib/data';
-import { googleAI } from '@genkit-ai/googleai';
-import { genkit, z } from 'genkit';
-import { ai } from '@/ai/genkit';
 
-
-const LogisticsEntrySchema = z.object({
-  id: z.string().describe('The unique identifier for the entry. This MUST be returned unmodified.'),
-  logistica: z.string().optional().describe('The original logistics string.'),
-  entregador: z.string().optional().describe('The name of the delivery person.'),
-  valor: z.number().optional().describe('The freight cost.'),
-});
-
+// Tipos de entrada - COMPATÍVEL com sua página
 const OrganizeLogisticsInputSchema = z.object({
   logisticsData: z.array(z.any()).describe("An array of logistics data records to be organized."),
-  apiKey: z.string().optional().describe("The user's Gemini API key."),
+  apiKey: z.string().describe("The API key for the AI service"),
 });
+
 export type OrganizeLogisticsInput = z.infer<typeof OrganizeLogisticsInputSchema>;
 
+// Tipo de saída
 const OrganizeLogisticsOutputSchema = z.object({
-  organizedData: z.array(LogisticsEntrySchema).describe('The organized logistics data with extracted fields.'),
+  organizedData: z.array(z.any()).describe('The organized logistics data with extracted fields.'),
 });
+
 export type OrganizeLogisticsOutput = z.infer<typeof OrganizeLogisticsOutputSchema>;
 
+// Função principal - COMPATÍVEL com sua página
 export async function organizeLogistics(input: OrganizeLogisticsInput): Promise<{ organizedData: VendaDetalhada[] }> {
-    console.log('🚀 Iniciando organização com', input.logisticsData.length, 'itens');
-    
-    try {
-        if (!input.logisticsData || input.logisticsData.length === 0) {
-            throw new Error('Nenhum dado fornecido para organizar');
-        }
-        if (!input.logisticsData[0].id) {
-            throw new Error('Dados sem ID encontrados');
-        }
+  console.log('🚀 Iniciando organização com IA');
+  console.log('📊 Dados recebidos:', input.logisticsData.length, 'itens');
+  console.log('🔑 API Key presente:', !!input.apiKey);
 
-        console.log('📋 Exemplo de dado:', JSON.stringify(input.logisticsData[0], null, 2));
-
-        // We only need to send a subset of fields to the AI to save tokens
-        const dataForAI = input.logisticsData.map(item => ({
-            id: item.id,
-            logistica: String(item.logistica ?? ''), // Ensure logistica is always a string
-        }));
-
-        const result = await organizeLogisticsFlow({ logisticsData: dataForAI, apiKey: input.apiKey });
-        
-        if (!result || !result.organizedData) {
-            throw new Error('IA não retornou dados válidos');
-        }
-
-        console.log('✅ IA processou', result.organizedData.length, 'itens');
-        
-        const originalDataById = new Map(input.logisticsData.map(item => [item.id, item]));
-        
-        result.organizedData.forEach((organizedItem) => {
-            const originalItem = originalDataById.get(organizedItem.id);
-            if (originalItem) {
-                originalItem.entregador = organizedItem.entregador || '';
-                originalItem.valor = organizedItem.valor || 0;
-                if (organizedItem.logistica === 'Loja') {
-                    originalItem.logistica = 'Loja';
-                }
-            } else {
-                console.warn(`⚠️ Item com ID ${organizedItem.id} não encontrado nos dados originais`);
-            }
-        });
-
-        const finalData = Array.from(originalDataById.values());
-        console.log('🎉 Finalizado com sucesso:', finalData.length, 'itens');
-        
-        return { organizedData: finalData };
-        
-    } catch (error: any) {
-        console.error('❌ Erro detalhado:', {
-            message: error.message,
-            stack: error.stack,
-            inputSize: input.logisticsData?.length
-        });
-        
-        if (error.message.includes('AI')) {
-            throw new Error('Falha na comunicação com a IA. Tente novamente.');
-        } else if (error.message.includes('network') || error.message.includes('request')) {
-            throw new Error('Problema de conexão. Verifique sua internet.');
-        } else {
-            throw new Error(`Erro ao processar dados: ${error.message}`);
-        }
+  try {
+    // Validações
+    if (!input.logisticsData || input.logisticsData.length === 0) {
+      throw new Error('Nenhum dado fornecido para organizar');
     }
+
+    if (!input.apiKey) {
+      throw new Error('Chave de API não fornecida');
+    }
+
+    // Preparar dados para a IA
+    const itemsToProcess = input.logisticsData.map(item => ({
+      id: item.id || `item-${Date.now()}-${Math.random()}`,
+      logistica: item.logistica || '',
+      entregador: item.entregador || '',
+      valor: item.valor || 0
+    }));
+
+    console.log('🤖 Enviando para IA:', itemsToProcess.slice(0, 2)); // Log dos primeiros 2
+
+    // Chamar API do Google AI diretamente
+    const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': input.apiKey
+      },
+      body: JSON.stringify({
+        contents: [{
+          parts: [{
+            text: createPrompt(itemsToProcess)
+          }]
+        }],
+        generationConfig: {
+          temperature: 0.1,
+          topK: 1,
+          topP: 1,
+          maxOutputTokens: 8192,
+        }
+      })
+    });
+
+    if (!response.ok) {
+      const errorData = await response.text();
+      console.error('❌ Erro da API:', response.status, errorData);
+      
+      if (response.status === 400) {
+        throw new Error('Chave de API inválida ou problema na requisição');
+      } else if (response.status === 429) {
+        throw new Error('Limite de uso da API atingido. Tente novamente mais tarde.');
+      } else {
+        throw new Error(`Erro da API: ${response.status}`);
+      }
+    }
+
+    const result = await response.json();
+    console.log('📥 Resposta bruta da IA:', result);
+
+    // Extrair o texto da resposta
+    const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!text) {
+      throw new Error('IA não retornou texto válido');
+    }
+
+    console.log('📝 Texto da IA:', text);
+
+    // Tentar extrair JSON da resposta
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      throw new Error('IA não retornou JSON válido');
+    }
+
+    const organizedResults = JSON.parse(jsonMatch[0]);
+    console.log('📋 Dados organizados:', organizedResults);
+
+    if (!organizedResults.results || !Array.isArray(organizedResults.results)) {
+      throw new Error('Formato de resposta da IA inválido');
+    }
+
+    // Merge dos resultados com dados originais
+    const originalDataMap = new Map(
+      input.logisticsData.map(item => [item.id, item])
+    );
+
+    organizedResults.results.forEach((organizedItem: any) => {
+      const originalItem = originalDataMap.get(organizedItem.id);
+      if (originalItem) {
+        originalItem.entregador = organizedItem.entregador || '';
+        originalItem.valor = organizedItem.valor || 0;
+        
+        // Atualizar logística se for loja
+        if (organizedItem.logistica === 'Loja') {
+          originalItem.logistica = 'Loja';
+        }
+      }
+    });
+
+    const finalData = Array.from(originalDataMap.values());
+    console.log('✅ Organização concluída:', finalData.length, 'itens processados');
+
+    return { organizedData: finalData };
+
+  } catch (error: any) {
+    console.error('❌ Erro detalhado:', error);
+    
+    // Mensagens de erro mais específicas
+    if (error.message.includes('API key')) {
+      throw new Error('Problema com a chave da API. Verifique se está correta.');
+    } else if (error.message.includes('quota') || error.message.includes('429')) {
+      throw new Error('Limite de uso da API atingido. Tente novamente em alguns minutos.');
+    } else if (error.message.includes('network') || error.name === 'TypeError') {
+      throw new Error('Erro de conexão. Verifique sua internet.');
+    } else if (error.message.includes('JSON')) {
+      throw new Error('Resposta da IA em formato inválido. Tente novamente.');
+    } else {
+      throw new Error(`Erro ao organizar dados: ${error.message}`);
+    }
+  }
 }
 
+// Função para criar o prompt
+function createPrompt(items: any[]): string {
+  return `
+Você é um assistente especializado em organizar dados de logística de vendas.
 
-const organizeLogisticsFlow = ai.defineFlow(
-  {
-    name: 'organizeLogisticsFlow',
-    inputSchema: z.object({ 
-      logisticsData: z.array(z.object({ id: z.string(), logistica: z.string().optional() })),
-      apiKey: z.string().optional(),
-    }),
-    outputSchema: OrganizeLogisticsOutputSchema,
-  },
-  async (input) => {
-    const customAI = genkit({
-      plugins: [googleAI({ apiKey: input.apiKey })],
-    });
+Analise cada item da lista e extraia as seguintes informações:
 
-    const { output } = await customAI.generate({
-        model: 'gemini-1.5-flash',
-        prompt: `You are an intelligent data processing agent. Your task is to analyze a list of logistics entries and extract structured information.
+REGRAS IMPORTANTES:
+1. Se logistica = "X_Loja" → entregador = "", valor = 0, logistica = "Loja"
+2. Se logistica contém nome/valor (ex: "João/R$15", "Maria-20") → extraia nome e valor numérico
+3. Se logistica = "Loja" → entregador = "", valor = 0
+4. SEMPRE mantenha o ID original de cada item
+5. Valores devem ser apenas números (remova R$, símbolos, etc.)
 
-For each entry, examine the 'logistica' field:
-- If the field contains a name and a currency value (e.g., "Matheus/R$20", "Ana-15", "João R$ 10.50"), extract the name and numerical value.
-- If the field is exactly "Loja" or "X_Loja", it means it was an in-store pickup:
-  - Set 'entregador' as empty string
-  - Set 'valor' as 0
-  - Set 'logistica' as "Loja"
-- If the field contains "X_" prefix (like "X_Loja"), remove the "X_" prefix
-- For any other case, try your best to extract the information.
-- ALWAYS return the original 'id' for each record.
+EXEMPLOS:
+- Input: {"id": "123", "logistica": "Maria/R$25"} 
+- Output: {"id": "123", "entregador": "Maria", "valor": 25, "logistica": "Maria/R$25"}
 
-Data to analyze:
-\`\`\`json
-{{{json logisticsData}}}
-\`\`\``,
-        input: { logisticsData: input.logisticsData },
-        output: { schema: OrganizeLogisticsOutputSchema },
-    });
-    
-    if (!output) {
-      throw new Error('AI did not return an output.');
-    }
-    return output;
-  }
-);
+- Input: {"id": "456", "logistica": "X_Loja"}
+- Output: {"id": "456", "entregador": "", "valor": 0, "logistica": "Loja"}
+
+DADOS PARA PROCESSAR:
+${JSON.stringify(items, null, 2)}
+
+RETORNE APENAS o JSON no seguinte formato (sem texto adicional):
+{
+  "results": [
+    {"id": "...", "entregador": "...", "valor": 0, "logistica": "..."}
+  ]
+}
+`;
+}
