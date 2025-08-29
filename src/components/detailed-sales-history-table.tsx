@@ -41,7 +41,7 @@ const FIXED_COLUMNS: ColumnDef[] = [
   { id: "entregador",   label: "Entregador",    isSortable: true },
   { id: "valor",        label: "Valor",         isSortable: true, className: "text-right" },
 ];
-const REQUIRED_ALWAYS_ON = ["codigo", "logistica"];
+const REQUIRED_ALWAYS_ON = ["codigo"];
 
 type SortKey = keyof VendaDetalhada | string | null;
 type SortDirection = "asc" | "desc";
@@ -75,7 +75,7 @@ interface DetailedSalesHistoryTableProps {
     tableTitle?: string;
 }
 
-export default function DetailedSalesHistoryTable({ data, columns, tableTitle = "Relatorio Logistico" }: DetailedSalesHistoryTableProps) {
+export default function DetailedSalesHistoryTable({ data, columns, tableTitle = "Histórico Detalhado de Vendas" }: DetailedSalesHistoryTableProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const [sortKey, setSortKey] = useState<SortKey>("data");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
@@ -434,5 +434,3 @@ export default function DetailedSalesHistoryTable({ data, columns, tableTitle = 
     </Card>
   );
 }
-
-    

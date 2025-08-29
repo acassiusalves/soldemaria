@@ -134,6 +134,8 @@ const columnLabels: Record<string, string> = {
   custoFrete: 'Valor Entrega',
   valorCredito: 'Valor Crédito',
   valorDescontos: 'Valor Descontos',
+  entregador: 'Entregador',
+  valor: 'Valor',
 };
 const getLabel = (key: string) => columnLabels[key] || key;
 
