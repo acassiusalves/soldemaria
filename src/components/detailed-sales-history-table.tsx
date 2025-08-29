@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { ArrowUpDown, Columns, ChevronRight, X } from "lucide-react";
@@ -93,8 +93,10 @@ function loadVisibility(keys: string[], storageKey: string): Record<string, bool
     const raw = localStorage.getItem(storageKey);
     if (!raw) return null;
     const saved = JSON.parse(raw) as Record<string, boolean>;
+    // se vier vazio ou quase nada, considera nulo
+    if (!saved || Object.keys(saved).length === 0) return null;
     const view: Record<string, boolean> = {};
-    keys.forEach(k => { view[k] = saved[k] ?? false; });
+    keys.forEach(k => { (view as any)[k] = saved[k] ?? undefined; });
     return view;
   } catch { return null; }
 }
@@ -109,8 +111,8 @@ function mergeVisibilityWithColumns(
   computeDefault: (k: string) => boolean
 ): Record<string, boolean> {
   const out: Record<string, boolean> = {};
-  currentCols.forEach(k => { out[k] = saved?.[k] ?? computeDefault(k); });
-  REQUIRED_ALWAYS_ON.forEach(k => { if (k in out) out[k] = true; });
+  currentCols.forEach(k => { (out as any)[k] = saved?.[k] ?? computeDefault(k); });
+  REQUIRED_ALWAYS_ON.forEach(k => { if (k in out) (out as any)[k] = true; });
   return out;
 }
 
@@ -207,6 +209,7 @@ export default function DetailedSalesHistoryTable({ data, columns, tableTitle = 
   const [deliverymanFilter, setDeliverymanFilter] = useState<Set<string>>(new Set());
   const [logisticsFilter, setLogisticsFilter] = useState<Set<string>>(new Set());
   const [cityFilter, setCityFilter] = useState<Set<string>>(new Set());
+  const initializedRef = useRef(false);
 
 
   const effectiveColumns = useMemo(() => {
@@ -255,17 +258,20 @@ export default function DetailedSalesHistoryTable({ data, columns, tableTitle = 
   }, [effectiveColumns, detailColumns]);
 
   useEffect(() => {
+    if (initializedRef.current) return;      // 👈 evita reinit
     if (mainColumns.length === 0) return;
-
+  
     const keys = mainColumns.map(c => c.id);
-
+  
     // defina seu default (ex.: primeira página toda visível; ou as X principais)
     const defaultVisibleKeys = keys; // aqui: todas visíveis por padrão
     const computeDefault = (k: string) => defaultVisibleKeys.includes(k);
-
+  
     const saved = loadVisibility(keys, STORAGE_KEY);
     const merged = mergeVisibilityWithColumns(keys, saved, computeDefault);
+  
     setColumnVisibility(merged);
+    initializedRef.current = true;           // 👈 marca como feito
   }, [mainColumns]);
 
 
@@ -291,8 +297,8 @@ export default function DetailedSalesHistoryTable({ data, columns, tableTitle = 
     const keys = mainColumns.map(c => c.id);
     const defaultVisibleKeys = keys; // todas on por padrão
     const next: Record<string, boolean> = {};
-    keys.forEach(k => { next[k] = defaultVisibleKeys.includes(k); });
-    REQUIRED_ALWAYS_ON.forEach(k => { if (k in next) next[k] = true; });
+    keys.forEach(k => { (next as any)[k] = defaultVisibleKeys.includes(k); });
+    REQUIRED_ALWAYS_ON.forEach(k => { if (k in next) (next as any)[k] = true; });
     setColumnVisibility(next);
   };
   
@@ -502,9 +508,13 @@ export default function DetailedSalesHistoryTable({ data, columns, tableTitle = 
                           className="capitalize"
                           checked={!!columnVisibility[column.id]}
                           disabled={REQUIRED_ALWAYS_ON.includes(column.id)}
-                          onCheckedChange={(value) =>
-                            setColumnVisibility(prev => ({ ...prev, [column.id]: !!value }))
-                          }
+                          onCheckedChange={(value) => {
+                            setColumnVisibility(prev => {
+                              const next = { ...prev, [column.id]: !!value };
+                              saveVisibility(next, STORAGE_KEY);   // 👈 salva já
+                              return next;
+                            });
+                          }}
                       >
                           {column.label}
                       </DropdownMenuCheckboxItem>
@@ -657,5 +667,3 @@ export default function DetailedSalesHistoryTable({ data, columns, tableTitle = 
     </Card>
   );
 }
-
-    
