@@ -16,6 +16,7 @@ import {
   Trash2,
   Loader2,
   Percent,
+  Wand2,
 } from "lucide-react";
 import {
   collection,
@@ -72,6 +73,7 @@ import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
 import { Progress } from "@/components/ui/progress";
 import { Logo } from "@/components/icons";
+import { organizeLogistics } from "@/ai/flows/organize-logistics";
 
 /* ========== helpers de datas e normalização ========== */
 const toDate = (value: unknown): Date | null => {
@@ -273,6 +275,7 @@ export default function LogisticaPage() {
 
   const [date, setDate] = React.useState<DateRange | undefined>(undefined);
   const [isSaving, setIsSaving] = React.useState(false);
+  const [isOrganizing, setIsOrganizing] = React.useState(false);
   const [saveProgress, setSaveProgress] = React.useState(0);
 
   /* ======= Realtime listeners ======= */
@@ -391,6 +394,28 @@ export default function LogisticaPage() {
     });
   };
 
+  /* ======= Organizar com IA ======= */
+  const handleOrganizeWithAI = async () => {
+    if (stagedData.length === 0) {
+      toast({ title: "Nenhum dado para organizar", description: "Adicione dados à área de revisão primeiro.", variant: "default" });
+      return;
+    }
+    setIsOrganizing(true);
+    try {
+      const result = await organizeLogistics({ logisticsData: stagedData });
+      if (result.organizedData) {
+        setStagedData(result.organizedData);
+        toast({ title: "Sucesso!", description: "Os dados foram organizados pela IA." });
+      } else {
+        throw new Error("A IA não retornou dados organizados.");
+      }
+    } catch (error) {
+      console.error("Error organizing data with AI:", error);
+      toast({ title: "Erro na Organização", description: "Houve um problema ao comunicar com a IA.", variant: "destructive" });
+    } finally {
+      setIsOrganizing(false);
+    }
+  };
 
   /* ======= Salvar no Firestore ======= */
   const handleSaveChangesToDb = async () => {
@@ -602,11 +627,25 @@ export default function LogisticaPage() {
                         Dados de Apoio
                       </Button>
                     </SupportDataDialog>
+                    {stagedData.length > 0 && (
+                      <Button
+                        onClick={handleOrganizeWithAI}
+                        variant="outline"
+                        disabled={isOrganizing || isSaving}
+                      >
+                        {isOrganizing ? (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                          <Wand2 className="mr-2 h-4 w-4" />
+                        )}
+                        {isOrganizing ? "Organizando..." : "Organizar"}
+                      </Button>
+                    )}
                      {stagedData.length > 0 && (
                       <Button
                         onClick={handleClearStagedData}
                         variant="destructive"
-                        disabled={isSaving}
+                        disabled={isSaving || isOrganizing}
                       >
                         <Trash2 className="mr-2 h-4 w-4" />
                         Limpar Revisão
@@ -614,7 +653,7 @@ export default function LogisticaPage() {
                     )}
                     <Button
                       onClick={handleSaveChangesToDb}
-                      disabled={stagedData.length === 0 || isSaving}
+                      disabled={stagedData.length === 0 || isSaving || isOrganizing}
                       variant={stagedData.length === 0 ? "outline" : "default"}
                       title={stagedData.length === 0 ? "Carregue planilhas para habilitar" : "Salvar dados no Firestore"}
                     >
@@ -687,4 +726,3 @@ export default function LogisticaPage() {
     </div>
   );
 }
-
