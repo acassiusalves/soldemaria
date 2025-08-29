@@ -4,7 +4,8 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { format, parse, parseISO, endOfDay, isValid } from "date-fns";
+import { format, parse, parseISO, endOfDay, isValid, subDays, startOfMonth, endOfMonth } from "date-fns";
+import { ptBR } from 'date-fns/locale';
 import type { DateRange } from "react-day-picker";
 import {
   AlertTriangle,
@@ -885,7 +886,22 @@ export default function VendasPage() {
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-auto p-0" align="start">
-                <Calendar initialFocus mode="range" defaultMonth={date?.from} selected={date} onSelect={setDate} numberOfMonths={2} />
+                <Calendar
+                    locale={ptBR}
+                    initialFocus
+                    mode="range"
+                    defaultMonth={date?.from}
+                    selected={date}
+                    onSelect={setDate}
+                    numberOfMonths={2}
+                    presets={[
+                        { label: 'Hoje', range: { from: new Date(), to: new Date() } },
+                        { label: 'Ontem', range: { from: subDays(new Date(), 1), to: subDays(new Date(), 1) } },
+                        { label: 'Últimos 7 dias', range: { from: subDays(new Date(), 6), to: new Date() } },
+                        { label: 'Últimos 30 dias', range: { from: subDays(new Date(), 29), to: new Date() } },
+                        { label: 'Este mês', range: { from: startOfMonth(new Date()), to: endOfMonth(new Date()) } },
+                    ]}
+                />
               </PopoverContent>
             </Popover>
           </CardContent>
@@ -904,3 +920,5 @@ export default function VendasPage() {
     </div>
   );
 }
+
+    
