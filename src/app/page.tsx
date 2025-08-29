@@ -4,7 +4,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { addDays, format, parse, parseISO, endOfDay, isValid } from "date-fns";
+import { format, parseISO, endOfDay, isValid } from "date-fns";
 import type { DateRange } from "react-day-picker";
 import {
   DollarSign,
@@ -54,7 +54,12 @@ const toDate = (value: unknown): Date | null => {
   if (!value) return null;
   if (value instanceof Date && isValid(value)) return value;
   if (value instanceof Timestamp) return value.toDate();
-  if (typeof value === "string") return parseISO(value.replace(/\//g, "-"));
+  if (typeof value === "string") {
+     try {
+       const d = parseISO(value.replace(/\//g, "-"));
+       if (isValid(d)) return d;
+     } catch {}
+  }
   return null;
 };
 
@@ -110,6 +115,15 @@ export default function DashboardPage() {
   }, [salesByCategory]);
 
   const displayDate = date;
+
+  const dataForCharts = React.useMemo(() => {
+    return filteredSales.map(s => ({
+        ...s,
+        data: toDate(s.data)?.toISOString() || new Date(0).toISOString(),
+        receita: s.final || 0,
+    }));
+  }, [filteredSales]);
+
 
   return (
     <div className="flex min-h-screen w-full flex-col">
@@ -274,13 +288,14 @@ export default function DashboardPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="pl-2">
-              <SalesChart data={filteredSales.map(s => ({...s, receita: s.final, data: toDate(s.data)?.toISOString() || ''}))} />
+              <SalesChart data={dataForCharts} />
             </CardContent>
           </Card>
-          <InsightsGenerator data={filteredSales.map(s => ({...s, receita: s.final, data: toDate(s.data)?.toISOString() || ''})) as any} />
+          <InsightsGenerator data={dataForCharts} />
         </div>
 
       </main>
     </div>
   );
 }
+

@@ -12,12 +12,12 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { generateSalesInsights } from "@/ai/flows/generate-sales-insights";
-import { VendaDetalhada } from "@/lib/data";
+import type { Venda } from "@/lib/data";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 
 interface InsightsGeneratorProps {
-  data: VendaDetalhada[];
+  data: Venda[];
 }
 
 export default function InsightsGenerator({ data }: InsightsGeneratorProps) {
@@ -36,6 +36,8 @@ export default function InsightsGenerator({ data }: InsightsGeneratorProps) {
           });
           return;
         }
+        
+        // Ensure data is serializable JSON
         const salesJson = JSON.stringify(data);
         const result = await generateSalesInsights({ salesData: salesJson });
         setInsights(result.insights);
