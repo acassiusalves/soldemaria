@@ -68,7 +68,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Progress } from "@/components/ui/progress";
 import { Logo } from "@/components/icons";
 import { organizeCosts } from "@/ai/flows/organize-costs";
-import { debugCosts } from "@/ai/flows/organize-costs";
+import { debugCostsDetailed } from "@/ai/flows/organize-costs";
 
 /* ========== helpers de normalização ========== */
 export const normalizeHeader = (s: string) =>
@@ -231,6 +231,10 @@ const headerMappingNormalized: Record<string, string> = {
   "instituicao financeira": "instituicao_financeira",
   "tipo de pagamento": "tipo_pagamento",
   "parcelas": "parcela",
+  "mov_estoque": "codigo",
+  "valor_da_parcela": "valor",
+  "tipo": "tipo_pagamento",
+  "parcelas1": "parcela"
 };
 
 export default function CustosVendasPage() {
@@ -478,20 +482,20 @@ export default function CustosVendasPage() {
     }
   };
   
-  const handleDebugData = async () => {
-    const apiKey = "test"; // não precisa de API key para debug
+  const handleDebugDetailed = async () => {
+    const apiKey = "test";
     
     try {
-      const result = await debugCosts({ 
+      const result = await debugCostsDetailed({ 
         costsData: stagedData, 
         apiKey 
       });
       
-      console.log('🔍 Resultado do debug:', result);
-      alert(`Debug concluído! Dados: ${result.originalLength}. Confira o console.`);
+      console.log('🔍 Debug detalhado:', result);
+      alert('Debug detalhado concluído! Veja o console.');
       
     } catch (error: any) {
-      console.error('❌ Debug falhou:', error);
+      console.error('❌ Debug detalhado falhou:', error);
       alert(`Debug falhou: ${error.message}`);
     }
   };
@@ -593,14 +597,13 @@ export default function CustosVendasPage() {
                         Dados de Apoio
                       </Button>
                     </SupportDataDialog>
-                    {/* BOTÃO DE DEBUG - REMOVER DEPOIS */}
                     {stagedData.length > 0 && (
                       <Button
-                        onClick={handleDebugData}
+                        onClick={handleDebugDetailed}
                         variant="outline"
-                        className="bg-blue-50"
+                        className="bg-green-50"
                       >
-                        🔍 Debug Dados
+                        🔍 Debug Detalhado
                       </Button>
                     )}
                     {stagedData.length > 0 && (
@@ -683,4 +686,5 @@ export default function CustosVendasPage() {
     </div>
   );
 }
+
 

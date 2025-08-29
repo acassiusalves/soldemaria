@@ -124,73 +124,67 @@ export async function organizeCosts(input: OrganizeCostsInput): Promise<Organize
   }
 }
 
-// FUNÇÃO DE DEBUG - Para investigar problemas
-export async function debugCosts(input: OrganizeCostsInput): Promise<any> {
-  console.log('🔍 DEBUG CUSTOS: Investigando dados');
+// FUNÇÃO DE DEBUG DETALHADO - Para ver os valores reais
+export async function debugCostsDetailed(input: OrganizeCostsInput): Promise<any> {
+  console.log('🔍 DEBUG DETALHADO: Analisando valores dos campos');
   
-  const originalLength = input.costsData?.length || 0;
-  console.log('📊 Tamanho original:', originalLength);
-  
-  if (originalLength === 0) {
-    return { error: 'Nenhum dado fornecido', originalLength: 0 };
+  if (!input.costsData || input.costsData.length === 0) {
+    return { error: 'Nenhum dado fornecido' };
   }
   
-  // Analisar primeiro item
   const firstItem = input.costsData[0];
-  console.log('📋 Primeiro item:', JSON.stringify(firstItem, null, 2));
+  console.log('📋 Primeiro item completo:', JSON.stringify(firstItem, null, 2));
   
-  // Analisar todas as chaves disponíveis
-  const allKeys = new Set<string>();
-  input.costsData.forEach(item => {
-    Object.keys(item || {}).forEach(key => allKeys.add(key));
-  });
-  
-  const keysList = Array.from(allKeys).sort();
-  console.log('🔑 Todas as chaves encontradas:', keysList);
-  
-  // Verificar chaves esperadas
-  const expectedKeys = ['codigo', 'modo_de_pagamento', 'valor', 'instituicao_financeira'];
-  const missingKeys = expectedKeys.filter(key => !keysList.includes(key));
-  const extraKeys = keysList.filter(key => !expectedKeys.includes(key));
-  
-  console.log('❌ Chaves esperadas mas não encontradas:', missingKeys);
-  console.log('➕ Chaves extras encontradas:', extraKeys);
-  
-  // Verificar possíveis variações das chaves
-  const possibleMappings: Record<string, string[]> = {};
-  keysList.forEach(key => {
-    const normalized = key.toLowerCase().replace(/[^a-z]/g, '');
-    
-    if (normalized.includes('codigo') || normalized.includes('cod')) {
-      possibleMappings.codigo = possibleMappings.codigo || [];
-      possibleMappings.codigo.push(key);
+  // Verificar valores específicos dos campos que precisamos
+  const fieldAnalysis = {
+    mov_estoque: {
+      value: firstItem.mov_estoque,
+      type: typeof firstItem.mov_estoque,
+      exists: firstItem.hasOwnProperty('mov_estoque'),
+      isNull: firstItem.mov_estoque === null,
+      isUndefined: firstItem.mov_estoque === undefined,
+      isEmpty: firstItem.mov_estoque === ''
+    },
+    valor_da_parcela: {
+      value: firstItem.valor_da_parcela,
+      type: typeof firstItem.valor_da_parcela,
+      exists: firstItem.hasOwnProperty('valor_da_parcela'),
+      isNull: firstItem.valor_da_parcela === null,
+      isUndefined: firstItem.valor_da_parcela === undefined,
+      isEmpty: firstItem.valor_da_parcela === ''
     }
-    
-    if (normalized.includes('modo') || normalized.includes('pagamento') || normalized.includes('payment')) {
-      possibleMappings.modo_de_pagamento = possibleMappings.modo_de_pagamento || [];
-      possibleMappings.modo_de_pagamento.push(key);
-    }
-    
-    if (normalized.includes('valor') || normalized.includes('value') || normalized.includes('amount')) {
-      possibleMappings.valor = possibleMappings.valor || [];
-      possibleMappings.valor.push(key);
-    }
-    
-    if (normalized.includes('instituicao') || normalized.includes('banco') || normalized.includes('bank')) {
-      possibleMappings.instituicao_financeira = possibleMappings.instituicao_financeira || [];
-      possibleMappings.instituicao_financeira.push(key);
-    }
-  });
+  };
   
-  console.log('🔀 Possíveis mapeamentos:', possibleMappings);
+  console.log('🔍 Análise dos campos:', fieldAnalysis);
+  
+  // Testar o mapeamento manualmente
+  const testMapping: any = {};
+  
+  // Testar mapeamento do código
+  if (firstItem.mov_estoque) {
+    testMapping.codigo = String(firstItem.mov_estoque);
+    console.log('✅ Mapeamento código:', firstItem.mov_estoque, '→', testMapping.codigo);
+  } else {
+    console.log('❌ mov_estoque não tem valor válido:', firstItem.mov_estoque);
+  }
+  
+  // Testar mapeamento do valor
+  if (firstItem.valor_da_parcela) {
+    testMapping.valor = firstItem.valor_da_parcela;
+    console.log('✅ Mapeamento valor:', firstItem.valor_da_parcela, '→', testMapping.valor);
+  } else {
+    console.log('❌ valor_da_parcela não tem valor válido:', firstItem.valor_da_parcela);
+  }
   
   return {
-    originalLength,
+    originalLength: input.costsData.length,
     firstItem,
-    allKeys: keysList,
-    missingKeys,
-    extraKeys,
-    possibleMappings,
-    sampleData: input.costsData.slice(0, 3)
+    fieldAnalysis,
+    testMapping,
+    allFieldNames: Object.keys(firstItem || {}),
+    sampleValues: Object.keys(firstItem || {}).reduce((acc: any, key: string) => {
+      acc[key] = firstItem[key];
+      return acc;
+    }, {})
   };
 }
