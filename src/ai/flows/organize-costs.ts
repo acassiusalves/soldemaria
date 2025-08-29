@@ -1,4 +1,3 @@
-
 'use server';
 
 import { z } from 'zod';
@@ -12,10 +11,10 @@ export type OrganizeCostsOutput = {
   organizedData: any[];
 };
 
-// This function mirrors the logic from organize-logistics.ts for manual data processing
+// FUNÇÃO PRINCIPAL - Organizar Custos
 export async function organizeCosts(input: OrganizeCostsInput): Promise<OrganizeCostsOutput> {
-  console.log('🚀 ORGANIZAR CUSTOS: Iniciando função principal');
-  console.log('📊 Dados de entrada:', input.costsData?.length || 0, 'itens');
+  console.log('💰 CUSTOS: Iniciando organização');
+  console.log('📊 Dados recebidos:', input.costsData?.length || 0, 'itens');
   
   try {
     // Validações
@@ -28,53 +27,144 @@ export async function organizeCosts(input: OrganizeCostsInput): Promise<Organize
     }
     
     if (input.costsData.length === 0) {
-      console.log('⚠️ Array de custos vazio, retornando vazio');
+      console.log('⚠️ Array vazio, retornando vazio');
       return { organizedData: [] };
     }
     
-    console.log('📋 Exemplo de item de custo:', JSON.stringify(input.costsData[0], null, 2));
+    console.log('📋 Exemplo de item:', JSON.stringify(input.costsData[0], null, 2));
     
-    // A lógica de processamento aqui pode ser ajustada para as regras de negócio de custos
+    // Processar TODOS os dados - sem perder nenhum
     const processedData = input.costsData.map((item, index) => {
       try {
+        // Criar uma cópia completa do item original
         const processedItem = JSON.parse(JSON.stringify(item));
         
-        // Example processing logic - can be adapted for costs
-        // For now, it just ensures some fields exist.
-        if (processedItem.descricao === undefined || processedItem.descricao === null) {
-            processedItem.descricao = '';
+        // Garantir campos essenciais
+        if (!processedItem.codigo) {
+          processedItem.codigo = `CUSTO-${Date.now()}-${index}`;
         }
-        if (processedItem.valor === undefined || processedItem.valor === null) {
-            processedItem.valor = 0;
+        
+        if (!processedItem.modo_de_pagamento && processedItem.modo_pagamento) {
+          processedItem.modo_de_pagamento = processedItem.modo_pagamento;
         }
+        
+        if (!processedItem.instituicao_financeira && processedItem.instituicao) {
+          processedItem.instituicao_financeira = processedItem.instituicao;
+        }
+        
+        // Garantir que valor é numérico
+        if (processedItem.valor && typeof processedItem.valor === 'string') {
+          const valorStr = processedItem.valor.replace(/[R$\s]/gi, '').replace(/,/g, '.');
+          const valor = parseFloat(valorStr);
+          processedItem.valor = isNaN(valor) ? 0 : valor;
+        }
+        
+        // Campos padrão
+        processedItem.modo_de_pagamento = processedItem.modo_de_pagamento || '';
+        processedItem.instituicao_financeira = processedItem.instituicao_financeira || '';
+        processedItem.valor = processedItem.valor || 0;
         
         return processedItem;
         
       } catch (itemError) {
-        console.warn(`⚠️ Erro ao processar item de custo ${index}:`, itemError);
-        return item; // Return original item on error
+        console.warn(`⚠️ Erro ao processar item ${index}:`, itemError);
+        // Se der erro, retorna o item original
+        return item;
       }
     });
     
-    console.log('✅ ORGANIZAR CUSTOS: Processamento concluído');
+    console.log('✅ CUSTOS: Processamento concluído');
     console.log('📊 Dados de saída:', processedData.length, 'itens');
     
+    // VERIFICAÇÃO CRÍTICA - não deve perder dados
     if (processedData.length !== input.costsData.length) {
-      console.error('❌ PERDA DE DADOS DE CUSTOS DETECTADA!');
+      console.error('❌ PERDA DE DADOS DETECTADA!');
+      console.error('Entrada:', input.costsData.length);
+      console.error('Saída:', processedData.length);
       throw new Error(`Perda de dados: ${input.costsData.length} → ${processedData.length}`);
     }
     
     return { organizedData: processedData };
     
   } catch (error: any) {
-    console.error('❌ ORGANIZAR CUSTOS: Erro:', error.message);
-    console.error('❌ ORGANIZAR CUSTOS: Stack:', error.stack);
+    console.error('❌ CUSTOS: Erro:', error.message);
+    console.error('❌ CUSTOS: Stack:', error.stack);
     
-    console.log('🔄 Retornando dados de custos originais devido ao erro');
+    // Em caso de erro, retornar dados originais para não perder nada
+    console.log('🔄 Retornando dados originais devido ao erro');
     return { 
       organizedData: input.costsData || [] 
     };
   }
 }
 
+// FUNÇÃO DE DEBUG - Para investigar problemas
+export async function debugCosts(input: OrganizeCostsInput): Promise<any> {
+  console.log('🔍 DEBUG CUSTOS: Investigando dados');
+  
+  const originalLength = input.costsData?.length || 0;
+  console.log('📊 Tamanho original:', originalLength);
+  
+  if (originalLength === 0) {
+    return { error: 'Nenhum dado fornecido', originalLength: 0 };
+  }
+  
+  // Analisar primeiro item
+  const firstItem = input.costsData[0];
+  console.log('📋 Primeiro item:', JSON.stringify(firstItem, null, 2));
+  
+  // Analisar todas as chaves disponíveis
+  const allKeys = new Set<string>();
+  input.costsData.forEach(item => {
+    Object.keys(item || {}).forEach(key => allKeys.add(key));
+  });
+  
+  const keysList = Array.from(allKeys).sort();
+  console.log('🔑 Todas as chaves encontradas:', keysList);
+  
+  // Verificar chaves esperadas
+  const expectedKeys = ['codigo', 'modo_de_pagamento', 'valor', 'instituicao_financeira'];
+  const missingKeys = expectedKeys.filter(key => !keysList.includes(key));
+  const extraKeys = keysList.filter(key => !expectedKeys.includes(key));
+  
+  console.log('❌ Chaves esperadas mas não encontradas:', missingKeys);
+  console.log('➕ Chaves extras encontradas:', extraKeys);
+  
+  // Verificar possíveis variações das chaves
+  const possibleMappings: Record<string, string[]> = {};
+  keysList.forEach(key => {
+    const normalized = key.toLowerCase().replace(/[^a-z]/g, '');
     
+    if (normalized.includes('codigo') || normalized.includes('cod')) {
+      possibleMappings.codigo = possibleMappings.codigo || [];
+      possibleMappings.codigo.push(key);
+    }
+    
+    if (normalized.includes('modo') || normalized.includes('pagamento') || normalized.includes('payment')) {
+      possibleMappings.modo_de_pagamento = possibleMappings.modo_de_pagamento || [];
+      possibleMappings.modo_de_pagamento.push(key);
+    }
+    
+    if (normalized.includes('valor') || normalized.includes('value') || normalized.includes('amount')) {
+      possibleMappings.valor = possibleMappings.valor || [];
+      possibleMappings.valor.push(key);
+    }
+    
+    if (normalized.includes('instituicao') || normalized.includes('banco') || normalized.includes('bank')) {
+      possibleMappings.instituicao_financeira = possibleMappings.instituicao_financeira || [];
+      possibleMappings.instituicao_financeira.push(key);
+    }
+  });
+  
+  console.log('🔀 Possíveis mapeamentos:', possibleMappings);
+  
+  return {
+    originalLength,
+    firstItem,
+    allKeys: keysList,
+    missingKeys,
+    extraKeys,
+    possibleMappings,
+    sampleData: input.costsData.slice(0, 3)
+  };
+}

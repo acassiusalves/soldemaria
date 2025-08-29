@@ -68,6 +68,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Progress } from "@/components/ui/progress";
 import { Logo } from "@/components/icons";
 import { organizeCosts } from "@/ai/flows/organize-costs";
+import { debugCosts } from "@/ai/flows/organize-costs";
 
 /* ========== helpers de normalização ========== */
 export const normalizeHeader = (s: string) =>
@@ -497,6 +498,24 @@ export default function CustosVendasPage() {
       _t({ title: "Erro na Limpeza", description: "Não foi possível apagar todos os dados. Verifique o console.", variant: "destructive" });
     }
   };
+  
+  const handleDebugData = async () => {
+    const apiKey = "test"; // não precisa de API key para debug
+    
+    try {
+      const result = await debugCosts({ 
+        costsData: stagedData, 
+        apiKey 
+      });
+      
+      console.log('🔍 Resultado do debug:', result);
+      alert(`Debug concluído! Dados: ${result.originalLength}. Confira o console.`);
+      
+    } catch (error: any) {
+      console.error('❌ Debug falhou:', error);
+      alert(`Debug falhou: ${error.message}`);
+    }
+  };
 
   return (
     <div className="flex min-h-screen w-full flex-col">
@@ -595,6 +614,16 @@ export default function CustosVendasPage() {
                         Dados de Apoio
                       </Button>
                     </SupportDataDialog>
+                    {/* BOTÃO DE DEBUG - REMOVER DEPOIS */}
+                    {stagedData.length > 0 && (
+                      <Button
+                        onClick={handleDebugData}
+                        variant="outline"
+                        className="bg-blue-50"
+                      >
+                        🔍 Debug Dados
+                      </Button>
+                    )}
                     {stagedData.length > 0 && (
                       <Button
                         onClick={handleOrganizeWithAI}
@@ -675,3 +704,4 @@ export default function CustosVendasPage() {
     </div>
   );
 }
+
