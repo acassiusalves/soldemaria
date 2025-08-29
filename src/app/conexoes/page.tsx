@@ -40,23 +40,33 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
+const API_KEY_STORAGE_KEY = "gemini_api_key";
+
 export default function ConexoesPage() {
   const [apiKey, setApiKey] = React.useState("");
   const [showApiKey, setShowApiKey] = React.useState(false);
   const [isKeyValid, setIsKeyValid] = React.useState<boolean | null>(null);
   const { toast } = useToast();
 
+  React.useEffect(() => {
+    const storedKey = localStorage.getItem(API_KEY_STORAGE_KEY);
+    if (storedKey) {
+        setApiKey(storedKey);
+        setIsKeyValid(true); // Assume stored key is valid
+    }
+  }, []);
+
+
   const handleSaveApiKey = () => {
-    // In a real application, this would be sent to a secure backend endpoint
-    // and validated. For this prototype, we'll simulate a successful validation.
     if (apiKey.trim() !== "") {
-        console.log("API Key to save:", apiKey);
+        localStorage.setItem(API_KEY_STORAGE_KEY, apiKey);
         setIsKeyValid(true);
         toast({
             title: "Chave Salva!",
-            description: "Sua chave de API foi salva e validada com sucesso (simulado).",
+            description: "Sua chave de API foi salva localmente no seu navegador.",
         });
     } else {
+        localStorage.removeItem(API_KEY_STORAGE_KEY);
         setIsKeyValid(false);
         toast({
             title: "Chave Inválida",
@@ -68,7 +78,6 @@ export default function ConexoesPage() {
   
   const handleApiKeyChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setApiKey(e.target.value);
-    // Reset validation status when user types
     if (isKeyValid !== null) {
         setIsKeyValid(null);
     }
@@ -158,7 +167,7 @@ export default function ConexoesPage() {
                         <CheckCircle className="h-4 w-4" />
                         <AlertTitle>Conexão Ativa!</AlertTitle>
                         <AlertDescription>
-                            Sua chave de API do Gemini foi validada e está funcionando.
+                            Sua chave de API do Gemini está salva e pronta para uso.
                         </AlertDescription>
                     </Alert>
                 )}
@@ -183,7 +192,7 @@ export default function ConexoesPage() {
                         </Button>
                     </div>
                      <p className="text-xs text-muted-foreground pt-1">
-                        Sua chave será armazenada de forma segura.
+                        Sua chave será armazenada de forma segura no seu navegador.
                     </p>
                 </div>
                 <Button onClick={handleSaveApiKey}>

@@ -266,6 +266,8 @@ const mergeForHeader = (base: any, row: any) => {
 const MotionCard = motion(Card);
 
 type IncomingDataset = { rows: any[]; fileName: string; assocKey?: string };
+const API_KEY_STORAGE_KEY = "gemini_api_key";
+
 
 export default function LogisticaPage() {
   const [logisticaData, setLogisticaData] = React.useState<VendaDetalhada[]>([]);
@@ -398,13 +400,18 @@ export default function LogisticaPage() {
 
   /* ======= Organizar com IA ======= */
   const handleOrganizeWithAI = async () => {
+    const apiKey = localStorage.getItem(API_KEY_STORAGE_KEY);
+    if (!apiKey) {
+      toast({ title: "Chave de API não encontrada", description: "Por favor, adicione sua chave de API na página de Conexões.", variant: "destructive" });
+      return;
+    }
     if (stagedData.length === 0) {
       toast({ title: "Nenhum dado para organizar", description: "Adicione dados à área de revisão primeiro.", variant: "default" });
       return;
     }
     setIsOrganizing(true);
     try {
-      const result = await organizeLogistics({ logisticsData: stagedData });
+      const result = await organizeLogistics({ logisticsData: stagedData, apiKey });
       if (result.organizedData) {
         setStagedData(result.organizedData);
         toast({ title: "Sucesso!", description: "Os dados foram organizados pela IA." });

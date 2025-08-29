@@ -9,6 +9,7 @@
 
 import { ai } from '@/ai/genkit';
 import { VendaDetalhada } from '@/lib/data';
+import { googleAI } from '@genkit-ai/googleai';
 import { z } from 'genkit';
 
 const LogisticsEntrySchema = z.object({
@@ -20,6 +21,7 @@ const LogisticsEntrySchema = z.object({
 
 const OrganizeLogisticsInputSchema = z.object({
   logisticsData: z.array(z.any()).describe("An array of logistics data records to be organized."),
+  apiKey: z.string().optional().describe("The user's Gemini API key."),
 });
 export type OrganizeLogisticsInput = z.infer<typeof OrganizeLogisticsInputSchema>;
 
@@ -47,7 +49,7 @@ export async function organizeLogistics(input: OrganizeLogisticsInput): Promise<
             logistica: String(item.logistica ?? ''), // Ensure logistica is always a string
         }));
 
-        const result = await organizeLogisticsFlow({ logisticsData: dataForAI });
+        const result = await organizeLogisticsFlow({ logisticsData: dataForAI, apiKey: input.apiKey });
         
         if (!result || !result.organizedData) {
             throw new Error('IA não retornou dados válidos');
@@ -118,11 +120,19 @@ Data to analyze:
 const organizeLogisticsFlow = ai.defineFlow(
   {
     name: 'organizeLogisticsFlow',
-    inputSchema: z.object({ logisticsData: z.array(z.object({ id: z.string(), logistica: z.string().optional() })) }),
+    inputSchema: z.object({ 
+      logisticsData: z.array(z.object({ id: z.string(), logistica: z.string().optional() })),
+      apiKey: z.string().optional(),
+    }),
     outputSchema: OrganizeLogisticsOutputSchema,
   },
   async (input) => {
-    const { output } = await prompt(input);
+    const customAI = ai.configure({
+      plugins: [googleAI({ apiKey: input.apiKey })],
+    });
+
+    const { output } = await customAI.run(prompt(input));
+    
     if (!output) {
       throw new Error('AI did not return an output.');
     }
