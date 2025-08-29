@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
@@ -71,9 +72,10 @@ function saveVisibility(state: Record<string, boolean>) {
 interface DetailedSalesHistoryTableProps {
     data: any[]; // Data is now grouped data
     columns: ColumnDef[];
+    tableTitle?: string;
 }
 
-export default function DetailedSalesHistoryTable({ data, columns }: DetailedSalesHistoryTableProps) {
+export default function DetailedSalesHistoryTable({ data, columns, tableTitle = "Relatorio Logistico" }: DetailedSalesHistoryTableProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const [sortKey, setSortKey] = useState<SortKey>("data");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
@@ -290,7 +292,7 @@ export default function DetailedSalesHistoryTable({ data, columns }: DetailedSal
     <Card>
       <CardContent className="p-4">
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-h3 font-headline">Relatorio Logistico</h2>
+          <h2 className="text-h3 font-headline">{tableTitle}</h2>
           <div className="flex items-center gap-2">
             <Input 
               placeholder="Filtrar por Código ou Cliente..."
@@ -432,3 +434,5 @@ export default function DetailedSalesHistoryTable({ data, columns }: DetailedSal
     </Card>
   );
 }
+
+    
