@@ -4,7 +4,7 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { ArrowUpDown, Columns, ChevronRight, X } from "lucide-react";
+import { ArrowUpDown, Columns, ChevronRight, X, Eye, EyeOff, Save, Loader2, Settings2 } from "lucide-react";
 import { VendaDetalhada } from "@/lib/data";
 import {
   Table,
@@ -22,6 +22,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
   DropdownMenuItem,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuPortal,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -36,9 +40,18 @@ import { Badge } from "./ui/badge";
 
 
 const ITEMS_PER_PAGE = 10;
-const PREF_KEY = "hist_detalhado_vendas:v1"; // chave estável p/ esta tabela
-const STORAGE_KEY = `vendas_columns_visibility:${PREF_KEY}`;
+const REQUIRED_ALWAYS_ON = ["codigo"];
 
+type SortKey = keyof VendaDetalhada | string | null;
+type SortDirection = "asc" | "desc";
+type ColumnVisibility = Record<string, boolean>;
+
+export type ColumnDef = {
+  id: string;
+  label: string;
+  className?: string;
+  isSortable?: boolean;
+}
 
 const columnLabels: Record<string, string> = {
   data: 'Data',
@@ -76,51 +89,18 @@ const FIXED_COLUMNS: ColumnDef[] = [
   { id: "entregador",   label: "Entregador",    isSortable: true },
   { id: "valor",        label: "Valor",         isSortable: true, className: "text-right" },
 ];
-const REQUIRED_ALWAYS_ON = ["codigo"];
-
-type SortKey = keyof VendaDetalhada | string | null;
-type SortDirection = "asc" | "desc";
-
-export type ColumnDef = {
-  id: string;
-  label: string;
-  className?: string;
-  isSortable?: boolean;
-}
-
-function loadVisibility(keys: string[], storageKey: string): Record<string, boolean> | null {
-  try {
-    const raw = localStorage.getItem(storageKey);
-    if (!raw) return null;
-    const saved = JSON.parse(raw) as Record<string, boolean>;
-    // se vier vazio ou quase nada, considera nulo
-    if (!saved || Object.keys(saved).length === 0) return null;
-    const view: Record<string, boolean> = {};
-    keys.forEach(k => { (view as any)[k] = saved[k] ?? undefined; });
-    return view;
-  } catch { return null; }
-}
-
-function saveVisibility(state: Record<string, boolean>, storageKey: string) {
-  try { localStorage.setItem(storageKey, JSON.stringify(state)); } catch {}
-}
-
-function mergeVisibilityWithColumns(
-  currentCols: string[],
-  saved: Record<string, boolean> | null,
-  computeDefault: (k: string) => boolean
-): Record<string, boolean> {
-  const out: Record<string, boolean> = {};
-  currentCols.forEach(k => { (out as any)[k] = saved?.[k] ?? computeDefault(k); });
-  REQUIRED_ALWAYS_ON.forEach(k => { if (k in out) (out as any)[k] = true; });
-  return out;
-}
 
 interface DetailedSalesHistoryTableProps {
-    data: any[]; // Data is now grouped data
+    data: any[];
     columns: ColumnDef[];
     tableTitle?: string;
     showAdvancedFilters?: boolean;
+    // New props for controlled visibility
+    columnVisibility: ColumnVisibility;
+    onVisibilityChange: (newVisibility: ColumnVisibility) => void;
+    onSavePreferences: (visibilityToSave: ColumnVisibility) => void;
+    isLoadingPreferences: boolean;
+    isSavingPreferences: boolean;
 }
 
 const MultiSelectFilter = ({
@@ -197,21 +177,28 @@ const MultiSelectFilter = ({
 };
 
 
-export default function DetailedSalesHistoryTable({ data, columns, tableTitle = "Histórico Detalhado de Vendas", showAdvancedFilters = false }: DetailedSalesHistoryTableProps) {
+export default function DetailedSalesHistoryTable({ 
+    data, 
+    columns, 
+    tableTitle = "Histórico Detalhado de Vendas", 
+    showAdvancedFilters = false,
+    columnVisibility,
+    onVisibilityChange,
+    onSavePreferences,
+    isLoadingPreferences,
+    isSavingPreferences,
+}: DetailedSalesHistoryTableProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const [sortKey, setSortKey] = useState<SortKey>("data");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [filter, setFilter] = useState('');
-  const [columnVisibility, setColumnVisibility] = useState<Record<string, boolean>>({});
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
   const [vendorFilter, setVendorFilter] = useState<Set<string>>(new Set());
   const [deliverymanFilter, setDeliverymanFilter] = useState<Set<string>>(new Set());
   const [logisticsFilter, setLogisticsFilter] = useState<Set<string>>(new Set());
   const [cityFilter, setCityFilter] = useState<Set<string>>(new Set());
-  const initializedRef = useRef(false);
-
-
+  
   const effectiveColumns = useMemo(() => {
     const systemColumnsToHide = [
         "id", "sourceFile", "uploadTimestamp", "subRows", "parcelas", 
@@ -258,50 +245,17 @@ export default function DetailedSalesHistoryTable({ data, columns, tableTitle = 
   }, [effectiveColumns, detailColumns]);
 
   useEffect(() => {
-    if (initializedRef.current) return;      // 👈 evita reinit
-    if (mainColumns.length === 0) return;
-  
-    const keys = mainColumns.map(c => c.id);
-  
-    // defina seu default (ex.: primeira página toda visível; ou as X principais)
-    const defaultVisibleKeys = keys; // aqui: todas visíveis por padrão
-    const computeDefault = (k: string) => defaultVisibleKeys.includes(k);
-  
-    const saved = loadVisibility(keys, STORAGE_KEY);
-    const merged = mergeVisibilityWithColumns(keys, saved, computeDefault);
-  
-    setColumnVisibility(merged);
-    initializedRef.current = true;           // 👈 marca como feito
-  }, [mainColumns]);
-
-
-  useEffect(() => {
-    if (Object.keys(columnVisibility).length > 0) {
-      saveVisibility(columnVisibility, STORAGE_KEY);
+    // When the component initializes and we don't have preferences loaded yet,
+    // and there are columns to show, set all to visible as a default.
+    if (!isLoadingPreferences && Object.keys(columnVisibility).length === 0 && mainColumns.length > 0) {
+        const allVisible = mainColumns.reduce((acc, col) => {
+            acc[col.id] = true;
+            return acc;
+        }, {} as ColumnVisibility);
+        onVisibilityChange(allVisible);
     }
-  }, [columnVisibility]);
+  }, [isLoadingPreferences, columnVisibility, mainColumns, onVisibilityChange]);
 
-  useEffect(() => {
-    const onStorage = (e: StorageEvent) => {
-      if (e.key !== STORAGE_KEY || !e.newValue) return;
-      try {
-        const parsed = JSON.parse(e.newValue) as Record<string, boolean>;
-        setColumnVisibility(prev => ({ ...prev, ...parsed }));
-      } catch {}
-    };
-    window.addEventListener('storage', onStorage);
-    return () => window.removeEventListener('storage', onStorage);
-  }, []);
-  
-  const handleResetColumns = () => {
-    const keys = mainColumns.map(c => c.id);
-    const defaultVisibleKeys = keys; // todas on por padrão
-    const next: Record<string, boolean> = {};
-    keys.forEach(k => { (next as any)[k] = defaultVisibleKeys.includes(k); });
-    REQUIRED_ALWAYS_ON.forEach(k => { if (k in next) (next as any)[k] = true; });
-    setColumnVisibility(next);
-  };
-  
   const { uniqueVendores, uniqueEntregadores, uniqueLogisticas, uniqueCidades } = useMemo(() => {
     const vendores = new Set<string>();
     const entregadores = new Set<string>();
@@ -321,7 +275,7 @@ export default function DetailedSalesHistoryTable({ data, columns, tableTitle = 
         uniqueLogisticas: Array.from(logisticas).sort(),
         uniqueCidades: Array.from(cidades).sort(),
     };
-}, [data]);
+  }, [data]);
 
 
   const filteredData = useMemo(() => {
@@ -479,6 +433,26 @@ export default function DetailedSalesHistoryTable({ data, columns, tableTitle = 
     setCityFilter(new Set());
   }
 
+  const handleSetAllVisibility = (visible: boolean) => {
+    const next = mainColumns.reduce((acc, col) => {
+        if (!REQUIRED_ALWAYS_ON.includes(col.id)) {
+            acc[col.id] = visible;
+        } else {
+            acc[col.id] = true;
+        }
+        return acc;
+    }, {} as ColumnVisibility);
+    onVisibilityChange(next);
+  };
+
+  const handleResetToDefault = () => {
+    const defaultConfig = mainColumns.reduce((acc, col) => {
+        acc[col.id] = true;
+        return acc;
+    }, {} as ColumnVisibility);
+    onVisibilityChange(defaultConfig);
+  };
+
   return (
     <Card>
       <CardContent className="p-4">
@@ -495,13 +469,27 @@ export default function DetailedSalesHistoryTable({ data, columns, tableTitle = 
               <DropdownMenuTrigger asChild>
                 <Button variant="outline">
                   <Columns className="mr-2 h-4 w-4" />
-                  Exibir Colunas
+                  Visão da Tabela
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent>
-                <DropdownMenuLabel>Alternar Colunas Principais</DropdownMenuLabel>
+              <DropdownMenuContent align="end" className="w-64">
+                <DropdownMenuLabel>Configuração de Colunas</DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <ScrollArea className="h-72">
+                <div className="flex gap-2 px-2 py-1.5">
+                    <Button variant="outline" size="sm" className="flex-1" onClick={() => handleSetAllVisibility(true)}>
+                        <Eye className="mr-2 h-4 w-4" /> Mostrar Todas
+                    </Button>
+                    <Button variant="outline" size="sm" className="flex-1" onClick={() => handleSetAllVisibility(false)}>
+                        <EyeOff className="mr-2 h-4 w-4" /> Ocultar Todas
+                    </Button>
+                </div>
+                 <DropdownMenuItem onSelect={handleResetToDefault}>
+                    <Settings2 className="mr-2 h-4 w-4" />
+                    Resetar para Padrão
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuLabel>Colunas Visíveis</DropdownMenuLabel>
+                 <ScrollArea className="h-72">
                   {mainColumns.map((column) => (
                       <DropdownMenuCheckboxItem
                           key={column.id}
@@ -509,11 +497,8 @@ export default function DetailedSalesHistoryTable({ data, columns, tableTitle = 
                           checked={!!columnVisibility[column.id]}
                           disabled={REQUIRED_ALWAYS_ON.includes(column.id)}
                           onCheckedChange={(value) => {
-                            setColumnVisibility(prev => {
-                              const next = { ...prev, [column.id]: !!value };
-                              saveVisibility(next, STORAGE_KEY);   // 👈 salva já
-                              return next;
-                            });
+                            const newVisibility = { ...columnVisibility, [column.id]: !!value };
+                            onVisibilityChange(newVisibility);
                           }}
                       >
                           {column.label}
@@ -521,8 +506,9 @@ export default function DetailedSalesHistoryTable({ data, columns, tableTitle = 
                   ))}
                 </ScrollArea>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={handleResetColumns}>
-                  Resetar preferências de colunas
+                 <DropdownMenuItem onSelect={() => onSavePreferences(columnVisibility)} disabled={isSavingPreferences}>
+                    {isSavingPreferences ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                    Salvar esta visão
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -547,7 +533,14 @@ export default function DetailedSalesHistoryTable({ data, columns, tableTitle = 
             <TableHeader>
               <TableRow>
                  <TableHead className="w-[50px]"></TableHead>
-                {visibleColumns.length === 0 ? (
+                {isLoadingPreferences ? (
+                    <TableHead colSpan={5} className="text-muted-foreground h-12">
+                        <div className="flex items-center gap-2">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Carregando suas preferências...
+                        </div>
+                    </TableHead>
+                ) : visibleColumns.length === 0 ? (
                   <TableHead className="text-muted-foreground">
                     Nenhuma coluna visível — abra “Exibir Colunas” ou clique em “Resetar preferências”.
                   </TableHead>

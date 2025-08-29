@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import * as React from "react";
@@ -30,6 +29,7 @@ import {
   Timestamp,
   updateDoc,
   setDoc,
+  getDoc,
   arrayRemove,
   query,
   getDocsFromServer,
@@ -340,6 +340,9 @@ const mergeForHeader = (base: any, row: any) => {
 const MotionCard = motion(Card);
 
 type IncomingDataset = { rows: any[]; fileName: string; assocKey?: string };
+type ColumnVisibility = Record<string, boolean>;
+
+const PREF_KEY = "vendas_columns";
 
 export default function VendasPage() {
   const [salesFromDb, setSalesFromDb] = React.useState<VendaDetalhada[]>([]);
@@ -356,11 +359,59 @@ export default function VendasPage() {
   const [saveProgress, setSaveProgress] = React.useState(0);
   const router = useRouter();
 
+  // New states for column visibility
+  const [visibleColumns, setVisibleColumns] = React.useState<ColumnVisibility>({});
+  const [isLoadingPreferences, setIsLoadingPreferences] = React.useState(true);
+  const [isSavingPreferences, setIsSavingPreferences] = React.useState(false);
+
+
+  /* ======= Carregar/Salvar Preferências de Coluna ======= */
+  const loadColumnPreferences = React.useCallback(async () => {
+    if (!auth.currentUser) return;
+    setIsLoadingPreferences(true);
+    try {
+        const prefRef = doc(db, "userPreferences", auth.currentUser.uid);
+        const docSnap = await getDoc(prefRef);
+        if (docSnap.exists() && docSnap.data()?.[PREF_KEY]) {
+            setVisibleColumns(docSnap.data()[PREF_KEY]);
+        }
+    } catch (error) {
+        console.error("Erro ao carregar preferências:", error);
+    } finally {
+        setIsLoadingPreferences(false);
+    }
+  }, []);
+
+  const saveColumnPreferences = React.useCallback(async (newVisibility: ColumnVisibility) => {
+    if (!auth.currentUser) return;
+    setIsSavingPreferences(true);
+    try {
+      const prefRef = doc(db, "userPreferences", auth.currentUser.uid);
+      await setDoc(prefRef, { [PREF_KEY]: newVisibility }, { merge: true });
+       toast({ title: "Visão salva!", description: "Suas preferências de colunas foram salvas." });
+    } catch (error) {
+      console.error("Erro ao salvar preferências:", error);
+      toast({ title: "Erro", description: "Não foi possível salvar suas preferências.", variant: "destructive" });
+    } finally {
+      setIsSavingPreferences(false);
+    }
+  }, [toast]);
+
+  const handleVisibilityChange = (newVisibility: ColumnVisibility) => {
+    setVisibleColumns(newVisibility);
+    // Debounce or save on button click
+  };
 
     const handleLogout = async () => {
     await auth.signOut();
     router.push('/login');
   };
+
+  React.useEffect(() => {
+    if (auth.currentUser) {
+        loadColumnPreferences();
+    }
+  }, [loadColumnPreferences]);
 
 
   /* ======= Realtime listeners ======= */
@@ -915,7 +966,16 @@ export default function VendasPage() {
           )}
         </Card>
 
-        <DetailedSalesHistoryTable data={groupedForView} columns={columns} />
+        <DetailedSalesHistoryTable 
+            data={groupedForView} 
+            columns={columns} 
+            showAdvancedFilters={true}
+            columnVisibility={visibleColumns}
+            onVisibilityChange={handleVisibilityChange}
+            onSavePreferences={saveColumnPreferences}
+            isLoadingPreferences={isLoadingPreferences}
+            isSavingPreferences={isSavingPreferences}
+        />
       </main>
     </div>
   );
