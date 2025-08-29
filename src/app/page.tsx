@@ -4,7 +4,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { format, parseISO, endOfDay, isValid } from "date-fns";
+import { format, parseISO, endOfDay, isValid, startOfMonth, endOfMonth } from "date-fns";
 import type { DateRange } from "react-day-picker";
 import {
   DollarSign,
@@ -65,7 +65,10 @@ const toDate = (value: unknown): Date | null => {
 
 export default function DashboardPage() {
   const [salesData, setSalesData] = React.useState<VendaDetalhada[]>([]);
-  const [date, setDate] = React.useState<DateRange | undefined>(undefined);
+  const [date, setDate] = React.useState<DateRange | undefined>({
+    from: startOfMonth(new Date()),
+    to: endOfMonth(new Date()),
+  });
   const router = useRouter();
 
   React.useEffect(() => {
