@@ -20,6 +20,9 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
 
+// Initialize Firebase Auth here to ensure it's ready
+const auth = getAuth();
+
 export default function LoginPage() {
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
@@ -27,7 +30,6 @@ export default function LoginPage() {
   const [isLoggingIn, setIsLoggingIn] = React.useState(false);
   const router = useRouter();
   const { toast } = useToast();
-  const auth = getAuth();
 
   React.useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -39,7 +41,7 @@ export default function LoginPage() {
     });
 
     return () => unsubscribe();
-  }, [auth, router]);
+  }, [router]);
 
 
   const handleLogin = async (e: React.FormEvent) => {
