@@ -570,18 +570,18 @@ export default function VendasPage() {
         const batch = writeBatch(db);
 
         chunk.forEach((item) => {
-          const isUpdate = !String(item.id).startsWith('staged-');
-          const docId = isUpdate ? item.id : doc(collection(db, "vendas")).id;
+          const isStaged = String(item.id).startsWith('staged-');
+          const docId = isStaged ? doc(collection(db, "vendas")).id : item.id;
           const saleRef = doc(db, "vendas", docId);
           const { id, ...payload } = item;
           
-          if(!isUpdate) payload.id = docId;
+          if(isStaged) payload.id = docId;
 
           if (payload.data instanceof Date) payload.data = Timestamp.fromDate(payload.data);
           if (payload.uploadTimestamp instanceof Date) payload.uploadTimestamp = Timestamp.fromDate(payload.uploadTimestamp);
 
-          if (isUpdate) batch.update(saleRef, payload);
-          else batch.set(saleRef, payload);
+          // Use set with merge to handle both new and existing documents safely
+          batch.set(saleRef, payload, { merge: true });
         });
 
         await batch.commit();
@@ -867,5 +867,3 @@ export default function VendasPage() {
     </div>
   );
 }
-
-    
