@@ -32,20 +32,22 @@ export async function organizeLogistics(input: OrganizeLogisticsInput): Promise<
     console.log('🚀 Iniciando organização com', input.logisticsData.length, 'itens');
     
     try {
-        // Validar dados de entrada
         if (!input.logisticsData || input.logisticsData.length === 0) {
             throw new Error('Nenhum dado fornecido para organizar');
         }
-
-        // Verificar se os dados têm a estrutura esperada
-        const firstItem = input.logisticsData[0];
-        if (!firstItem.id) {
+        if (!input.logisticsData[0].id) {
             throw new Error('Dados sem ID encontrados');
         }
 
-        console.log('📋 Exemplo de dado:', JSON.stringify(firstItem, null, 2));
+        console.log('📋 Exemplo de dado:', JSON.stringify(input.logisticsData[0], null, 2));
 
-        const result = await organizeLogisticsFlow(input);
+        // We only need to send a subset of fields to the AI to save tokens
+        const dataForAI = input.logisticsData.map(item => ({
+            id: item.id,
+            logistica: item.logistica,
+        }));
+
+        const result = await organizeLogisticsFlow({ logisticsData: dataForAI });
         
         if (!result || !result.organizedData) {
             throw new Error('IA não retornou dados válidos');
@@ -53,10 +55,9 @@ export async function organizeLogistics(input: OrganizeLogisticsInput): Promise<
 
         console.log('✅ IA processou', result.organizedData.length, 'itens');
         
-        // Merge dos resultados
         const originalDataById = new Map(input.logisticsData.map(item => [item.id, item]));
         
-        result.organizedData.forEach((organizedItem, index) => {
+        result.organizedData.forEach((organizedItem) => {
             const originalItem = originalDataById.get(organizedItem.id);
             if (originalItem) {
                 originalItem.entregador = organizedItem.entregador || '';
@@ -74,21 +75,19 @@ export async function organizeLogistics(input: OrganizeLogisticsInput): Promise<
         
         return { organizedData: finalData };
         
-    } catch (error) {
-        const err = error as Error;
+    } catch (error: any) {
         console.error('❌ Erro detalhado:', {
-            message: err.message,
-            stack: err.stack,
+            message: error.message,
+            stack: error.stack,
             inputSize: input.logisticsData?.length
         });
         
-        // Retornar erro mais específico
-        if (err.message.includes('AI')) {
+        if (error.message.includes('AI')) {
             throw new Error('Falha na comunicação com a IA. Tente novamente.');
-        } else if (err.message.includes('network')) {
+        } else if (error.message.includes('network')) {
             throw new Error('Problema de conexão. Verifique sua internet.');
         } else {
-            throw new Error(`Erro ao processar dados: ${err.message}`);
+            throw new Error(`Erro ao processar dados: ${error.message}`);
         }
     }
 }
@@ -96,7 +95,7 @@ export async function organizeLogistics(input: OrganizeLogisticsInput): Promise<
 
 const prompt = ai.definePrompt({
   name: 'organizeLogisticsPrompt',
-  input: { schema: z.object({ logisticsData: z.array(LogisticsEntrySchema) }) },
+  input: { schema: z.object({ logisticsData: z.array(z.object({ id: z.string(), logistica: z.string().optional() })) }) },
   output: { schema: OrganizeLogisticsOutputSchema },
   prompt: `You are an intelligent data processing agent. Your task is to analyze a list of logistics entries and extract structured information.
 
@@ -119,17 +118,11 @@ Data to analyze:
 const organizeLogisticsFlow = ai.defineFlow(
   {
     name: 'organizeLogisticsFlow',
-    inputSchema: OrganizeLogisticsInputSchema,
+    inputSchema: z.object({ logisticsData: z.array(z.object({ id: z.string(), logistica: z.string().optional() })) }),
     outputSchema: OrganizeLogisticsOutputSchema,
   },
   async (input) => {
-    // We only need to send a subset of fields to the AI to save tokens
-    const dataForAI = input.logisticsData.map(item => ({
-        id: item.id,
-        logistica: item.logistica,
-    }));
-
-    const { output } = await prompt({ logisticsData: dataForAI });
+    const { output } = await prompt(input);
     if (!output) {
       throw new Error('AI did not return an output.');
     }
