@@ -111,7 +111,7 @@ const organizeLogisticsFlow = ai.defineFlow(
     });
 
     const { output } = await customAI.generate({
-        model: 'gemini-1.5-flash-latest',
+        model: 'gemini-1.5-flash',
         prompt: `You are an intelligent data processing agent. Your task is to analyze a list of logistics entries and extract structured information.
 
 For each entry, examine the 'logistica' field:
