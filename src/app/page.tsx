@@ -1,3 +1,4 @@
+
 "use client";
 
 import * as React from "react";
@@ -150,12 +151,22 @@ export default function DashboardPage() {
               </Link>
             </SidebarMenuItem>
             <SidebarMenuItem>
-              <Link href="/taxas">
                 <SidebarMenuButton>
                   <Percent />
                   Taxas
                 </SidebarMenuButton>
-              </Link>
+              <SidebarMenuSub>
+                <SidebarMenuSubItem>
+                  <Link href="/taxas/cartao">
+                    <SidebarMenuSubButton>Taxas do Cartão</SidebarMenuSubButton>
+                  </Link>
+                </SidebarMenuSubItem>
+                 <SidebarMenuSubItem>
+                  <Link href="/taxas/custos">
+                    <SidebarMenuSubButton>Custos sobre Vendas</SidebarMenuSubButton>
+                  </Link>
+                </SidebarMenuSubItem>
+              </SidebarMenuSub>
             </SidebarMenuItem>
              <SidebarMenuItem>
               <Link href="/conexoes">

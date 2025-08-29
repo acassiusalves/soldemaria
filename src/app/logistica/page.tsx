@@ -19,6 +19,7 @@ import {
   Percent,
   Wand2,
   Plug,
+  ChevronDown,
 } from "lucide-react";
 import {
   collection,
@@ -585,12 +586,22 @@ export default function LogisticaPage() {
           >
             Logística
           </Link>
-           <Link
-            href="/taxas"
-            className="text-muted-foreground transition-colors hover:text-foreground"
-          >
-            Taxas
-          </Link>
+           <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+               <Button variant="ghost" className="flex items-center gap-1 text-muted-foreground transition-colors hover:text-foreground data-[state=open]:bg-accent px-3">
+                Taxas
+                <ChevronDown className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              <DropdownMenuItem asChild>
+                <Link href="/taxas/cartao">Taxas do Cartão</Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link href="/taxas/custos">Custos sobre Vendas</Link>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
            <Link
             href="/conexoes"
             className="text-muted-foreground transition-colors hover:text-foreground"
