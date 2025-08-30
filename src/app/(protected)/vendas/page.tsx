@@ -177,8 +177,8 @@ const headerMappingNormalized: Record<string, string> = {
 
 /* ========== limpadores ========= */
 const isDateLike = (s: string) =>
-    /^\d{4}[-/]\d{2}[-/]\d{2}$/.test(s) ||
-    /^\d{2}[-/]\d{2}[-/]\d{4}$/.test(s);
+    /^\d{4}[-\/]\d{2}[-\/]\d{2}$/.test(s) ||
+    /^\d{2}[-\/]\d{2}[-\/]\d{4}$/.test(s);
 
 const cleanNumericValue = (value: any): number | string => {
   if (typeof value === "number") return value;
@@ -541,6 +541,14 @@ const handleSaveCustomCalculation = async (calc: Omit<CustomCalculation, 'id'> &
         const newVisibility = { ...columnVisibility, [finalCalc.id]: true };
         setColumnVisibility(newVisibility);
         await saveUserPreference(user.uid, 'vendas_columns_visibility', newVisibility);
+        
+        // Ensure the new column is added to the order
+        setColumnOrder(prev => {
+            const next = Array.isArray(prev) ? [...prev] : [];
+            if (!next.includes(finalCalc.id)) next.push(finalCalc.id);
+            saveUserPreference(user.uid, 'vendas_columns_order', next);
+            return next;
+        });
     }
 };
 
@@ -857,6 +865,17 @@ const handleSaveCustomCalculation = async (calc: Omit<CustomCalculation, 'id'> &
     return uniqueCols.map(c => ({ key: c.id, label: c.label }));
   }, [columns, customCalculations]);
 
+  const mergedColumns = React.useMemo(() => {
+    const map = new Map<string, ColumnDef>();
+    // 1) começa com as colunas do metadata
+    columns.forEach(c => map.set(c.id, c));
+    // 2) sobrescreve/insere as custom (label = nome do cálculo)
+    customCalculations.forEach(c => {
+      map.set(c.id, { id: c.id, label: c.name, isSortable: true });
+    });
+    return Array.from(map.values());
+  }, [columns, customCalculations]);
+
   return (
     <>
     <div className="flex min-h-screen w-full flex-col">
@@ -1059,7 +1078,7 @@ const handleSaveCustomCalculation = async (calc: Omit<CustomCalculation, 'id'> &
 
         <DetailedSalesHistoryTable 
             data={groupedForView} 
-            columns={[...columns, ...customCalculations.map(c => ({ id: c.id, label: c.name, isSortable: true }))]}
+            columns={mergedColumns}
             showAdvancedFilters={true}
             columnVisibility={columnVisibility}
             onVisibilityChange={handleVisibilityChange}
@@ -1087,3 +1106,4 @@ const handleSaveCustomCalculation = async (calc: Omit<CustomCalculation, 'id'> &
   );
 }
 
+    
