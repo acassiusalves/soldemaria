@@ -457,21 +457,21 @@ export default function VendasPage() {
     setIsSavingPreferences(false);
   };
   
-  const handleSaveCustomCalculation = async (calc: Omit<CustomCalculation, 'id'> & { id?: string }) => {
-      let newCalculations: CustomCalculation[];
-      const finalCalc = { ...calc };
+const handleSaveCustomCalculation = async (calc: Omit<CustomCalculation, 'id'> & { id?: string }) => {
+    let newCalculations: CustomCalculation[];
+    const finalCalc = { ...calc };
       
-      if (finalCalc.id) { // Editing
-          newCalculations = customCalculations.map(c => c.id === finalCalc.id ? (finalCalc as CustomCalculation) : c);
-      } else { // Adding
-          const newId = `custom_${Date.now()}`;
-          newCalculations = [...customCalculations, { ...finalCalc, id: newId }];
-      }
+    if (finalCalc.id) { // Editing
+        newCalculations = customCalculations.map(c => c.id === finalCalc.id ? (finalCalc as CustomCalculation) : c);
+    } else { // Adding
+        const newId = `custom_${Date.now()}`;
+        newCalculations = [...customCalculations, { ...finalCalc, id: newId }];
+    }
 
-      setCustomCalculations(newCalculations);
-      await saveGlobalCalculations(newCalculations);
-      toast({ title: "Cálculo Salvo!", description: `A coluna "${finalCalc.name}" está disponível para todos.`});
-  };
+    setCustomCalculations(newCalculations); // This line is crucial
+    await saveGlobalCalculations(newCalculations);
+    toast({ title: "Cálculo Salvo!", description: `A coluna "${finalCalc.name}" foi salva.`});
+};
 
   const handleDeleteCustomCalculation = async (calcId: string) => {
       const newCalculations = customCalculations.filter(c => c.id !== calcId);
@@ -976,4 +976,5 @@ export default function VendasPage() {
     </>
   );
 }
+
 
