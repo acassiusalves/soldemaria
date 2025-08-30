@@ -381,6 +381,8 @@ async function persistCalcColumns(calcs: CustomCalculation[]) {
 
 export default function VendasPage() {
   const [vendasData, setVendasData] = React.useState<VendaDetalhada[]>([]);
+  const [logisticaData, setLogisticaData] = React.useState<VendaDetalhada[]>([]);
+  const [custosData, setCustosData] = React.useState<VendaDetalhada[]>([]);
   const [stagedData, setStagedData] = React.useState<VendaDetalhada[]>([]);
   const [stagedFileNames, setStagedFileNames] = React.useState<string[]>([]);
   const [columns, setColumns] = React.useState<ColumnDef[]>([]);
@@ -410,30 +412,19 @@ export default function VendasPage() {
 
   /* ======= Realtime listeners ======= */
   React.useEffect(() => {
-    const qy = query(collection(db, "vendas"));
-    const unsub = onSnapshot(qy, (snapshot) => {
-      if (snapshot.metadata.hasPendingWrites) return;
-      let newData: VendaDetalhada[] = [];
-      let modifiedData: VendaDetalhada[] = [];
-      snapshot.docChanges().forEach((change) => {
-        if (change.type === "added")
-          newData.push({ ...change.doc.data(), id: change.doc.id } as VendaDetalhada);
-        if (change.type === "modified")
-          modifiedData.push({ ...change.doc.data(), id: change.doc.id } as VendaDetalhada);
-      });
-      if (newData.length || modifiedData.length) {
-        setVendasData((curr) => {
-          const map = new Map(curr.map((s) => [s.id, s]));
-          newData.forEach((s) => map.set(s.id, s));
-          modifiedData.forEach((s) => map.set(s.id, s));
-          return Array.from(map.values());
+    const collectionsToWatch = [
+        { name: "vendas", setter: setVendasData },
+        { name: "logistica", setter: setLogisticaData },
+        { name: "custos", setter: setCustosData },
+    ];
+
+    const unsubs = collectionsToWatch.map(({ name, setter }) => {
+        const q = query(collection(db, name));
+        return onSnapshot(q, (snapshot) => {
+            if (snapshot.metadata.hasPendingWrites) return;
+            const data = snapshot.docs.map(d => ({ ...d.data(), id: d.id })) as VendaDetalhada[];
+            setter(data);
         });
-      }
-      snapshot.docChanges().forEach((change) => {
-        if (change.type === "removed") {
-          setVendasData((curr) => curr.filter((s) => s.id !== change.doc.id));
-        }
-      });
     });
 
     const metaUnsub = onSnapshot(doc(db, "metadata", "vendas"), (docSnap) => {
@@ -444,7 +435,10 @@ export default function VendasPage() {
       }
     });
 
-    return () => { unsub(); metaUnsub(); };
+    return () => { 
+        unsubs.forEach(unsub => unsub());
+        metaUnsub(); 
+    };
   }, []);
 
   // Effect to load preferences from Firestore
@@ -529,7 +523,6 @@ const handleSaveCustomCalculation = async (calc: Omit<CustomCalculation, 'id'> &
         ? customCalculations.map(c => (c.id === finalCalc.id ? finalCalc : c))
         : [...customCalculations, finalCalc];
 
-    setCustomCalculations(newList);
     await saveGlobalCalculations(newList);
     await persistCalcColumns(newList);
     toast({ title: "Cálculo Salvo!", description: `A coluna "${finalCalc.name}" foi salva.` });
@@ -551,7 +544,6 @@ const handleSaveCustomCalculation = async (calc: Omit<CustomCalculation, 'id'> &
 
   const handleDeleteCustomCalculation = async (calcId: string) => {
       const newCalculations = customCalculations.filter(c => c.id !== calcId);
-      setCustomCalculations(newCalculations);
       await saveGlobalCalculations(newCalculations);
       toast({ title: "Cálculo Removido!"});
   };
@@ -644,13 +636,32 @@ const handleSaveCustomCalculation = async (calc: Omit<CustomCalculation, 'id'> &
 
   /* ======= Mescla banco + staged (staged tem prioridade) ======= */
   const allData = React.useMemo(() => {
-    const map = new Map(vendasData.map(s => [s.id, s]));
-    stagedData.forEach(s => {
-        const existing = map.get(s.id) || {};
-        map.set(s.id, { ...existing, ...s });
+    const allRows = [...vendasData, ...stagedData];
+    const logisticaMap = new Map(logisticaData.map(l => [normCode(l.codigo), l]));
+    const custosByCode = new Map<string, any[]>();
+
+    custosData.forEach(c => {
+        const code = normCode(c.codigo);
+        if (!custosByCode.has(code)) custosByCode.set(code, []);
+        custosByCode.get(code)!.push(c);
     });
+
+    const merged = allRows.map(venda => {
+        const code = normCode(venda.codigo);
+        const logistica = logisticaMap.get(code);
+        const custos = custosByCode.get(code);
+
+        return {
+            ...venda,
+            ...(logistica && { logistica: logistica.logistica, entregador: logistica.entregador, valor: logistica.valor }),
+            costs: custos || [],
+        };
+    });
+
+    const map = new Map(merged.map(s => [s.id, s]));
     return Array.from(map.values());
-  }, [vendasData, stagedData]);
+  }, [vendasData, logisticaData, custosData, stagedData]);
+
 
   /* ======= Filtro por período ======= */
   const filteredData = React.useMemo(() => {
@@ -1004,7 +1015,7 @@ const handleSaveCustomCalculation = async (calc: Omit<CustomCalculation, 'id'> &
                                     <AlertDialogTitle>Você tem certeza absoluta?</AlertDialogTitle>
                                     <AlertDialogDescription>
                                         Esta ação não pode ser desfeita. Isso irá apagar permanentemente
-                                        TODAS os dados de vendas do seu banco de dados.
+                                        TODOS os dados de vendas do seu banco de dados.
                                     </AlertDialogDescription>
                                 </AlertDialogHeader>
                                 <AlertDialogFooter>
