@@ -81,7 +81,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import DetailedSalesHistoryTable, { ColumnDef } from "@/components/detailed-sales-history-table";
-import type { VendaDetalhada, CustomCalculation } from "@/lib/data";
+import type { VendaDetalhada, CustomCalculation, FormulaItem } from "@/lib/data";
 import { SupportDataDialog } from "@/components/support-data-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Progress } from "@/components/ui/progress";
@@ -351,12 +351,10 @@ async function saveGlobalCalculations(calculations: CustomCalculation[]) {
     const docRef = doc(db, GLOBAL_SETTINGS_COLLECTION, "globalCalculations");
     const cleanCalcs = stripUndefinedDeep(
         calculations.map(c => ({
-        // garante defaults seguros
         id: c.id,
         name: c.name ?? 'Sem nome',
         formula: Array.isArray(c.formula) ? c.formula : [],
         isPercentage: c.isPercentage || false,
-        // só inclui interaction se estiver completa
         ...(c.interaction?.targetColumn
             ? { interaction: {
                     targetColumn: String(c.interaction.targetColumn),
@@ -542,7 +540,6 @@ const handleSaveCustomCalculation = async (calc: Omit<CustomCalculation, 'id'> &
         setColumnVisibility(newVisibility);
         await saveUserPreference(user.uid, 'vendas_columns_visibility', newVisibility);
         
-        // Ensure the new column is added to the order
         setColumnOrder(prev => {
             const next = Array.isArray(prev) ? [...prev] : [];
             if (!next.includes(finalCalc.id)) next.push(finalCalc.id);
@@ -596,7 +593,6 @@ const handleSaveCustomCalculation = async (calc: Omit<CustomCalculation, 'id'> &
   
       customCalculations.forEach(calc => {
         try {
-          // 1) Mapeia itens -> tokens seguros
           const tokensRaw = (calc.formula || []).map((item: any) => {
             if (item?.type === 'column') {
               return asNumberLiteral(getNumericField(flatRow, String(item.value)));
@@ -606,12 +602,11 @@ const handleSaveCustomCalculation = async (calc: Omit<CustomCalculation, 'id'> &
             }
             if (item?.type === 'op') {
               const op = String(item.value).trim();
-              return isOp(op) ? op : '+'; // fallback seguro
+              return isOp(op) ? op : '+';
             }
-            return ''; // ignora lixo
+            return '';
           }).filter(Boolean);
   
-          // 2) Corrige casos de dois valores seguidos (insere * implícito)
           const tokens: string[] = [];
           for (let i = 0; i < tokensRaw.length; i++) {
             const t = tokensRaw[i];
@@ -624,7 +619,6 @@ const handleSaveCustomCalculation = async (calc: Omit<CustomCalculation, 'id'> &
   
           const expr = tokens.join(' ');
   
-          // 3) Avalia
           const result = new Function(`return ${expr}`)();
           const numResult = typeof result === 'number' && Number.isFinite(result) ? result : 0;
   
@@ -668,16 +662,11 @@ const handleSaveCustomCalculation = async (calc: Omit<CustomCalculation, 'id'> &
       return itemDate && itemDate >= fromDate && itemDate <= toDateVal;
     });
   }, [date, allData]);
-  
-    /* ======= Aplica Cálculos Customizados ======= */
-  const calculatedData = React.useMemo(() => {
-      return applyCustomCalculations(filteredData);
-  }, [filteredData, applyCustomCalculations]);
 
-  /* ======= AGRUPAMENTO por código + subRows ======= */
+  /* ======= AGRUPAMENTO por código + subRows e Aplicação de Cálculos ======= */
   const groupedForView = React.useMemo(() => {
     const groups = new Map<string, any>();
-    for (const row of calculatedData) {
+    for (const row of filteredData) {
       const code = normCode((row as any).codigo);
       if (!code) continue;
 
@@ -686,8 +675,8 @@ const handleSaveCustomCalculation = async (calc: Omit<CustomCalculation, 'id'> &
       }
       const g = groups.get(code);
 
-      if (isDetailRow(row)) g.header.subRows.push(row); // detalhe
-      g.header = mergeForHeader(g.header, row);         // enriquece header
+      if (isDetailRow(row)) g.header.subRows.push(row);
+      g.header = mergeForHeader(g.header, row);
     }
 
     for (const g of groups.values()) {
@@ -695,9 +684,11 @@ const handleSaveCustomCalculation = async (calc: Omit<CustomCalculation, 'id'> &
         (toDate(a.data)?.getTime() ?? 0) - (toDate(b.data)?.getTime() ?? 0)
       );
     }
+    
+    const headers = Array.from(groups.values()).map(g => g.header);
 
-    return Array.from(groups.values()).map(g => g.header);
-  }, [calculatedData]);
+    return applyCustomCalculations(headers);
+  }, [filteredData, applyCustomCalculations]);
 
   /* ======= UPLOAD / PROCESSAMENTO ======= */
   const handleDataUpload = async (datasets: IncomingDataset[]) => {
@@ -773,8 +764,6 @@ const handleSaveCustomCalculation = async (calc: Omit<CustomCalculation, 'id'> &
           const map = new Map(prev.map(s => [s.id, s]));
           dataToSave.forEach(s => {
               const newRecord = { ...s };
-              // We assign a real ID after saving, so this might be tricky
-              // For now, let's just add them, Firestore listener will sync eventually
               if (!map.has(s.id)) {
                   map.set(s.id, newRecord);
               }
@@ -867,9 +856,7 @@ const handleSaveCustomCalculation = async (calc: Omit<CustomCalculation, 'id'> &
 
   const mergedColumns = React.useMemo(() => {
     const map = new Map<string, ColumnDef>();
-    // 1) começa com as colunas do metadata
     columns.forEach(c => map.set(c.id, c));
-    // 2) sobrescreve/insere as custom (label = nome do cálculo)
     customCalculations.forEach(c => {
       map.set(c.id, { id: c.id, label: c.name, isSortable: true });
     });
@@ -1105,5 +1092,3 @@ const handleSaveCustomCalculation = async (calc: Omit<CustomCalculation, 'id'> &
     </>
   );
 }
-
-    
