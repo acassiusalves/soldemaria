@@ -24,7 +24,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 interface CalculationDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (calculation: CustomCalculation) => Promise<void>;
+  onSave: (calculation: Omit<CustomCalculation, 'id'> & { id?: string }) => Promise<void>;
   onDelete: (calculationId: string) => Promise<void>;
   marketplaces: string[];
   availableColumns: { key: string; label: string }[];
@@ -96,8 +96,8 @@ export function CalculationDialog({ isOpen, onClose, onSave, onDelete, marketpla
           return;
       }
       
-      const newCalculation: CustomCalculation = {
-          id: editingId || `custom_${Date.now()}`,
+      const newCalculation: Omit<CustomCalculation, 'id'> & { id?: string } = {
+          id: editingId || undefined,
           name: columnName,
           formula: formula,
           isPercentage: isPercentage,
@@ -111,9 +111,7 @@ export function CalculationDialog({ isOpen, onClose, onSave, onDelete, marketpla
       };
 
       await onSave(newCalculation);
-      toast({ title: `Coluna ${editingId ? 'Atualizada' : 'Criada'}!`, description: `A coluna "${columnName}" foi salva.` });
       handleClear();
-      if (!editingId) onClose(); 
   };
 
   const handleEditClick = (calc: CustomCalculation) => {
@@ -128,7 +126,6 @@ export function CalculationDialog({ isOpen, onClose, onSave, onDelete, marketpla
   
   const handleDeleteClick = async (calcId: string) => {
     await onDelete(calcId);
-    toast({ title: 'Coluna Removida!', description: 'A coluna personalizada foi apagada.'});
     if (editingId === calcId) {
         handleClear();
     }

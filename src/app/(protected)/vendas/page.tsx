@@ -349,7 +349,19 @@ async function saveUserPreference(userId: string, key: string, value: any) {
 
 async function saveGlobalCalculations(calculations: CustomCalculation[]) {
     const docRef = doc(db, GLOBAL_SETTINGS_COLLECTION, "globalCalculations");
-    await setDoc(docRef, { calculations });
+    await setDoc(docRef, { calculations }, { merge: true });
+}
+
+async function persistCalcColumns(calcs: CustomCalculation[]) {
+  const metaRef = doc(db, "metadata", "vendas");
+  const snap = await getDoc(metaRef);
+  const current = (snap.exists() ? snap.data() : {});
+  const existing = Array.isArray(current.columns) ? current.columns : [];
+  const map = new Map(existing.map((c: any) => [c.id, c]));
+  calcs.forEach(c => {
+    if (!map.has(c.id)) map.set(c.id, { id: c.id, label: c.name, isSortable: true });
+  });
+  await setDoc(metaRef, { columns: Array.from(map.values()) }, { merge: true });
 }
 
 
@@ -469,19 +481,47 @@ export default function VendasPage() {
   };
   
 const handleSaveCustomCalculation = async (calc: Omit<CustomCalculation, 'id'> & { id?: string }) => {
-    let newCalculations: CustomCalculation[];
-    const finalCalc = { ...calc };
-      
-    if (finalCalc.id) { // Editing
-        newCalculations = customCalculations.map(c => c.id === finalCalc.id ? (finalCalc as CustomCalculation) : c);
-    } else { // Adding
-        const newId = `custom_${Date.now()}`;
-        newCalculations = [...customCalculations, { ...finalCalc, id: newId }];
-    }
+    const safeFormula = (calc.formula || []).map((item) => {
+        if (item.type === 'number') {
+            const n = typeof item.value === 'string'
+                ? parseFloat(String(item.value).replace(',', '.'))
+                : Number(item.value);
+            return { type: 'number', value: String(Number.isFinite(n) ? n : 0) };
+        }
+        if (item.type === 'column') {
+            return { type: 'column', value: String(item.value), label: String(item.label) };
+        }
+        return { type: 'operator', value: String(item.value), label: String(item.label) };
+    });
 
-    setCustomCalculations(newCalculations);
-    await saveGlobalCalculations(newCalculations);
-    toast({ title: "Cálculo Salvo!", description: `A coluna "${finalCalc.name}" foi salva.`});
+    const finalCalc = {
+        id: calc.id || `custom_${Date.now()}`,
+        name: (calc.name || 'Sem nome').trim(),
+        formula: safeFormula,
+        isPercentage: calc.isPercentage || false,
+        interaction: calc.interaction
+            ? {
+                targetColumn: String(calc.interaction.targetColumn),
+                operator: calc.interaction.operator === '-' ? '-' : '+' as '+' | '-',
+            }
+            : undefined,
+    };
+
+    const newList = customCalculations.some(c => c.id === finalCalc.id)
+        ? customCalculations.map(c => (c.id === finalCalc.id ? finalCalc : c))
+        : [...customCalculations, finalCalc];
+
+    setCustomCalculations(newList);
+    await saveGlobalCalculations(newList);
+    await persistCalcColumns(newList);
+    toast({ title: "Cálculo Salvo!", description: `A coluna "${finalCalc.name}" foi salva.` });
+
+    const user = auth.currentUser;
+    if (user) {
+        const newVisibility = { ...columnVisibility, [finalCalc.id]: true };
+        setColumnVisibility(newVisibility);
+        await saveUserPreference(user.uid, 'vendas_columns_visibility', newVisibility);
+    }
 };
 
   const handleDeleteCustomCalculation = async (calcId: string) => {
@@ -494,52 +534,55 @@ const handleSaveCustomCalculation = async (calc: Omit<CustomCalculation, 'id'> &
 
   const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): VendaDetalhada[] => {
     if (customCalculations.length === 0) return data;
-  
-    const getNumericField = (row: any, key: string): number => {
-      const val = row[key] ?? row.customData?.[key];
-      if (typeof val === 'number') return val;
-      if (typeof val === 'string') {
-        const num = parseFloat(val.replace(',', '.'));
-        return isNaN(num) ? 0 : num;
-      }
-      return 0;
-    };
-  
-    return data.map(row => {
-      const newCustomData: Record<string, number> = { ...(row.customData || {}) };
-      const flatRow: any = { ...row }; // <- vamos escrever no nível raiz também
-  
-      customCalculations.forEach(calc => {
-        try {
-          const formulaString = calc.formula.map(item => {
-            if (item.type === 'column') {
-              return getNumericField(flatRow, item.value);
-            }
-            return item.value;
-          }).join(' ');
-  
-          const result = new Function(`return ${formulaString}`)();
-          // salva nos dois lugares
-          newCustomData[calc.id] = result;
-          flatRow[calc.id] = result;
-  
-          if (calc.interaction) {
-            const base = getNumericField(flatRow, calc.interaction.targetColumn);
-            const newVal = calc.interaction.operator === '+' ? base + result : base - result;
-            // atualiza no customData e no nível raiz
-            newCustomData[calc.interaction.targetColumn] = newVal;
-            flatRow[calc.interaction.targetColumn] = newVal;
-          }
-        } catch (e) {
-          console.error(`Error calculating formula for ${calc.name}`, e);
-          newCustomData[calc.id] = 0;
-          flatRow[calc.id] = 0;
+
+    const labelToId = new Map();
+    [...columns, ...customCalculations.map(c => ({ id: c.id, label: c.name }))]
+        .forEach(c => { if (c?.label && c?.id) labelToId.set(String(c.label), String(c.id)); });
+
+    const getNumericField = (row: any, keyOrLabel: string): number => {
+        const key = Object.prototype.hasOwnProperty.call(row, keyOrLabel)
+            ? keyOrLabel
+            : (labelToId.get(keyOrLabel) || keyOrLabel);
+        const val = row[key] ?? row.customData?.[key];
+        if (typeof val === 'number') return val;
+        if (typeof val === 'string') {
+            const num = parseFloat(val.replace(',', '.'));
+            return Number.isFinite(num) ? num : 0;
         }
-      });
-  
-      return { ...flatRow, customData: newCustomData };
+        return 0;
+    };
+
+    return data.map((row) => {
+        const newCustomData: Record<string, number> = { ...(row.customData || {}) };
+        const flatRow: any = { ...row };
+
+        customCalculations.forEach((calc) => {
+            try {
+                const expr = calc.formula.map((item) => {
+                    if (item.type === 'column') return getNumericField(flatRow, String(item.value));
+                    return String(item.value);
+                }).join(' ');
+
+                const result = new Function(`return ${expr}`)();
+                newCustomData[calc.id] = result;
+                flatRow[calc.id] = result;
+
+                if (calc.interaction) {
+                    const base = getNumericField(flatRow, calc.interaction.targetColumn);
+                    const nv = calc.interaction.operator === '-' ? base - result : base + result;
+                    newCustomData[calc.interaction.targetColumn] = nv;
+                    flatRow[calc.interaction.targetColumn] = nv;
+                }
+            } catch (e) {
+                console.error(`Erro na fórmula de ${calc.name}`, e);
+                newCustomData[calc.id] = 0;
+                flatRow[calc.id] = 0;
+            }
+        });
+
+        return { ...flatRow, customData: newCustomData };
     });
-  }, [customCalculations]);
+  }, [customCalculations, columns]);
 
   /* ======= Mescla banco + staged (staged tem prioridade) ======= */
   const allData = React.useMemo(() => {
@@ -987,8 +1030,3 @@ const handleSaveCustomCalculation = async (calc: Omit<CustomCalculation, 'id'> &
     </>
   );
 }
-
-
-
-
-    
