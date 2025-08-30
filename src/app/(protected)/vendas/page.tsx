@@ -76,12 +76,11 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import DetailedSalesHistoryTable, { ColumnDef } from "@/components/detailed-sales-history-table";
-import type { VendaDetalhada, CustomCalculation, FormulaItem } from "@/lib/data";
+import type { VendaDetalhada } from "@/lib/data";
 import { SupportDataDialog } from "@/components/support-data-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Progress } from "@/components/ui/progress";
 import { Logo } from "@/components/icons";
-import { CalculationDialog } from "@/components/calculation-dialog";
 
 /* ========== helpers de datas e normalização ========== */
 const toDate = (value: unknown): Date | null => {
@@ -345,94 +344,6 @@ type IncomingDataset = { rows: any[]; fileName: string; assocKey?: string };
 type ColumnVisibility = Record<string, boolean>;
 
 const PREF_KEY_VISIBILITY = "vendas_columns_visibility";
-const PREF_KEY_CALCULATIONS = "vendas_custom_calculations";
-
-const defaultCalculations: CustomCalculation[] = [];
-
-
-// ===== CÁLCULOS PERSONALIZADOS =====
-const sortCalculationsByDependency = (calculations: CustomCalculation[]): CustomCalculation[] => {
-    const graph: { [key: string]: string[] } = {};
-    const inDegree: { [key: string]: number } = {};
-    const calcMap = new Map(calculations.map(c => [c.id, c]));
-    const calcIds = new Set(calcMap.keys());
-
-    for (const id of calcIds) {
-        graph[id] = [];
-        inDegree[id] = 0;
-    }
-
-    for (const calc of calculations) {
-        for (const item of calc.formula) {
-            if (item.type === 'column' && calcIds.has(item.value)) {
-                graph[item.value].push(calc.id);
-                inDegree[calc.id]++;
-            }
-        }
-        if (calc.interaction) {
-            const targetId = calc.interaction.targetColumn;
-            if (calcIds.has(targetId)) {
-                graph[targetId].push(calc.id);
-                inDegree[calc.id]++;
-            }
-        }
-    }
-
-    const queue: string[] = [];
-    for (const id in inDegree) {
-        if (inDegree[id] === 0) queue.push(id);
-    }
-
-    const sorted: CustomCalculation[] = [];
-    while (queue.length > 0) {
-        const currentId = queue.shift()!;
-        sorted.push(calcMap.get(currentId)!);
-        if (graph[currentId]) {
-            for (const neighborId of graph[currentId]) {
-                inDegree[neighborId]--;
-                if (inDegree[neighborId] === 0) queue.push(neighborId);
-            }
-        }
-    }
-
-    if (sorted.length !== calculations.length) {
-        console.error("Dependência circular detectada nos cálculos. A ordem pode estar incorreta.");
-        return calculations;
-    }
-
-    return sorted;
-};
-
-const parseBrNumber = (raw: unknown): number | null => {
-  if (raw == null) return null;
-  if (typeof raw === 'number' && Number.isFinite(raw)) return raw;
-  if (typeof raw !== 'string') return null;
-  const s0 = raw.trim().replace(/[^\\d.,-]/g, '');
-  if (!s0) return null;
-  if (s0.includes(',')) {
-    const normalized = s0.replace(/\./g, '').replace(',', '.');
-    const n = Number(normalized);
-    return Number.isFinite(n) ? n : null;
-  }
-  const n = Number(s0);
-  return Number.isFinite(n) ? n : null;
-};
-
-const getNumericField = (saleWithCost: any, key: string): number => {
-  const candidates = [
-    saleWithCost?.customData?.[key],
-    saleWithCost?.sheetData?.[key],
-    saleWithCost?.[key],
-  ];
-  for (const c of candidates) {
-    const n = parseBrNumber(c);
-    if (n != null) return n;
-  }
-  return 0;
-};
-// ===== FIM CÁLCULOS PERSONALIZADOS =====
-
-
 
 export default function VendasPage() {
   const [salesFromDb, setSalesFromDb] = React.useState<VendaDetalhada[]>([]);
@@ -454,11 +365,6 @@ export default function VendasPage() {
   const [isLoadingPreferences, setIsLoadingPreferences] = React.useState(true);
   const [isSavingPreferences, setIsSavingPreferences] = React.useState(false);
 
-  // Custom Calculations state
-  const [customCalculations, setCustomCalculations] = React.useState<CustomCalculation[]>(defaultCalculations);
-  const [isCalculationOpen, setIsCalculationOpen] = React.useState(false);
-
-
   /* ======= PREFERÊNCIAS DO USUÁRIO (VISIBILIDADE E CÁLCULOS) ======= */
   const loadUserPreferences = React.useCallback(async () => {
     if (!auth.currentUser) return;
@@ -470,9 +376,6 @@ export default function VendasPage() {
             const data = docSnap.data();
             if (data?.[PREF_KEY_VISIBILITY]) {
                 setVisibleColumns(data[PREF_KEY_VISIBILITY]);
-            }
-            if (data?.[PREF_KEY_CALCULATIONS]) {
-                setCustomCalculations(data[PREF_KEY_CALCULATIONS]);
             }
         }
     } catch (error) {
@@ -500,35 +403,6 @@ export default function VendasPage() {
   const handleVisibilityChange = (newVisibility: ColumnVisibility) => {
     setVisibleColumns(newVisibility);
   };
-
-  const handleSaveCalculations = async (calculation: Omit<CustomCalculation, 'id'> & { id?: string }) => {
-    let newCalculations: CustomCalculation[];
-    const finalCalculation = { ...calculation };
-
-    if (finalCalculation.id) {
-        newCalculations = customCalculations.map(c => c.id === finalCalculation.id ? { ...c, ...finalCalculation as CustomCalculation } : c);
-    } else {
-        const newId = `custom_${finalCalculation.name.toLowerCase().replace(/[\s\W]/g, '_')}_${Date.now()}`;
-        newCalculations = [...customCalculations, { ...finalCalculation, id: newId } as CustomCalculation];
-    }
-    
-    setCustomCalculations(newCalculations);
-    await saveUserPreferences(PREF_KEY_CALCULATIONS, newCalculations);
-  };
-
-  const handleDeleteCalculation = async (calculationId: string) => {
-    const newCalculations = customCalculations.filter(c => c.id !== calculationId);
-    setCustomCalculations(newCalculations);
-    await saveUserPreferences(PREF_KEY_CALCULATIONS, newCalculations);
-  };
-
-  const availableFormulaColumns = React.useMemo(() => {
-    const systemCols = columns.filter(c => c.id !== 'subRows' && c.id !== 'costs');
-    const customCols = customCalculations.map(c => ({ id: c.id, label: c.name }));
-    const allCols = [...systemCols, ...customCols];
-    return Array.from(new Map(allCols.map(item => [item.id, item])).values())
-        .map(c => ({key: c.id, label: c.label}));
-  }, [columns, customCalculations]);
 
   React.useEffect(() => {
     if (auth.currentUser) {
@@ -597,60 +471,6 @@ export default function VendasPage() {
     return () => { salesUnsub(); logisticsUnsub(); costsUnsub(); metaUnsub(); };
   }, []);
   
-    const applyCustomCalculations = React.useCallback((sale: VendaDetalhada): VendaDetalhada => {
-        const saleWithCalc: any = {
-            ...sale,
-            customData: { ...(sale as any).customData || {} },
-        };
-
-        const sortedCalculations = sortCalculationsByDependency(customCalculations);
-
-        sortedCalculations.forEach((calc) => {
-            try {
-                const values: number[] = [];
-                const ops: string[] = [];
-                const prec = (op: string) => (op === '+' || op === '-') ? 1 : (op === '*' || op === '/') ? 2 : 0;
-
-                const applyOp = () => {
-                    const op = ops.pop()!;
-                    const r = values.pop()!;
-                    const l = values.pop()!;
-                    if (op === '+') values.push(l + r);
-                    else if (op === '-') values.push(l - r);
-                    else if (op === '*') values.push(l * r);
-                    else if (op === '/') values.push(r !== 0 ? l / r : 0);
-                };
-
-                for (const item of calc.formula) {
-                    if (item.type === 'column') {
-                        values.push(getNumericField(saleWithCalc, item.value));
-                    } else if (item.type === 'number') {
-                        values.push(parseBrNumber(item.value) ?? 0);
-                    } else if (item.value === '(') {
-                        ops.push('(');
-                    } else if (item.value === ')') {
-                        while (ops.length && ops[ops.length - 1] !== '(') applyOp();
-                        ops.pop();
-                    } else {
-                        while (ops.length && prec(ops[ops.length - 1]) >= prec(item.value)) applyOp();
-                        ops.push(item.value);
-                    }
-                }
-                while (ops.length) applyOp();
-
-                let result = values[0] ?? 0;
-                if (!Number.isFinite(result)) result = 0;
-                if (calc.isPercentage) result = result * 100;
-
-                saleWithCalc.customData[calc.id] = result;
-
-            } catch (e) {
-                console.error(`Error calculating formula for ${calc.name}:`, e);
-                saleWithCalc.customData[calc.id] = 0;
-            }
-        });
-        return saleWithCalc as VendaDetalhada;
-    }, [customCalculations]);
 
   /* ======= Mescla Vendas + Logistica + Custos + Staged ======= */
   const allSales = React.useMemo(() => {
@@ -701,8 +521,8 @@ export default function VendasPage() {
         salesMap.set(s.id, { ...existing, ...s });
     });
     
-    return Array.from(salesMap.values()).map(applyCustomCalculations);
-  }, [salesFromDb, logisticsFromDb, costsFromDb, stagedSales, applyCustomCalculations]);
+    return Array.from(salesMap.values());
+  }, [salesFromDb, logisticsFromDb, costsFromDb, stagedSales]);
 
 
   /* ======= Filtro por período ======= */
@@ -1055,10 +875,6 @@ export default function VendasPage() {
                         Dados de Apoio
                       </Button>
                     </SupportDataDialog>
-                    <Button variant="outline" onClick={() => setIsCalculationOpen(true)}>
-                        <Calculator className="mr-2 h-4 w-4" />
-                        Calcular
-                    </Button>
                      {stagedSales.length > 0 && (
                       <Button
                         onClick={handleClearStagedData}
@@ -1156,7 +972,7 @@ export default function VendasPage() {
 
         <DetailedSalesHistoryTable 
             data={groupedForView} 
-            columns={[...columns, ...customCalculations.map(c => ({ id: c.id, label: c.name, isSortable: true }))]}
+            columns={columns}
             showAdvancedFilters={true}
             columnVisibility={visibleColumns}
             onVisibilityChange={handleVisibilityChange}
@@ -1165,17 +981,7 @@ export default function VendasPage() {
             isSavingPreferences={isSavingPreferences}
         />
         
-        <CalculationDialog
-            isOpen={isCalculationOpen}
-            onClose={() => setIsCalculationOpen(false)}
-            onSave={handleSaveCalculations}
-            onDelete={handleDeleteCalculation}
-            availableColumns={availableFormulaColumns}
-            customCalculations={customCalculations}
-        />
       </main>
     </div>
   );
 }
-
-    
