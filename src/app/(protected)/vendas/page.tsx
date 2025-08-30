@@ -345,8 +345,9 @@ const MotionCard = motion(Card);
 type IncomingDataset = { rows: any[]; fileName: string; assocKey?: string };
 type ColumnVisibility = Record<string, boolean>;
 
-const PREF_KEY_CALCULATIONS = "vendas_custom_calculations";
 const PREF_KEY_VISIBILITY = "vendas_columns_visibility";
+const PREF_KEY_CALCULATIONS = "global_custom_calculations"; // Changed to global key
+
 
 export default function VendasPage() {
   const [salesFromDb, setSalesFromDb] = React.useState<VendaDetalhada[]>([]);
@@ -375,20 +376,30 @@ export default function VendasPage() {
 
   /* ======= PREFERÊNCIAS DO USUÁRIO (VISIBILIDADE E CÁLCULOS) ======= */
   const loadUserPreferences = React.useCallback(async () => {
-    if (!auth.currentUser) return;
     setIsLoadingPreferences(true);
     try {
-        const prefRef = doc(db, "userPreferences", auth.currentUser.uid);
-        const docSnap = await getDoc(prefRef);
-        if (docSnap.exists()) {
-            const data = docSnap.data();
-            if (data?.[PREF_KEY_VISIBILITY]) {
-                setVisibleColumns(data[PREF_KEY_VISIBILITY]);
-            }
+        // Load global calculations
+        const globalSettingsRef = doc(db, "app-settings", "global");
+        const globalSnap = await getDoc(globalSettingsRef);
+        if (globalSnap.exists()) {
+            const data = globalSnap.data();
             if (data?.[PREF_KEY_CALCULATIONS]) {
                 setCustomCalculations(data[PREF_KEY_CALCULATIONS]);
             }
         }
+        
+        // Load user-specific column visibility
+        if (auth.currentUser) {
+            const prefRef = doc(db, "userPreferences", auth.currentUser.uid);
+            const docSnap = await getDoc(prefRef);
+            if (docSnap.exists()) {
+                const data = docSnap.data();
+                if (data?.[PREF_KEY_VISIBILITY]) {
+                    setVisibleColumns(data[PREF_KEY_VISIBILITY]);
+                }
+            }
+        }
+
     } catch (error) {
         console.error("Erro ao carregar preferências:", error);
     } finally {
@@ -402,10 +413,10 @@ export default function VendasPage() {
     try {
       const prefRef = doc(db, "userPreferences", auth.currentUser.uid);
       await setDoc(prefRef, { [key]: value }, { merge: true });
-       toast({ title: "Preferências salvas!", description: "Sua configuração foi salva." });
+       toast({ title: "Preferências salvas!", description: "Sua configuração de colunas foi salva." });
     } catch (error) {
       console.error("Erro ao salvar preferências:", error);
-      toast({ title: "Erro", description: "Não foi possível salvar suas preferências.", variant: "destructive" });
+      toast({ title: "Erro", description: "Não foi possível salvar suas preferências de colunas.", variant: "destructive" });
     } finally {
       setIsSavingPreferences(false);
     }
@@ -436,13 +447,18 @@ export default function VendasPage() {
             newCalculations.push(calc);
         }
         setCustomCalculations(newCalculations);
-        await saveUserPreferences(PREF_KEY_CALCULATIONS, newCalculations);
+
+        const globalSettingsRef = doc(db, "app-settings", "global");
+        await setDoc(globalSettingsRef, { [PREF_KEY_CALCULATIONS]: newCalculations }, { merge: true });
+        toast({ title: `Cálculo ${calc.id ? 'Atualizado' : 'Criado'}!`, description: `O cálculo "${calc.name}" foi salvo para todos os usuários.` });
     };
 
     const handleDeleteCustomCalculation = async (calcId: string) => {
         const newCalculations = customCalculations.filter(c => c.id !== calcId);
         setCustomCalculations(newCalculations);
-        await saveUserPreferences(PREF_KEY_CALCULATIONS, newCalculations);
+        const globalSettingsRef = doc(db, "app-settings", "global");
+        await setDoc(globalSettingsRef, { [PREF_KEY_CALCULATIONS]: newCalculations }, { merge: true });
+        toast({ title: 'Cálculo Removido!', description: 'O cálculo personalizado foi apagado.'});
     };
 
     const applyCustomCalculations = React.useCallback((sales: VendaDetalhada[]) => {
