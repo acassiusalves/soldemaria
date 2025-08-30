@@ -4,7 +4,7 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { ArrowUpDown, Columns, ChevronRight, X, Eye, EyeOff, Save, Loader2, Settings2 } from "lucide-react";
+import { ArrowUpDown, Columns, ChevronRight, X, Eye, EyeOff, Save, Loader2, Settings2, GripVertical } from "lucide-react";
 import { VendaDetalhada, CustomCalculation } from "@/lib/data";
 import {
   Table,
@@ -27,6 +27,16 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuPortal,
 } from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+  DialogClose,
+} from "@/components/ui/dialog";
+import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -45,6 +55,8 @@ const REQUIRED_ALWAYS_ON = ["codigo"];
 type SortKey = keyof VendaDetalhada | string | null;
 type SortDirection = "asc" | "desc";
 type ColumnVisibility = Record<string, boolean>;
+type ColumnOrder = string[];
+
 
 export type ColumnDef = {
   id: string;
@@ -97,7 +109,9 @@ interface DetailedSalesHistoryTableProps {
     showAdvancedFilters?: boolean;
     columnVisibility?: ColumnVisibility;
     onVisibilityChange?: (newVisibility: ColumnVisibility) => void;
-    onSavePreferences?: (visibilityToSave: ColumnVisibility) => void;
+    columnOrder?: ColumnOrder;
+    onOrderChange?: (newOrder: ColumnOrder) => void;
+    onSavePreferences?: (key: "vendas_columns_visibility" | "vendas_columns_order", value: any) => void;
     isLoadingPreferences?: boolean;
     isSavingPreferences?: boolean;
 }
@@ -176,6 +190,81 @@ const MultiSelectFilter = ({
 };
 
 
+const OrderManagerDialog = ({
+    isOpen,
+    onClose,
+    columns,
+    order,
+    onOrderChange,
+}: {
+    isOpen: boolean;
+    onClose: () => void;
+    columns: ColumnDef[];
+    order: string[];
+    onOrderChange: (newOrder: string[]) => void;
+}) => {
+    const orderedColumns = useMemo(() => {
+        const columnsMap = new Map(columns.map(c => [c.id, c]));
+        const currentOrder = order.length > 0 ? order : columns.map(c => c.id);
+        
+        const ordered = currentOrder.map(id => columnsMap.get(id)).filter(Boolean) as ColumnDef[];
+        const unordered = columns.filter(c => !currentOrder.includes(c.id));
+        
+        return [...ordered, ...unordered];
+    }, [columns, order]);
+    
+    const handleDragEnd = (result: any) => {
+        if (!result.destination) return;
+        const items = Array.from(orderedColumns);
+        const [reorderedItem] = items.splice(result.source.index, 1);
+        items.splice(result.destination.index, 0, reorderedItem);
+        onOrderChange(items.map(item => item.id));
+    };
+
+    return (
+        <Dialog open={isOpen} onOpenChange={onClose}>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>Organizar Colunas</DialogTitle>
+                    <DialogDescription>
+                        Arraste e solte as colunas para definir a ordem de exibição na tabela.
+                    </DialogDescription>
+                </DialogHeader>
+                <DragDropContext onDragEnd={handleDragEnd}>
+                    <Droppable droppableId="columns">
+                        {(provided) => (
+                            <div {...provided.droppableProps} ref={provided.innerRef} className="space-y-2 max-h-[60vh] overflow-y-auto">
+                                {orderedColumns.map((col, index) => (
+                                    <Draggable key={col.id} draggableId={col.id} index={index}>
+                                        {(provided) => (
+                                            <div
+                                                ref={provided.innerRef}
+                                                {...provided.draggableProps}
+                                                {...provided.dragHandleProps}
+                                                className="flex items-center p-2 border rounded-md bg-muted/50"
+                                            >
+                                                <GripVertical className="mr-2 h-5 w-5 text-muted-foreground" />
+                                                {col.label}
+                                            </div>
+                                        )}
+                                    </Draggable>
+                                ))}
+                                {provided.placeholder}
+                            </div>
+                        )}
+                    </Droppable>
+                </DragDropContext>
+                <DialogFooter>
+                    <DialogClose asChild>
+                        <Button>Concluído</Button>
+                    </DialogClose>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+};
+
+
 export default function DetailedSalesHistoryTable({ 
     data, 
     columns, 
@@ -183,6 +272,8 @@ export default function DetailedSalesHistoryTable({
     showAdvancedFilters = false,
     columnVisibility: controlledVisibility,
     onVisibilityChange,
+    columnOrder: controlledOrder,
+    onOrderChange,
     onSavePreferences,
     isLoadingPreferences = false,
     isSavingPreferences = false,
@@ -199,11 +290,19 @@ export default function DetailedSalesHistoryTable({
   const [cityFilter, setCityFilter] = useState<Set<string>>(new Set());
   
   const [internalVisibility, setInternalVisibility] = useState<ColumnVisibility>({});
+  const [internalOrder, setInternalOrder] = useState<ColumnOrder>([]);
+  const [isOrderManagerOpen, setIsOrderManagerOpen] = useState(false);
+
+  const initializedRef = useRef(false);
   
-  const isVisibilityManaged = !!controlledVisibility && !!onVisibilityChange && !!onSavePreferences;
-  const columnVisibility = isVisibilityManaged ? controlledVisibility : internalVisibility;
-  const setColumnVisibility = isVisibilityManaged ? onVisibilityChange! : setInternalVisibility;
+  const isManaged = !!controlledVisibility && !!onVisibilityChange && !!onSavePreferences && !!controlledOrder && !!onOrderChange;
+
+  const columnVisibility = isManaged ? controlledVisibility : internalVisibility;
+  const setColumnVisibility = isManaged ? onVisibilityChange! : setInternalVisibility;
   
+  const columnOrder = isManaged ? controlledOrder : internalOrder;
+  const setColumnOrder = isManaged ? onOrderChange! : setInternalOrder;
+
 
   const effectiveColumns = useMemo(() => {
     const systemColumnsToHide = [
@@ -230,7 +329,6 @@ export default function DetailedSalesHistoryTable({
         }
       });
     }
-    // ensure all labels are correct
     map.forEach((col, key) => {
         col.label = getLabel(key);
     });
@@ -258,15 +356,17 @@ export default function DetailedSalesHistoryTable({
     return effectiveColumns.filter(c => !detailKeys.includes(c.id));
   }, [effectiveColumns, detailColumns]);
 
-  useEffect(() => {
-      if (!isVisibilityManaged && mainColumns.length > 0) {
-          const defaultVisibility = mainColumns.reduce((acc, col) => {
-              acc[col.id] = true;
-              return acc;
-          }, {} as ColumnVisibility);
-          setInternalVisibility(defaultVisibility);
-      }
-  }, [isVisibilityManaged, mainColumns]);
+    useEffect(() => {
+    if (!isManaged && mainColumns.length > 0 && !initializedRef.current) {
+      const defaultVisibility = mainColumns.reduce((acc, col) => {
+        acc[col.id] = true;
+        return acc;
+      }, {} as ColumnVisibility);
+      setInternalVisibility(defaultVisibility);
+      setInternalOrder(mainColumns.map(c => c.id));
+      initializedRef.current = true;
+    }
+  }, [isManaged, mainColumns]);
 
 
   const { uniqueVendores, uniqueEntregadores, uniqueLogisticas, uniqueCidades } = useMemo(() => {
@@ -432,11 +532,14 @@ export default function DetailedSalesHistoryTable({
   }
 
   const visibleColumns = useMemo(() => {
-    if (!isVisibilityManaged) {
-      return mainColumns;
-    }
-    return mainColumns.filter(c => columnVisibility[c.id]);
-  }, [mainColumns, columnVisibility, isVisibilityManaged]);
+    const columnMap = new Map(mainColumns.map(c => [c.id, c]));
+    const order = columnOrder.length > 0 ? columnOrder : mainColumns.map(c => c.id);
+    
+    return order
+        .map(id => columnMap.get(id))
+        .filter(Boolean)
+        .filter(c => isManaged ? columnVisibility[c!.id] : true) as ColumnDef[];
+  }, [mainColumns, columnVisibility, columnOrder, isManaged]);
 
 
   const hasActiveAdvancedFilter = useMemo(() => {
@@ -470,9 +573,13 @@ export default function DetailedSalesHistoryTable({
         return acc;
     }, {} as ColumnVisibility);
     onVisibilityChange(defaultConfig);
+    if(onOrderChange) {
+        onOrderChange(mainColumns.map(c => c.id));
+    }
   };
 
   return (
+    <>
     <Card>
       <CardContent className="p-4">
         <div className="flex justify-between items-center mb-4">
@@ -484,7 +591,7 @@ export default function DetailedSalesHistoryTable({
               onChange={(e) => setFilter(e.target.value)}
               className="w-auto"
             />
-            {isVisibilityManaged && onSavePreferences && (
+            {isManaged && onSavePreferences && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline">
@@ -495,35 +602,47 @@ export default function DetailedSalesHistoryTable({
               <DropdownMenuContent align="end" className="w-64">
                 <DropdownMenuLabel>Configuração de Colunas</DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <div className="flex gap-2 px-2 py-1.5">
-                    <Button variant="outline" size="sm" className="flex-1" onClick={() => handleSetAllVisibility(true)}>
-                        <Eye className="mr-2 h-4 w-4" /> Mostrar Todas
-                    </Button>
-                    <Button variant="outline" size="sm" className="flex-1" onClick={() => handleSetAllVisibility(false)}>
-                        <EyeOff className="mr-2 h-4 w-4" /> Ocultar Todas
-                    </Button>
-                </div>
+                <DropdownMenuItem onSelect={() => setIsOrderManagerOpen(true)}>
+                    <GripVertical className="mr-2 h-4 w-4" />
+                    Organizar Colunas
+                </DropdownMenuItem>
+                <DropdownMenuSub>
+                    <DropdownMenuSubTrigger>
+                        <Eye className="mr-2 h-4 w-4" />
+                        <span>Visibilidade</span>
+                    </DropdownMenuSubTrigger>
+                     <DropdownMenuPortal>
+                        <DropdownMenuSubContent>
+                             <DropdownMenuItem onSelect={() => handleSetAllVisibility(true)}>
+                                <Eye className="mr-2 h-4 w-4" /> Mostrar Todas
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onSelect={() => handleSetAllVisibility(false)}>
+                                <EyeOff className="mr-2 h-4 w-4" /> Ocultar Todas
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <ScrollArea className="h-72">
+                              {mainColumns.map((column) => (
+                                  <DropdownMenuCheckboxItem
+                                      key={column.id}
+                                      className="capitalize"
+                                      checked={!!columnVisibility[column.id]}
+                                      disabled={REQUIRED_ALWAYS_ON.includes(column.id)}
+                                      onCheckedChange={(value) => setColumnVisibility({ ...columnVisibility, [column.id]: !!value })}
+                                  >
+                                      {column.label}
+                                  </DropdownMenuCheckboxItem>
+                              ))}
+                            </ScrollArea>
+                        </DropdownMenuSubContent>
+                    </DropdownMenuPortal>
+                </DropdownMenuSub>
+                <DropdownMenuSeparator />
                  <DropdownMenuItem onSelect={handleResetToDefault}>
                     <Settings2 className="mr-2 h-4 w-4" />
                     Resetar para Padrão
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuLabel>Colunas Visíveis</DropdownMenuLabel>
-                 <ScrollArea className="h-72">
-                  {mainColumns.map((column) => (
-                      <DropdownMenuCheckboxItem
-                          key={column.id}
-                          className="capitalize"
-                          checked={!!columnVisibility[column.id]}
-                          disabled={REQUIRED_ALWAYS_ON.includes(column.id)}
-                          onCheckedChange={(value) => setColumnVisibility({ ...columnVisibility, [column.id]: !!value })}
-                      >
-                          {column.label}
-                      </DropdownMenuCheckboxItem>
-                  ))}
-                </ScrollArea>
-                <DropdownMenuSeparator />
-                 <DropdownMenuItem onSelect={() => onSavePreferences!(columnVisibility)} disabled={isSavingPreferences}>
+                 <DropdownMenuItem onSelect={() => onSavePreferences('vendas_columns_visibility', columnVisibility)} disabled={isSavingPreferences}>
                     {isSavingPreferences ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
                     Salvar esta visão
                 </DropdownMenuItem>
@@ -558,7 +677,7 @@ export default function DetailedSalesHistoryTable({
                           Carregando suas preferências...
                         </div>
                     </TableHead>
-                ) : visibleColumns.length === 0 && isVisibilityManaged ? (
+                ) : visibleColumns.length === 0 && isManaged ? (
                   <TableHead className="text-muted-foreground">
                     Nenhuma coluna visível — abra “Exibir Colunas” ou clique em “Resetar preferências”.
                   </TableHead>
@@ -676,5 +795,15 @@ export default function DetailedSalesHistoryTable({
         </div>
       </CardContent>
     </Card>
+    {isManaged && (
+        <OrderManagerDialog
+            isOpen={isOrderManagerOpen}
+            onClose={() => setIsOrderManagerOpen(false)}
+            columns={mainColumns}
+            order={columnOrder}
+            onOrderChange={setColumnOrder}
+        />
+    )}
+    </>
   );
 }

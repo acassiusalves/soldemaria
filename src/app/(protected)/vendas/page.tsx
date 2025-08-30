@@ -344,9 +344,12 @@ const MotionCard = motion(Card);
 
 type IncomingDataset = { rows: any[]; fileName: string; assocKey?: string };
 type ColumnVisibility = Record<string, boolean>;
+type ColumnOrder = string[];
+
 
 const PREF_KEY_VISIBILITY = "vendas_columns_visibility";
-const PREF_KEY_CALCULATIONS = "global_custom_calculations"; // Changed to global key
+const PREF_KEY_ORDER = "vendas_columns_order";
+const PREF_KEY_CALCULATIONS = "global_custom_calculations";
 
 
 export default function VendasPage() {
@@ -364,8 +367,9 @@ export default function VendasPage() {
   const [saveProgress, setSaveProgress] = React.useState(0);
   const router = useRouter();
 
-  // Column Visibility state
+  // Preferences state
   const [visibleColumns, setVisibleColumns] = React.useState<ColumnVisibility>({});
+  const [columnOrder, setColumnOrder] = React.useState<ColumnOrder>([]);
   const [isLoadingPreferences, setIsLoadingPreferences] = React.useState(true);
   const [isSavingPreferences, setIsSavingPreferences] = React.useState(false);
 
@@ -374,11 +378,10 @@ export default function VendasPage() {
   const [isCalculationOpen, setIsCalculationOpen] = React.useState(false);
 
 
-  /* ======= PREFERÊNCIAS DO USUÁRIO (VISIBILIDADE E CÁLCULOS) ======= */
+  /* ======= USER PREFERENCES (VISIBILITY, ORDER, CALCULATIONS) ======= */
   const loadUserPreferences = React.useCallback(async () => {
     setIsLoadingPreferences(true);
     try {
-        // Load global calculations
         const globalSettingsRef = doc(db, "app-settings", "global");
         const globalSnap = await getDoc(globalSettingsRef);
         if (globalSnap.exists()) {
@@ -388,15 +391,13 @@ export default function VendasPage() {
             }
         }
         
-        // Load user-specific column visibility
         if (auth.currentUser) {
             const prefRef = doc(db, "userPreferences", auth.currentUser.uid);
             const docSnap = await getDoc(prefRef);
             if (docSnap.exists()) {
                 const data = docSnap.data();
-                if (data?.[PREF_KEY_VISIBILITY]) {
-                    setVisibleColumns(data[PREF_KEY_VISIBILITY]);
-                }
+                if (data?.[PREF_KEY_VISIBILITY]) setVisibleColumns(data[PREF_KEY_VISIBILITY]);
+                if (data?.[PREF_KEY_ORDER]) setColumnOrder(data[PREF_KEY_ORDER]);
             }
         }
 
@@ -413,10 +414,10 @@ export default function VendasPage() {
     try {
       const prefRef = doc(db, "userPreferences", auth.currentUser.uid);
       await setDoc(prefRef, { [key]: value }, { merge: true });
-       toast({ title: "Preferências salvas!", description: "Sua configuração de colunas foi salva." });
+       toast({ title: "Preferências salvas!", description: "Sua configuração de tabela foi salva." });
     } catch (error) {
       console.error("Erro ao salvar preferências:", error);
-      toast({ title: "Erro", description: "Não foi possível salvar suas preferências de colunas.", variant: "destructive" });
+      toast({ title: "Erro", description: "Não foi possível salvar suas preferências.", variant: "destructive" });
     } finally {
       setIsSavingPreferences(false);
     }
@@ -424,6 +425,11 @@ export default function VendasPage() {
   
   const handleVisibilityChange = (newVisibility: ColumnVisibility) => {
     setVisibleColumns(newVisibility);
+  };
+  
+  const handleOrderChange = (newOrder: ColumnOrder) => {
+      setColumnOrder(newOrder);
+      saveUserPreferences(PREF_KEY_ORDER, newOrder);
   };
 
   React.useEffect(() => {
@@ -437,7 +443,7 @@ export default function VendasPage() {
     router.push('/login');
   };
 
-  /* ======= LÓGICA DE CÁLCULOS PERSONALIZADOS ======= */
+  /* ======= CUSTOM CALCULATIONS LOGIC ======= */
     const handleSaveCustomCalculation = async (calc: CustomCalculation) => {
         const newCalculations = [...customCalculations];
         const existingIndex = newCalculations.findIndex(c => c.id === calc.id);
@@ -468,15 +474,11 @@ export default function VendasPage() {
             const newSale = { ...sale, customData: { ...sale.customData } };
             customCalculations.forEach(calc => {
                 try {
-                    // This is a simplified calculation logic.
-                    // A proper implementation would need a formula parser.
                     const formula = calc.formula.map(item => {
                         if (item.type === 'column') return `(sale['${item.value}'] || 0)`;
                         return item.value;
                     }).join(' ');
                     
-                    // WARNING: Using eval is a security risk and should be replaced with a proper parser.
-                    // This is for demonstration purposes only.
                     const result = eval(formula);
                     (newSale.customData as any)[calc.id] = result;
                 } catch (e) {
@@ -543,9 +545,8 @@ export default function VendasPage() {
   }, []);
   
 
-  /* ======= Mescla Vendas + Logistica + Custos + Staged ======= */
+  /* ======= MERGE DATA SOURCES (Vendas + Logistica + Custos + Staged) ======= */
   const allSales = React.useMemo(() => {
-    // Group logistics data by code for efficient lookup
     const logisticsMap = new Map();
     logisticsFromDb.forEach(log => {
       const code = normCode((log as any).codigo);
@@ -561,7 +562,6 @@ export default function VendasPage() {
       }
     });
       
-    // Group costs data by code
     const costsMap = new Map<string, any[]>();
     costsFromDb.forEach(cost => {
         const code = normCode((cost as any).codigo);
@@ -571,7 +571,6 @@ export default function VendasPage() {
         }
     });
 
-    // Merge DB sales with logistics and costs data
     const mergedSales = salesFromDb.map(sale => {
       const code = normCode((sale as any).codigo);
       const finalSale = { ...sale };
@@ -585,7 +584,6 @@ export default function VendasPage() {
       return finalSale;
     });
 
-    // Merge with staged sales
     const salesMap = new Map(mergedSales.map(s => [s.id, s]));
     stagedSales.forEach(s => {
         const existing = salesMap.get(s.id) || {};
@@ -596,7 +594,7 @@ export default function VendasPage() {
   }, [salesFromDb, logisticsFromDb, costsFromDb, stagedSales]);
 
 
-  /* ======= Filtro por período ======= */
+  /* ======= FILTERS (DATE & TEXT) ======= */
   const filteredSales = React.useMemo(() => {
     if (!date?.from) return allSales;
     const fromDate = date.from;
@@ -607,7 +605,7 @@ export default function VendasPage() {
     });
   }, [date, allSales]);
 
-  /* ======= AGRUPAMENTO por código + subRows + calculos ======= */
+  /* ======= GROUPING & FINAL CALCULATIONS ======= */
   const groupedForView = React.useMemo(() => {
     const groups = new Map<string, any>();
     for (const row of filteredSales) {
@@ -619,8 +617,8 @@ export default function VendasPage() {
       }
       const g = groups.get(code);
 
-      if (isDetailRow(row)) g.header.subRows.push(row); // detalhe
-      g.header = mergeForHeader(g.header, row);         // enriquece header
+      if (isDetailRow(row)) g.header.subRows.push(row);
+      g.header = mergeForHeader(g.header, row);
     }
     
     const groupedArray = Array.from(groups.values()).map(g => g.header);
@@ -636,21 +634,19 @@ export default function VendasPage() {
     return calculatedData;
   }, [filteredSales, applyCustomCalculations]);
 
-  /* ======= UPLOAD / ASSOCIAÇÃO ======= */
+  /* ======= UPLOAD / ASSOCIATION LOGIC ======= */
   const handleDataUpload = async (datasets: IncomingDataset[]) => {
     if (!datasets || datasets.length === 0) return;
 
     const dbByCode = new Map(
-      [...salesFromDb, ...logisticsFromDb, ...costsFromDb] // Combine all sources
+      [...salesFromDb, ...logisticsFromDb, ...costsFromDb]
         .filter(s => (s as any).codigo != null)
         .map(s => [normCode((s as any).codigo), s])
     );
 
-
     const uploadTimestamp = Date.now();
     const stagedUpdates = new Map<string, any>();
     const stagedInserts: any[] = [];
-
     let updated = 0, notFound = 0, skippedNoKey = 0, inserted = 0;
 
     for (const ds of datasets) {
@@ -658,11 +654,6 @@ export default function VendasPage() {
       if (!rows?.length) continue;
 
       const mapped = rows.map(mapRowToSystem);
-
-      console.log("[apoio] arquivo:", fileName);
-      console.log("[apoio] assocKey marcada:", assocKey);
-      console.log("[apoio] headers brutos:", Object.keys(rows[0] ?? {}));
-      console.log("[apoio] headers mapeados:", Object.keys(mapped[0] ?? {}));
 
       for (let i = 0; i < rows.length; i++) {
         const rawRow = rows[i];
@@ -682,7 +673,6 @@ export default function VendasPage() {
           stagedUpdates.set(merged.id, merged);
           updated++;
         } else {
-          // Upsert
           const docId = `staged-${uploadTimestamp}-${inserted}`;
           stagedInserts.push({ ...mappedRow, codigo: code, id: docId, sourceFile: fileName, uploadTimestamp: new Date(uploadTimestamp) });
           inserted++;
@@ -713,7 +703,7 @@ export default function VendasPage() {
     }
   };
 
-  /* ======= Salvar no Firestore ======= */
+  /* ======= FIRESTORE SAVE LOGIC ======= */
   const handleSaveChangesToDb = async () => {
     if (stagedSales.length === 0) {
       toast({ title: "Nenhum dado novo para salvar", variant: "default" });
@@ -745,7 +735,6 @@ export default function VendasPage() {
           if (payload.data instanceof Date) payload.data = Timestamp.fromDate(payload.data);
           if (payload.uploadTimestamp instanceof Date) payload.uploadTimestamp = Timestamp.fromDate(payload.uploadTimestamp);
 
-          // Use set with merge to handle both new and existing documents safely
           batch.set(saleRef, payload, { merge: true });
         });
 
@@ -753,19 +742,16 @@ export default function VendasPage() {
         setSaveProgress(((i + 1) / chunks.length) * 100);
       }
 
-      // Optimistic update
       setSalesFromDb(prev => {
           const map = new Map(prev.map(s => [s.id, s]));
           salesToSave.forEach(s => {
               const existing = map.get(s.id) || {};
               const newRecord = { ...existing, ...s };
-              // Ensure the final ID is the one from DB, not the staged one
               if (!String(s.id).startsWith('staged-')) {
                  newRecord.id = s.id;
               }
               map.set(newRecord.id, newRecord);
           });
-           // Clean up any remaining staged-id entries
           stagedSales.forEach(s => {
             if (String(s.id).startsWith('staged-')) map.delete(s.id);
           });
@@ -1056,7 +1042,9 @@ export default function VendasPage() {
             showAdvancedFilters={true}
             columnVisibility={visibleColumns}
             onVisibilityChange={handleVisibilityChange}
-            onSavePreferences={(vis) => saveUserPreferences(PREF_KEY_VISIBILITY, vis)}
+            columnOrder={columnOrder}
+            onOrderChange={handleOrderChange}
+            onSavePreferences={saveUserPreferences}
             isLoadingPreferences={isLoadingPreferences}
             isSavingPreferences={isSavingPreferences}
         />
