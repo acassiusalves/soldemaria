@@ -76,11 +76,13 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import DetailedSalesHistoryTable, { ColumnDef } from "@/components/detailed-sales-history-table";
-import type { VendaDetalhada } from "@/lib/data";
+import type { VendaDetalhada, CustomCalculation } from "@/lib/data";
 import { SupportDataDialog } from "@/components/support-data-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Progress } from "@/components/ui/progress";
 import { Logo } from "@/components/icons";
+import { CalculationDialog } from "@/components/calculation-dialog";
+
 
 /* ========== helpers de datas e normalização ========== */
 const toDate = (value: unknown): Date | null => {
@@ -343,6 +345,7 @@ const MotionCard = motion(Card);
 type IncomingDataset = { rows: any[]; fileName: string; assocKey?: string };
 type ColumnVisibility = Record<string, boolean>;
 
+const PREF_KEY_CALCULATIONS = "vendas_custom_calculations";
 const PREF_KEY_VISIBILITY = "vendas_columns_visibility";
 
 export default function VendasPage() {
@@ -365,6 +368,11 @@ export default function VendasPage() {
   const [isLoadingPreferences, setIsLoadingPreferences] = React.useState(true);
   const [isSavingPreferences, setIsSavingPreferences] = React.useState(false);
 
+  // Custom Calculations state
+  const [customCalculations, setCustomCalculations] = React.useState<CustomCalculation[]>([]);
+  const [isCalculationOpen, setIsCalculationOpen] = React.useState(false);
+
+
   /* ======= PREFERÊNCIAS DO USUÁRIO (VISIBILIDADE E CÁLCULOS) ======= */
   const loadUserPreferences = React.useCallback(async () => {
     if (!auth.currentUser) return;
@@ -376,6 +384,9 @@ export default function VendasPage() {
             const data = docSnap.data();
             if (data?.[PREF_KEY_VISIBILITY]) {
                 setVisibleColumns(data[PREF_KEY_VISIBILITY]);
+            }
+            if (data?.[PREF_KEY_CALCULATIONS]) {
+                setCustomCalculations(data[PREF_KEY_CALCULATIONS]);
             }
         }
     } catch (error) {
@@ -410,12 +421,56 @@ export default function VendasPage() {
     }
   }, [loadUserPreferences]);
 
-
     const handleLogout = async () => {
     await auth.signOut();
     router.push('/login');
   };
 
+  /* ======= LÓGICA DE CÁLCULOS PERSONALIZADOS ======= */
+    const handleSaveCustomCalculation = async (calc: CustomCalculation) => {
+        const newCalculations = [...customCalculations];
+        const existingIndex = newCalculations.findIndex(c => c.id === calc.id);
+        if (existingIndex > -1) {
+            newCalculations[existingIndex] = calc;
+        } else {
+            newCalculations.push(calc);
+        }
+        setCustomCalculations(newCalculations);
+        await saveUserPreferences(PREF_KEY_CALCULATIONS, newCalculations);
+    };
+
+    const handleDeleteCustomCalculation = async (calcId: string) => {
+        const newCalculations = customCalculations.filter(c => c.id !== calcId);
+        setCustomCalculations(newCalculations);
+        await saveUserPreferences(PREF_KEY_CALCULATIONS, newCalculations);
+    };
+
+    const applyCustomCalculations = React.useCallback((sales: VendaDetalhada[]) => {
+        if (customCalculations.length === 0) return sales;
+
+        return sales.map(sale => {
+            const newSale = { ...sale, customData: { ...sale.customData } };
+            customCalculations.forEach(calc => {
+                try {
+                    // This is a simplified calculation logic.
+                    // A proper implementation would need a formula parser.
+                    const formula = calc.formula.map(item => {
+                        if (item.type === 'column') return `(sale['${item.value}'] || 0)`;
+                        return item.value;
+                    }).join(' ');
+                    
+                    // WARNING: Using eval is a security risk and should be replaced with a proper parser.
+                    // This is for demonstration purposes only.
+                    const result = eval(formula);
+                    (newSale.customData as any)[calc.id] = result;
+                } catch (e) {
+                    console.error(`Error calculating formula for ${calc.name}:`, e);
+                    (newSale.customData as any)[calc.id] = 0;
+                }
+            });
+            return newSale;
+        });
+    }, [customCalculations]);
 
   /* ======= Realtime listeners ======= */
   React.useEffect(() => {
@@ -529,14 +584,14 @@ export default function VendasPage() {
   const filteredSales = React.useMemo(() => {
     if (!date?.from) return allSales;
     const fromDate = date.from;
-    const toDate = date.to ? endOfDay(date.to) : endOfDay(fromDate);
+    const toDateVal = date.to ? endOfDay(date.to) : endOfDay(fromDate);
     return allSales.filter((sale) => {
       const saleDate = toDate(sale.data);
-      return saleDate && saleDate >= fromDate && saleDate <= toDate;
+      return saleDate && saleDate >= fromDate && saleDate <= toDateVal;
     });
   }, [date, allSales]);
 
-  /* ======= AGRUPAMENTO por código + subRows ======= */
+  /* ======= AGRUPAMENTO por código + subRows + calculos ======= */
   const groupedForView = React.useMemo(() => {
     const groups = new Map<string, any>();
     for (const row of filteredSales) {
@@ -551,15 +606,19 @@ export default function VendasPage() {
       if (isDetailRow(row)) g.header.subRows.push(row); // detalhe
       g.header = mergeForHeader(g.header, row);         // enriquece header
     }
+    
+    const groupedArray = Array.from(groups.values()).map(g => g.header);
 
-    for (const g of groups.values()) {
-      g.header.subRows.sort((a: any, b: any) =>
+    const calculatedData = applyCustomCalculations(groupedArray);
+
+    calculatedData.forEach(g => {
+      g.subRows.sort((a: any, b: any) =>
         (toDate(a.data)?.getTime() ?? 0) - (toDate(b.data)?.getTime() ?? 0)
       );
-    }
+    });
 
-    return Array.from(groups.values()).map(g => g.header);
-  }, [filteredSales]);
+    return calculatedData;
+  }, [filteredSales, applyCustomCalculations]);
 
   /* ======= UPLOAD / ASSOCIAÇÃO ======= */
   const handleDataUpload = async (datasets: IncomingDataset[]) => {
@@ -776,6 +835,7 @@ export default function VendasPage() {
   };
 
   return (
+    <>
     <div className="flex min-h-screen w-full flex-col">
       <header className="sticky top-0 flex h-16 items-center gap-4 border-b bg-background px-4 md:px-6">
         <nav className="hidden flex-col gap-6 text-lg font-medium md:flex md:flex-row md:items-center md:gap-5 md:text-sm lg:gap-6">
@@ -864,6 +924,10 @@ export default function VendasPage() {
                   <CardDescription>Filtre as vendas que você deseja analisar.</CardDescription>
                 </div>
                  <div className="flex items-center gap-2">
+                    <Button variant="outline" onClick={() => setIsCalculationOpen(true)}>
+                        <Calculator className="mr-2 h-4 w-4" />
+                        Calcular
+                    </Button>
                     <SupportDataDialog
                       onProcessData={handleDataUpload}
                       uploadedFileNames={uploadedFileNames}
@@ -983,5 +1047,15 @@ export default function VendasPage() {
         
       </main>
     </div>
+    <CalculationDialog
+        isOpen={isCalculationOpen}
+        onClose={() => setIsCalculationOpen(false)}
+        onSave={handleSaveCustomCalculation}
+        onDelete={handleDeleteCustomCalculation}
+        marketplaces={[]}
+        availableColumns={columns.map(c => ({key: c.id, label: c.label}))}
+        customCalculations={customCalculations}
+    />
+    </>
   );
 }
