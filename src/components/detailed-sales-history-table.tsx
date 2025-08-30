@@ -339,7 +339,7 @@ export default function DetailedSalesHistoryTable({
 
 
   const detailColumns = useMemo(() => {
-    const detailKeys = ['item', 'descricao', 'quantidade', 'custoUnitario', 'valorUnitario', 'valorCredito', 'valorDescontos'];
+    const detailKeys = ['item', 'descricao', 'quantidade', 'valorCredito', 'valorDescontos'];
     return effectiveColumns.filter(c => detailKeys.includes(c.id));
   }, [effectiveColumns]);
   
