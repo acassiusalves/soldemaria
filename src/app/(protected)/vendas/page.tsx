@@ -21,6 +21,10 @@ import {
   Plug,
   ChevronDown,
   Calculator,
+  Eye,
+  EyeOff,
+  Settings2,
+  GripVertical,
 } from "lucide-react";
 import {
   collection,
@@ -38,6 +42,7 @@ import {
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { auth, db } from "@/lib/firebase";
+import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 
 
 import { cn } from "@/lib/utils";
@@ -172,8 +177,8 @@ const headerMappingNormalized: Record<string, string> = {
 
 /* ========== limpadores ========= */
 const isDateLike = (s: string) =>
-  /^\d{4}[-/]\d{2}[-/]\d{2}$/.test(s) ||
-  /^\d{2}[-/]\d{2}[-/]\d{4}$/.test(s);
+  /^\d{4}[-\/]\d{2}[-\/]\d{2}$/.test(s) ||
+  /^\d{2}[-\/]\d{2}[-\/]\d{4}$/.test(s);
 
 const cleanNumericValue = (value: any): number | string => {
   if (typeof value === "number") return value;
@@ -307,27 +312,33 @@ const MotionCard = motion(Card);
 type IncomingDataset = { rows: any[]; fileName: string; assocKey?: string };
 const API_KEY_STORAGE_KEY = "gemini_api_key";
 const PREFERENCES_COLLECTION = "userPreferences";
+const GLOBAL_SETTINGS_COLLECTION = "app-settings";
 
 
 async function loadUserPreferences(userId: string) {
     const defaultPrefs = {
         vendas_columns_visibility: {},
         vendas_columns_order: [],
+        custom_calculations: [],
     };
     if (!userId) return defaultPrefs;
 
-    const docRef = doc(db, PREFERENCES_COLLECTION, userId);
-    const docSnap = await getDoc(docRef);
+    const userDocRef = doc(db, PREFERENCES_COLLECTION, userId);
+    const globalDocRef = doc(db, GLOBAL_SETTINGS_COLLECTION, "globalCalculations");
 
-    if (docSnap.exists()) {
-        const data = docSnap.data();
-        return {
-            vendas_columns_visibility: data.vendas_columns_visibility || {},
-            vendas_columns_order: data.vendas_columns_order || [],
-        };
-    } else {
-        return defaultPrefs;
-    }
+    const [userDocSnap, globalDocSnap] = await Promise.all([
+        getDoc(userDocRef),
+        getDoc(globalDocRef),
+    ]);
+
+    const userPrefs = userDocSnap.exists() ? userDocSnap.data() : {};
+    const globalSettings = globalDocSnap.exists() ? globalDocSnap.data() : {};
+
+    return {
+        vendas_columns_visibility: userPrefs.vendas_columns_visibility || {},
+        vendas_columns_order: userPrefs.vendas_columns_order || [],
+        custom_calculations: globalSettings.calculations || [],
+    };
 }
 
 async function saveUserPreference(userId: string, key: string, value: any) {
@@ -336,17 +347,8 @@ async function saveUserPreference(userId: string, key: string, value: any) {
     await setDoc(docRef, { [key]: value }, { merge: true });
 }
 
-async function loadGlobalCalculations() {
-    const docRef = doc(db, "app-settings", "globalCalculations");
-    const docSnap = await getDoc(docRef);
-    if (docSnap.exists()) {
-        return docSnap.data().calculations || [];
-    }
-    return [];
-}
-
 async function saveGlobalCalculations(calculations: CustomCalculation[]) {
-    const docRef = doc(db, "app-settings", "globalCalculations");
+    const docRef = doc(db, GLOBAL_SETTINGS_COLLECTION, "globalCalculations");
     await setDoc(docRef, { calculations });
 }
 
@@ -425,13 +427,10 @@ export default function VendasPage() {
           setIsLoadingPreferences(true);
           const user = auth.currentUser;
           if (user) {
-              const [prefs, calcs] = await Promise.all([
-                  loadUserPreferences(user.uid),
-                  loadGlobalCalculations(),
-              ]);
+              const prefs = await loadUserPreferences(user.uid);
               setColumnVisibility(prefs.vendas_columns_visibility);
               setColumnOrder(prefs.vendas_columns_order);
-              setCustomCalculations(calcs);
+              setCustomCalculations(prefs.custom_calculations);
           }
           setIsLoadingPreferences(false);
       };
@@ -458,11 +457,20 @@ export default function VendasPage() {
     setIsSavingPreferences(false);
   };
   
-  const handleSaveCustomCalculation = async (calc: CustomCalculation) => {
-      const newCalculations = [...customCalculations.filter(c => c.id !== calc.id), calc];
+  const handleSaveCustomCalculation = async (calc: Omit<CustomCalculation, 'id'> & { id?: string }) => {
+      let newCalculations: CustomCalculation[];
+      const finalCalc = { ...calc };
+      
+      if (finalCalc.id) { // Editing
+          newCalculations = customCalculations.map(c => c.id === finalCalc.id ? (finalCalc as CustomCalculation) : c);
+      } else { // Adding
+          const newId = `custom_${Date.now()}`;
+          newCalculations = [...customCalculations, { ...finalCalc, id: newId }];
+      }
+
       setCustomCalculations(newCalculations);
       await saveGlobalCalculations(newCalculations);
-      toast({ title: "Cálculo Salvo!", description: `A coluna "${calc.name}" está disponível para todos.`});
+      toast({ title: "Cálculo Salvo!", description: `A coluna "${finalCalc.name}" está disponível para todos.`});
   };
 
   const handleDeleteCustomCalculation = async (calcId: string) => {
