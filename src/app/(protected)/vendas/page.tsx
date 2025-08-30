@@ -45,7 +45,7 @@ import { auth, db } from "@/lib/firebase";
 import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 
 
-import { cn } from "@/lib/utils";
+import { cn, stripUndefinedDeep } from "@/lib/utils";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -177,8 +177,8 @@ const headerMappingNormalized: Record<string, string> = {
 
 /* ========== limpadores ========= */
 const isDateLike = (s: string) =>
-  /^\d{4}[-\/]\d{2}[-\/]\d{2}$/.test(s) ||
-  /^\d{2}[-\/]\d{2}[-\/]\d{4}$/.test(s);
+    /^\d{4}[-/]\d{2}[-/]\d{2}$/.test(s) ||
+    /^\d{2}[-/]\d{2}[-/]\d{4}$/.test(s);
 
 const cleanNumericValue = (value: any): number | string => {
   if (typeof value === "number") return value;
@@ -349,7 +349,23 @@ async function saveUserPreference(userId: string, key: string, value: any) {
 
 async function saveGlobalCalculations(calculations: CustomCalculation[]) {
     const docRef = doc(db, GLOBAL_SETTINGS_COLLECTION, "globalCalculations");
-    await setDoc(docRef, { calculations }, { merge: true });
+    const cleanCalcs = stripUndefinedDeep(
+        calculations.map(c => ({
+        // garante defaults seguros
+        id: c.id,
+        name: c.name ?? 'Sem nome',
+        formula: Array.isArray(c.formula) ? c.formula : [],
+        isPercentage: c.isPercentage || false,
+        // só inclui interaction se estiver completa
+        ...(c.interaction?.targetColumn
+            ? { interaction: {
+                    targetColumn: String(c.interaction.targetColumn),
+                    operator: c.interaction.operator === '-' ? '-' : '+',
+                } }
+            : {})
+        }))
+    );
+    await setDoc(docRef, { calculations: cleanCalcs }, { merge: true });
 }
 
 async function persistCalcColumns(calcs: CustomCalculation[]) {
@@ -481,31 +497,35 @@ export default function VendasPage() {
   };
   
 const handleSaveCustomCalculation = async (calc: Omit<CustomCalculation, 'id'> & { id?: string }) => {
-    const safeFormula = (calc.formula || []).map((item) => {
-        if (item.type === 'number') {
+    const safeFormula = (calc.formula || []).map((item: any) => {
+        if (item?.type === 'number') {
             const n = typeof item.value === 'string'
                 ? parseFloat(String(item.value).replace(',', '.'))
                 : Number(item.value);
-            return { type: 'number', value: String(Number.isFinite(n) ? n : 0) };
+            return { type: 'number', value: String(Number.isFinite(n) ? n : 0), label: String(Number.isFinite(n) ? n : 0) };
         }
-        if (item.type === 'column') {
+        if (item?.type === 'column') {
             return { type: 'column', value: String(item.value), label: String(item.label) };
         }
-        return { type: 'operator', value: String(item.value), label: String(item.label) };
-    });
+        if (item?.type === 'op') {
+            return { type: 'op', value: String(item.value), label: String(item.label) };
+        }
+        return undefined;
+    }).filter(Boolean) as { type: 'number' | 'column' | 'op'; value: string; label: string }[];
 
-    const finalCalc = {
+    const finalCalc: CustomCalculation = {
         id: calc.id || `custom_${Date.now()}`,
         name: (calc.name || 'Sem nome').trim(),
         formula: safeFormula,
         isPercentage: calc.isPercentage || false,
-        interaction: calc.interaction
-            ? {
-                targetColumn: String(calc.interaction.targetColumn),
-                operator: calc.interaction.operator === '-' ? '-' : '+' as '+' | '-',
-            }
-            : undefined,
+        ...(calc.interaction?.targetColumn
+            ? { interaction: {
+                    targetColumn: String(calc.interaction.targetColumn),
+                    operator: calc.interaction.operator === '-' ? '-' : '+',
+                } }
+            : {})
     };
+
 
     const newList = customCalculations.some(c => c.id === finalCalc.id)
         ? customCalculations.map(c => (c.id === finalCalc.id ? finalCalc : c))
@@ -560,6 +580,7 @@ const handleSaveCustomCalculation = async (calc: Omit<CustomCalculation, 'id'> &
             try {
                 const expr = calc.formula.map((item) => {
                     if (item.type === 'column') return getNumericField(flatRow, String(item.value));
+                    if (item.type === 'number') return getNumericField(flatRow, String(item.value));
                     return String(item.value);
                 }).join(' ');
 
