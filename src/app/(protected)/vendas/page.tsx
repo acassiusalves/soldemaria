@@ -552,6 +552,8 @@ const handleSaveCustomCalculation = async (calc: Omit<CustomCalculation, 'id'> &
 
 
   const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): VendaDetalhada[] => {
+    console.log('🧮 Aplicando', customCalculations.length, 'cálculos customizados');
+    console.log('📊 Cálculos:', customCalculations.map(c => ({ id: c.id, name: c.name })));
     if (customCalculations.length === 0) return data;
   
     const labelToId = new Map<string, string>();
@@ -618,6 +620,7 @@ const handleSaveCustomCalculation = async (calc: Omit<CustomCalculation, 'id'> &
   
           newCustomData[calc.id] = numResult;
           flatRow[calc.id] = numResult;
+          console.log(`✅ Cálculo "${calc.name}" (${calc.id}): ${numResult}`);
   
           if (calc.interaction) {
             const base = getNumericField(flatRow, calc.interaction.targetColumn);
@@ -626,13 +629,24 @@ const handleSaveCustomCalculation = async (calc: Omit<CustomCalculation, 'id'> &
             flatRow[calc.interaction.targetColumn] = nv;
           }
         } catch (e) {
-          console.error('Erro na fórmula', calc?.name, e);
+          console.error('❌ Erro na fórmula', calc?.name, e);
           newCustomData[calc.id] = 0;
           flatRow[calc.id] = 0;
         }
       });
   
-      return { ...flatRow, customData: newCustomData };
+      const resultado = { ...flatRow, customData: newCustomData };
+      console.log('📊 Row processada:', {
+        codigo: resultado.codigo,
+        temCustomData: !!resultado.customData,
+        valoresCustomData: resultado.customData,
+        valoresDiretos: customCalculations.reduce((acc, calc) => {
+          acc[calc.id] = resultado[calc.id];
+          return acc;
+        }, {} as any)
+      });
+      
+      return resultado;
     });
   }, [customCalculations, columns]);
 
@@ -872,13 +886,30 @@ const handleSaveCustomCalculation = async (calc: Omit<CustomCalculation, 'id'> &
   }, [columns, customCalculations]);
 
   const mergedColumns = React.useMemo(() => {
+    console.log('🔗 Mesclando colunas...');
+    console.log('📋 columns:', columns.length);
+    console.log('🧮 customCalculations:', customCalculations.length);
+    
     const map = new Map<string, ColumnDef>();
-    columns.forEach(c => map.set(c.id, c));
-    customCalculations.forEach(c => {
-      map.set(c.id, { id: c.id, label: c.name, isSortable: true });
+    
+    // Adicionar colunas normais
+    columns.forEach(c => {
+        map.set(c.id, c);
+        console.log('📊 Adicionada coluna normal:', c.id, c.label);
     });
-    return Array.from(map.values());
-  }, [columns, customCalculations]);
+    
+    // Adicionar colunas customizadas
+    customCalculations.forEach(c => {
+        const columnDef = { id: c.id, label: c.name, isSortable: true };
+        map.set(c.id, columnDef);
+        console.log('🧮 Adicionada coluna customizada:', c.id, c.name);
+    });
+    
+    const resultado = Array.from(map.values());
+    console.log('✅ mergedColumns final:', resultado.map(c => ({ id: c.id, label: c.label })));
+    
+    return resultado;
+}, [columns, customCalculations]);
 
   return (
     <>
@@ -1109,3 +1140,5 @@ const handleSaveCustomCalculation = async (calc: Omit<CustomCalculation, 'id'> &
     </>
   );
 }
+
+    

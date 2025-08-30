@@ -339,7 +339,7 @@ export default function DetailedSalesHistoryTable({
 
 
   const detailColumns = useMemo(() => {
-    const detailKeys = ['item', 'descricao', 'quantidade', 'valorCredito', 'valorDescontos'];
+    const detailKeys = ['item', 'descricao', 'quantidade', 'valorCredito', 'valorDescontos', 'custoUnitario', 'valorUnitario'];
     return effectiveColumns.filter(c => detailKeys.includes(c.id));
   }, [effectiveColumns]);
   
@@ -357,18 +357,24 @@ export default function DetailedSalesHistoryTable({
     return effectiveColumns.filter(c => !detailKeys.includes(c.id));
   }, [effectiveColumns, detailColumns]);
 
-    useEffect(() => {
-    if (!isManaged && mainColumns.length > 0 && !initializedRef.current) {
-      const defaultVisibility = mainColumns.reduce((acc, col) => {
-        acc[col.id] = true;
-        return acc;
-      }, {} as ColumnVisibility);
-      setInternalVisibility(defaultVisibility);
-      setInternalOrder(mainColumns.map(c => c.id));
-      initializedRef.current = true;
-    }
-  }, [isManaged, mainColumns]);
-
+    // DEBUG TEMPORÁRIO - REMOVER DEPOIS
+React.useEffect(() => {
+  if (mainColumns.length > 0) {
+    console.log('🔍 === DEBUG COLUNAS ===');
+    console.log('📊 Total mainColumns:', mainColumns.length);
+    console.log('📋 mainColumns:', mainColumns.map(c => ({ 
+      id: c.id, 
+      label: c.label,
+      visible: columnVisibility[c.id] 
+    })));
+    console.log('👁️ columnVisibility completo:', columnVisibility);
+    console.log('📐 columnOrder:', columnOrder);
+    console.log('✅ visibleColumns resultantes:', visibleColumns.length);
+    console.log('🎛️ isManaged:', isManaged);
+    console.log('⏳ isLoadingPreferences:', isLoadingPreferences);
+    console.log('========================');
+  }
+}, [mainColumns, columnVisibility, columnOrder, isManaged, isLoadingPreferences]);
 
   const { uniqueVendores, uniqueEntregadores, uniqueLogisticas, uniqueCidades } = useMemo(() => {
     const vendores = new Set<string>();
@@ -465,8 +471,27 @@ export default function DetailedSalesHistoryTable({
   );
 
   const renderCell = (row: any, columnId: string) => {
-    let value = row[columnId] ?? row.customData?.[columnId];
+    // PRIMEIRO: Tentar pegar o valor direto da row
+    let value = row[columnId];
     
+    // SEGUNDO: Se não encontrou, tentar em customData
+    if (value === null || value === undefined) {
+        value = row.customData?.[columnId];
+    }
+    
+    // TERCEIRO: Debug para colunas customizadas
+    if (columnId.startsWith('custom_') || columnId.startsWith('Custom_')) {
+        console.log(`🧮 Renderizando coluna customizada "${columnId}":`, {
+            valorDireto: row[columnId],
+            valorCustomData: row.customData?.[columnId],
+            valorFinal: value,
+            temCustomData: !!row.customData,
+            chavesDaRow: Object.keys(row),
+            chavesCustomData: row.customData ? Object.keys(row.customData) : []
+        });
+    }
+    
+    // Campos especiais
     if (columnId === 'tipo_pagamento' || columnId === 'tipo_de_pagamento') {
         return showBlank(row.tipo_de_pagamento ?? row.tipo_pagamento);
     }
@@ -474,39 +499,49 @@ export default function DetailedSalesHistoryTable({
         return showBlank(row.parcela);
     }
 
+    // Se ainda não tem valor, retornar vazio
     if (value === null || value === undefined || (typeof value === "string" && value.trim() === "")) {
-      return "";
+        return "";
     }
     
+    // Formatação de quantidade total
     if (columnId === 'quantidadeTotal' && typeof value === 'number') {
-        return value;
+        return value.toString();
     }
 
+    // Função para converter para número
     const toNumber = (x: any) => {
-      if (typeof x === "number") return x;
-      if (typeof x === "string") {
-        const cleaned = x.replace(/\u00A0/g, "").replace(/[^0-9,.-]/g, "").replace(/\./g, "").replace(",", ".");
-        const n = Number(cleaned);
-        if (!Number.isNaN(n)) return n;
-      }
-      return null;
+        if (typeof x === "number") return x;
+        if (typeof x === "string") {
+            const cleaned = x.replace(/\u00A0/g, "").replace(/[^0-9,.-]/g, "").replace(/\./g, "").replace(",", ".");
+            const n = Number(cleaned);
+            if (!Number.isNaN(n)) return n;
+        }
+        return null;
     };
 
+    // Formatação monetária para campos financeiros
     if (["final","custoFrete","imposto","embalagem","comissao","custoUnitario","valorUnitario","valorCredito","valorDescontos", "valor"]
-        .includes(columnId) || (typeof value === 'number')) {
-      const n = toNumber(value);
-      if (n !== null) {
-        return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-      }
+        .includes(columnId) || (typeof value === 'number' && columnId.startsWith('custom_'))) {
+        const n = toNumber(value);
+        if (n !== null) {
+            return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+        }
     }
 
+    // Formatação de data
     if (columnId === "data") {
-      const d = value?.toDate ? value.toDate() : (typeof value === 'string' ? parseISO(value) : value);
-      return d instanceof Date && !isNaN(d.getTime()) ? format(d, "dd/MM/yyyy", { locale: ptBR }) : "";
+        const d = value?.toDate ? value.toDate() : (typeof value === 'string' ? parseISO(value) : value);
+        return d instanceof Date && !isNaN(d.getTime()) ? format(d, "dd/MM/yyyy", { locale: ptBR }) : "";
+    }
+
+    // Para colunas customizadas numéricas, mostrar como número se não for monetário
+    if ((columnId.startsWith('custom_') || columnId.startsWith('Custom_')) && typeof value === 'number') {
+        return value.toLocaleString("pt-BR");
     }
 
     return String(value);
-  };
+};
   
   const renderDetailCell = (sale: VendaDetalhada, columnId: string) => {
     const value = (sale as any)[columnId];
@@ -812,3 +847,5 @@ export default function DetailedSalesHistoryTable({
     </>
   );
 }
+
+    
