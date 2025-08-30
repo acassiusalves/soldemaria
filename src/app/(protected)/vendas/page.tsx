@@ -436,6 +436,17 @@ export default function VendasPage() {
       };
       loadPrefs();
   }, []);
+  
+  // Real-time listener for global calculations
+  React.useEffect(() => {
+    const ref = doc(db, GLOBAL_SETTINGS_COLLECTION, "globalCalculations");
+    const unsub = onSnapshot(ref, snap => {
+        const data = snap.data();
+        setCustomCalculations(Array.isArray(data?.calculations) ? data.calculations : []);
+    });
+    return () => unsub();
+  }, []);
+
 
   const handleVisibilityChange = async (newVisibility: Record<string, boolean>) => {
     setColumnVisibility(newVisibility);
@@ -468,7 +479,7 @@ const handleSaveCustomCalculation = async (calc: Omit<CustomCalculation, 'id'> &
         newCalculations = [...customCalculations, { ...finalCalc, id: newId }];
     }
 
-    setCustomCalculations(newCalculations); // This line is crucial
+    setCustomCalculations(newCalculations);
     await saveGlobalCalculations(newCalculations);
     toast({ title: "Cálculo Salvo!", description: `A coluna "${finalCalc.name}" foi salva.`});
 };
@@ -482,52 +493,52 @@ const handleSaveCustomCalculation = async (calc: Omit<CustomCalculation, 'id'> &
 
 
   const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): VendaDetalhada[] => {
-      if (customCalculations.length === 0) return data;
-      
-      const getNumericField = (row: any, key: string): number => {
-        const val = row[key] ?? row.customData?.[key];
-        if (typeof val === 'number') return val;
-        if (typeof val === 'string') {
-            const num = parseFloat(val.replace(',', '.'));
-            return isNaN(num) ? 0 : num;
+    if (customCalculations.length === 0) return data;
+  
+    const getNumericField = (row: any, key: string): number => {
+      const val = row[key] ?? row.customData?.[key];
+      if (typeof val === 'number') return val;
+      if (typeof val === 'string') {
+        const num = parseFloat(val.replace(',', '.'));
+        return isNaN(num) ? 0 : num;
+      }
+      return 0;
+    };
+  
+    return data.map(row => {
+      const newCustomData: Record<string, number> = { ...(row.customData || {}) };
+      const flatRow: any = { ...row }; // <- vamos escrever no nível raiz também
+  
+      customCalculations.forEach(calc => {
+        try {
+          const formulaString = calc.formula.map(item => {
+            if (item.type === 'column') {
+              return getNumericField(flatRow, item.value);
+            }
+            return item.value;
+          }).join(' ');
+  
+          const result = new Function(`return ${formulaString}`)();
+          // salva nos dois lugares
+          newCustomData[calc.id] = result;
+          flatRow[calc.id] = result;
+  
+          if (calc.interaction) {
+            const base = getNumericField(flatRow, calc.interaction.targetColumn);
+            const newVal = calc.interaction.operator === '+' ? base + result : base - result;
+            // atualiza no customData e no nível raiz
+            newCustomData[calc.interaction.targetColumn] = newVal;
+            flatRow[calc.interaction.targetColumn] = newVal;
+          }
+        } catch (e) {
+          console.error(`Error calculating formula for ${calc.name}`, e);
+          newCustomData[calc.id] = 0;
+          flatRow[calc.id] = 0;
         }
-        return 0;
-      };
-
-      return data.map(row => {
-          const newCustomData: Record<string, number> = { ...(row.customData || {}) };
-          
-          customCalculations.forEach(calc => {
-              try {
-                  const formulaString = calc.formula.map(item => {
-                      if (item.type === 'column') {
-                          return getNumericField(row, item.value);
-                      }
-                      return item.value;
-                  }).join(' ');
-
-                  // VERY basic eval, not safe for production with arbitrary user input
-                  // For this controlled environment, it's a shortcut.
-                  const result = new Function(`return ${formulaString}`)();
-                  newCustomData[calc.id] = result;
-
-                  if(calc.interaction) {
-                      const base = getNumericField(row, calc.interaction.targetColumn);
-                      if (calc.interaction.operator === '+') {
-                        newCustomData[calc.interaction.targetColumn] = base + result;
-                      } else {
-                        newCustomData[calc.interaction.targetColumn] = base - result;
-                      }
-                  }
-
-              } catch(e) {
-                  console.error(`Error calculating formula for ${calc.name}`, e);
-                  newCustomData[calc.id] = 0;
-              }
-          });
-
-          return { ...row, customData: newCustomData };
       });
+  
+      return { ...flatRow, customData: newCustomData };
+    });
   }, [customCalculations]);
 
   /* ======= Mescla banco + staged (staged tem prioridade) ======= */
@@ -978,3 +989,6 @@ const handleSaveCustomCalculation = async (calc: Omit<CustomCalculation, 'id'> &
 }
 
 
+
+
+    
