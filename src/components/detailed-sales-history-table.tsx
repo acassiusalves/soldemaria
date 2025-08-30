@@ -78,6 +78,7 @@ const columnLabels: Record<string, string> = {
   item: 'Item',
   descricao: 'Descrição',
   quantidade: 'Qtd.',
+  quantidadeTotal: 'Qtd. Total',
   custoUnitario: 'Custo Unitário',
   valorUnitario: 'Valor Unitário',
   final: 'Valor Final',
@@ -475,6 +476,10 @@ export default function DetailedSalesHistoryTable({
 
     if (value === null || value === undefined || (typeof value === "string" && value.trim() === "")) {
       return "";
+    }
+    
+    if (columnId === 'quantidadeTotal' && typeof value === 'number') {
+        return value;
     }
 
     const toNumber = (x: any) => {

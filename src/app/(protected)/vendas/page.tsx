@@ -140,6 +140,7 @@ const columnLabels: Record<string, string> = {
   item: 'Item',
   descricao: 'Descrição',
   quantidade: 'Qtd.',
+  quantidadeTotal: 'Qtd. Total',
   custoUnitario: 'Custo Unitário',
   valorUnitario: 'Valor Unitário',
   final: 'Valor Final',
@@ -522,7 +523,8 @@ const handleSaveCustomCalculation = async (calc: Omit<CustomCalculation, 'id'> &
     const newList = customCalculations.some(c => c.id === finalCalc.id)
         ? customCalculations.map(c => (c.id === finalCalc.id ? finalCalc : c))
         : [...customCalculations, finalCalc];
-
+    
+    setCustomCalculations(newList);
     await saveGlobalCalculations(newList);
     await persistCalcColumns(newList);
     toast({ title: "Cálculo Salvo!", description: `A coluna "${finalCalc.name}" foi salva.` });
@@ -696,7 +698,11 @@ const handleSaveCustomCalculation = async (calc: Omit<CustomCalculation, 'id'> &
       );
     }
     
-    const headers = Array.from(groups.values()).map(g => g.header);
+    const headers = Array.from(groups.values()).map(g => {
+        const totalQuantity = (g.header.subRows || []).reduce((acc: number, item: any) => acc + (Number(item.quantidade) || 0), 0);
+        g.header.quantidadeTotal = totalQuantity;
+        return g.header;
+    });
 
     return applyCustomCalculations(headers);
   }, [filteredData, applyCustomCalculations]);
