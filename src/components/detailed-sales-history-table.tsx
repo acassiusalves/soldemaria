@@ -190,6 +190,22 @@ const MultiSelectFilter = ({
     )
 };
 
+// Fix for react-beautiful-dnd in React 18 Strict Mode
+const StrictDroppable = ({ children, ...props }: React.ComponentProps<typeof Droppable>) => {
+  const [enabled, setEnabled] = useState(false);
+  useEffect(() => {
+    const animation = requestAnimationFrame(() => setEnabled(true));
+    return () => {
+      cancelAnimationFrame(animation);
+      setEnabled(false);
+    };
+  }, []);
+  if (!enabled) {
+    return null;
+  }
+  return <Droppable {...props}>{children}</Droppable>;
+};
+
 
 const OrderManagerDialog = ({
     isOpen,
@@ -232,7 +248,7 @@ const OrderManagerDialog = ({
                     </DialogDescription>
                 </DialogHeader>
                 <DragDropContext onDragEnd={handleDragEnd}>
-                    <Droppable droppableId="columns">
+                    <StrictDroppable droppableId="columns">
                         {(provided) => (
                             <div {...provided.droppableProps} ref={provided.innerRef} className="space-y-2 max-h-[60vh] overflow-y-auto">
                                 {orderedColumns.map((col, index) => (
@@ -253,7 +269,7 @@ const OrderManagerDialog = ({
                                 {provided.placeholder}
                             </div>
                         )}
-                    </Droppable>
+                    </StrictDroppable>
                 </DragDropContext>
                 <DialogFooter>
                     <DialogClose asChild>
@@ -341,7 +357,7 @@ export default function DetailedSalesHistoryTable({
 
 
 const detailColumns = useMemo(() => {
-    const detailKeys = ['item', 'descricao', 'quantidade'];
+    const detailKeys = ['item', 'descricao', 'quantidade', 'valorCredito', 'valorDescontos', 'custoUnitario', 'valorUnitario'];
     
     // IMPORTANTE: Nunca filtrar colunas customizadas como detailColumns
     return effectiveColumns.filter(c => {
@@ -465,12 +481,15 @@ const mainColumns = useMemo(() => {
   );
 
 const renderCell = (row: any, columnId: string) => {
+    // PRIMEIRO: Tentar pegar o valor direto da row
     let value = row[columnId];
     
+    // SEGUNDO: Se não encontrou, tentar em customData
     if (value === null || value === undefined) {
         value = row.customData?.[columnId];
     }
     
+    // Campos especiais
     if (columnId === 'tipo_pagamento' || columnId === 'tipo_de_pagamento') {
         return showBlank(row.tipo_de_pagamento ?? row.tipo_pagamento);
     }
@@ -478,14 +497,17 @@ const renderCell = (row: any, columnId: string) => {
         return showBlank(row.parcela);
     }
 
+    // Se ainda não tem valor, retornar vazio
     if (value === null || value === undefined || (typeof value === "string" && value.trim() === "")) {
         return "";
     }
     
+    // Formatação de quantidade total
     if (columnId === 'quantidadeTotal' && typeof value === 'number') {
         return value.toString();
     }
 
+    // Função para converter para número
     const toNumber = (x: any) => {
         if (typeof x === "number") return x;
         if (typeof x === "string") {
@@ -496,6 +518,7 @@ const renderCell = (row: any, columnId: string) => {
         return null;
     };
 
+    // Formatação monetária para campos financeiros
     if (["final","custoFrete","imposto","embalagem","comissao","custoUnitario","valorUnitario","valorCredito","valorDescontos", "valor"]
         .includes(columnId) || (typeof value === 'number' && columnId.startsWith('custom_'))) {
         const n = toNumber(value);
@@ -504,11 +527,13 @@ const renderCell = (row: any, columnId: string) => {
         }
     }
 
+    // Formatação de data
     if (columnId === "data") {
         const d = value?.toDate ? value.toDate() : (typeof value === 'string' ? parseISO(value) : value);
         return d instanceof Date && !isNaN(d.getTime()) ? format(d, "dd/MM/yyyy", { locale: ptBR }) : "";
     }
 
+    // Para colunas customizadas numéricas, mostrar como número se não for monetário
     if ((columnId.startsWith('custom_') || columnId.startsWith('Custom_')) && typeof value === 'number') {
         return value.toLocaleString("pt-BR");
     }
@@ -553,12 +578,10 @@ const renderCell = (row: any, columnId: string) => {
         .filter(Boolean)
         .filter(c => isManaged ? columnVisibility[c!.id] : true) as ColumnDef[];
     
-    // FORÇAR quantidadeTotal se não estiver aparecendo
     const hasQuantidadeTotal = result.some(c => c.id === 'quantidadeTotal');
     const quantidadeTotalColumn = mainColumns.find(c => c.id === 'quantidadeTotal');
     
     if (!hasQuantidadeTotal && quantidadeTotalColumn) {
-        console.log('🚀 FORÇANDO quantidadeTotal a aparecer');
         result.push(quantidadeTotalColumn);
     }
     
@@ -601,53 +624,6 @@ const renderCell = (row: any, columnId: string) => {
         onOrderChange(mainColumns.map(c => c.id));
     }
   };
-
-  // DEBUG TEMPORÁRIO - REMOVER DEPOIS
-  React.useEffect(() => {
-    if (mainColumns.length > 0) {
-      console.log('🔍 === DEBUG COLUNAS ===');
-      console.log('📊 Total mainColumns:', mainColumns.length);
-      console.log('📋 mainColumns:', mainColumns.map(c => ({ 
-        id: c.id, 
-        label: c.label,
-        visible: columnVisibility[c.id] 
-      })));
-      console.log('👁️ columnVisibility completo:', columnVisibility);
-      console.log('📐 columnOrder:', columnOrder);
-      console.log('✅ visibleColumns resultantes:', visibleColumns.length);
-      console.log('🎛️ isManaged:', isManaged);
-      console.log('⏳ isLoadingPreferences:', isLoadingPreferences);
-      console.log('========================');
-    }
-  }, [mainColumns, columnVisibility, columnOrder, visibleColumns, isManaged]);
-  
-  React.useEffect(() => {
-    console.log('🔍 DEBUG QUANTIDADE TOTAL:');
-    
-    // Verificar se quantidadeTotal está em mainColumns
-    const quantidadeTotalInMain = mainColumns.find(c => c.id === 'quantidadeTotal');
-    console.log('📊 quantidadeTotal em mainColumns:', quantidadeTotalInMain);
-    
-    // Verificar visibilidade
-    console.log('👁️ Visibilidade de quantidadeTotal:', columnVisibility['quantidadeTotal']);
-    
-    // Verificar se está na ordem
-    console.log('📋 quantidadeTotal está em columnOrder:', columnOrder.includes('quantidadeTotal'));
-    console.log('📋 Posição na ordem:', columnOrder.indexOf('quantidadeTotal'));
-    
-    // Verificar se está em visibleColumns
-    const quantidadeTotalInVisible = visibleColumns.find(c => c.id === 'quantidadeTotal');
-    console.log('✅ quantidadeTotal em visibleColumns:', quantidadeTotalInVisible);
-    
-    // Verificar dados
-    if (data.length > 0) {
-      console.log('🧮 Valor quantidadeTotal no primeiro item:', data[0].quantidadeTotal);
-      console.log('🧮 Tipo do valor:', typeof data[0].quantidadeTotal);
-    }
-    
-    console.log('========================');
-  }, [mainColumns, columnVisibility, columnOrder, visibleColumns, data]);
-
 
   return (
     <>
