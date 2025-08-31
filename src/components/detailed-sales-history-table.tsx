@@ -4,7 +4,7 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { ArrowUpDown, Columns, ChevronRight, X, Eye, EyeOff, Save, Loader2, Settings2, GripVertical, Calculator } from "lucide-react";
+import { ArrowUpDown, Columns, ChevronRight, X, Eye, EyeOff, Save, Loader2, Settings2, GripVertical, Calculator, Search } from "lucide-react";
 import { VendaDetalhada, CustomCalculation } from "@/lib/data";
 import {
   Table,
@@ -742,17 +742,19 @@ export default function DetailedSalesHistoryTable({
   return (
     <>
     <Card>
-      <CardContent className="p-4">
-        <div className="flex justify-between items-center mb-4">
+      <CardContent className="p-4 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
           <h2 className="text-h3 font-headline">{tableTitle}</h2>
           <div className="flex items-center gap-2">
-            <div className="text-sm font-medium text-muted-foreground">{data.length} registros</div>
-            <Input 
-              placeholder="Filtrar por Código ou Cliente..."
-              value={filter}
-              onChange={(e) => setFilter(e.target.value)}
-              className="w-auto"
-            />
+             <div className="relative w-full max-w-sm">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input 
+                placeholder="Filtrar por Código ou Cliente..."
+                value={filter}
+                onChange={(e) => setFilter(e.target.value)}
+                className="pl-9"
+                />
+            </div>
             {isManaged && onSavePreferences && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -816,20 +818,27 @@ export default function DetailedSalesHistoryTable({
             )}
           </div>
         </div>
-        {showAdvancedFilters && (
-            <div className="flex items-center gap-2 mb-4">
-                <MultiSelectFilter title="Vendedor" options={uniqueVendores} selectedValues={vendorFilter} onSelectionChange={setVendorFilter} />
-                <MultiSelectFilter title="Entregador" options={uniqueEntregadores} selectedValues={deliverymanFilter} onSelectionChange={setDeliverymanFilter} />
-                <MultiSelectFilter title="Logística" options={uniqueLogisticas} selectedValues={logisticsFilter} onSelectionChange={setLogisticsFilter} />
-                <MultiSelectFilter title="Cidade" options={uniqueCidades} selectedValues={cityFilter} onSelectionChange={setCityFilter} />
-                {hasActiveAdvancedFilter && (
-                    <Button variant="ghost" onClick={clearAllAdvancedFilters} className="text-muted-foreground">
-                        <X className="mr-2 h-4 w-4" />
-                        Limpar Filtros
-                    </Button>
-                )}
+
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
+            {showAdvancedFilters && (
+                <div className="flex items-center gap-2 flex-wrap">
+                    <MultiSelectFilter title="Vendedor" options={uniqueVendores} selectedValues={vendorFilter} onSelectionChange={setVendorFilter} />
+                    <MultiSelectFilter title="Entregador" options={uniqueEntregadores} selectedValues={deliverymanFilter} onSelectionChange={setDeliverymanFilter} />
+                    <MultiSelectFilter title="Logística" options={uniqueLogisticas} selectedValues={logisticsFilter} onSelectionChange={setLogisticsFilter} />
+                    <MultiSelectFilter title="Cidade" options={uniqueCidades} selectedValues={cityFilter} onSelectionChange={setCityFilter} />
+                    {hasActiveAdvancedFilter && (
+                        <Button variant="ghost" onClick={clearAllAdvancedFilters} className="text-muted-foreground">
+                            <X className="mr-2 h-4 w-4" />
+                            Limpar Filtros
+                        </Button>
+                    )}
+                </div>
+            )}
+            <div className="text-sm font-medium text-muted-foreground sm:ml-auto">
+                {data.length} registros
             </div>
-        )}
+        </div>
+
         <div className="rounded-md border">
           <Table>
             <TableHeader>
