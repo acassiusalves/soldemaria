@@ -34,18 +34,7 @@ import {
   DialogTitle,
   DialogDescription,
   DialogFooter,
-  DialogClose,
 } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
-import { Card, CardContent } from "./ui/card";
-import { ScrollArea } from "./ui/scroll-area";
-import type { Timestamp } from "firebase/firestore";
-import { cn, showBlank } from "@/lib/utils";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
-import { Badge } from "./ui/badge";
 import {
   DndContext,
   closestCenter,
@@ -63,6 +52,16 @@ import {
   useSortable,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import { Card, CardContent } from "./ui/card";
+import { ScrollArea } from "./ui/scroll-area";
+import type { Timestamp } from "firebase/firestore";
+import { cn, showBlank } from "@/lib/utils";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
+import { Badge } from "./ui/badge";
 
 
 const ITEMS_PER_PAGE = 10;
@@ -431,7 +430,7 @@ export default function DetailedSalesHistoryTable({
   }, [columns, data]);
 
   const detailColumns = useMemo(() => {
-    const detailKeys = ['item', 'descricao', 'quantidade', 'valorCredito', 'valorDescontos', 'custoUnitario', 'valorUnitario'];
+    const detailKeys = ['item', 'descricao', 'quantidade', 'valorCredito', 'valorDescontos'];
     
     // IMPORTANTE: Nunca filtrar colunas customizadas como detailColumns
     return effectiveColumns.filter(c => {
@@ -463,7 +462,6 @@ export default function DetailedSalesHistoryTable({
         const allColumnIds = mainColumns.map(c => c.id);
         if (!allColumnIds.includes('quantidadeTotal')) {
             // Adicionar quantidadeTotal se não estiver presente
-            const quantColumn = { id: 'quantidadeTotal', label: 'Qtd. Total', isSortable: true };
             allColumnIds.push('quantidadeTotal');
         }
         
@@ -652,26 +650,18 @@ export default function DetailedSalesHistoryTable({
 
   const visibleColumns = useMemo(() => {
     const columnMap = new Map(mainColumns.map(c => [c.id, c]));
-    const order = columnOrder.length > 0 ? columnOrder : mainColumns.map(c => c.id);
     
-    // INCLUIR quantidadeTotal explicitamente se não estiver na ordem
-    const ensureQuantidadeTotal = (orderList: string[]) => {
-      if (!orderList.includes('quantidadeTotal')) {
-        const quantidadeTotalExists = mainColumns.some(c => c.id === 'quantidadeTotal');
-        if (quantidadeTotalExists) {
-          return [...orderList, 'quantidadeTotal'];
-        }
-      }
-      return orderList;
-    };
+    // Se a ordem controlada existe e tem itens, use-a. Caso contrário, use a ordem das mainColumns.
+    const order = (isManaged && columnOrder && columnOrder.length > 0)
+        ? columnOrder
+        : mainColumns.map(c => c.id);
 
-    const finalOrder = ensureQuantidadeTotal(order);
-    
-    return finalOrder
-        .map(id => columnMap.get(id))
-        .filter(Boolean)
-        .filter(c => isManaged ? (columnVisibility[c!.id] !== false) : true) as ColumnDef[];
+    return order
+        .map(id => columnMap.get(id)) // Mapeia IDs para definições de coluna
+        .filter(Boolean) // Remove qualquer ID que não corresponda a uma coluna
+        .filter(c => (isManaged ? columnVisibility[c!.id] !== false : true)) as ColumnDef[]; // Filtra pela visibilidade
   }, [mainColumns, columnVisibility, columnOrder, isManaged]);
+
 
   const hasActiveAdvancedFilter = useMemo(() => {
     return vendorFilter.size > 0 || deliverymanFilter.size > 0 || logisticsFilter.size > 0 || cityFilter.size > 0;
@@ -938,3 +928,4 @@ export default function DetailedSalesHistoryTable({
     </>
   );
 }
+
