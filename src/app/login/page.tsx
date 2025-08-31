@@ -82,60 +82,63 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen w-full flex-col items-center justify-center bg-muted/40">
-       <div className="mb-8 flex flex-col items-center gap-4 text-center">
-            <Image 
+    <div className="w-full lg:grid lg:min-h-screen lg:grid-cols-1">
+      <div className="flex items-center justify-center py-12">
+        <div className="mx-auto grid w-[350px] gap-6">
+          <div className="grid gap-4 text-center">
+             <Image 
                 src="/sol-de-maria-logo.png"
                 alt="Logo Sol de Maria"
                 width={120}
                 height={120}
-                className="rounded-full"
+                className="rounded-full mx-auto"
             />
-            <div>
-                <h1 className="text-3xl font-headline font-bold">Visão de Vendas</h1>
-                <p className="text-muted-foreground">Bem-vindo de volta!</p>
-            </div>
+            <h1 className="text-3xl font-bold font-headline">Visão de Vendas</h1>
+            <p className="text-balance text-muted-foreground">
+              Entre com suas credenciais para acessar o painel
+            </p>
+          </div>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-2xl font-headline">Login</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleLogin} className="grid gap-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="email">Email</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    placeholder="seu@email.com"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    disabled={isLoggingIn}
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <div className="flex items-center">
+                    <Label htmlFor="password">Senha</Label>
+                  </div>
+                  <Input
+                    id="password"
+                    type="password"
+                    required
+                    placeholder="********"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    disabled={isLoggingIn}
+                  />
+                </div>
+                <Button type="submit" className="w-full" disabled={isLoggingIn}>
+                  {isLoggingIn && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Entrar
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
         </div>
-      <Card className="w-full max-w-sm">
-        <CardHeader>
-          <CardTitle className="text-2xl font-headline">Login</CardTitle>
-          <CardDescription>
-            Entre com suas credenciais para acessar o painel.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleLogin} className="grid gap-4">
-            <div className="grid gap-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="seu@email.com"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                disabled={isLoggingIn}
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="password">Senha</Label>
-              <Input
-                id="password"
-                type="password"
-                required
-                placeholder="********"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                disabled={isLoggingIn}
-              />
-            </div>
-            <Button type="submit" className="w-full" disabled={isLoggingIn}>
-               {isLoggingIn && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Entrar
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
+      </div>
     </div>
   );
 }
