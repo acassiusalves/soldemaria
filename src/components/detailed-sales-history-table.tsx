@@ -4,7 +4,7 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { ArrowUpDown, Columns, ChevronRight, X, Eye, EyeOff, Save, Loader2, Settings2, GripVertical } from "lucide-react";
+import { ArrowUpDown, Columns, ChevronRight, X, Eye, EyeOff, Save, Loader2, Settings2, GripVertical, Calculator } from "lucide-react";
 import { VendaDetalhada, CustomCalculation } from "@/lib/data";
 import {
   Table,
@@ -120,6 +120,7 @@ const getLabel = (key: string, customCalculations: CustomCalculation[] = []) => 
     // Depois verificar o mapeamento de labels padrão
     return columnLabels[key] || key;
 };
+
 
 const FIXED_COLUMNS: ColumnDef[] = [
   { id: "codigo",       label: "Código",        isSortable: true },
@@ -405,8 +406,9 @@ export default function DetailedSalesHistoryTable({
   const columnVisibility = isManaged ? controlledVisibility : internalVisibility;
   const setColumnVisibility = isManaged ? onVisibilityChange! : setInternalVisibility;
   
-  const columnOrder = isManaged ? controlledOrder : internalOrder;
+  const columnOrder = isManaged ? controlledOrder ?? [] : internalOrder;
   const setColumnOrder = isManaged ? onOrderChange! : setInternalOrder;
+
 
   const effectiveColumns = useMemo(() => {
     const systemColumnsToHide = [
@@ -589,6 +591,7 @@ export default function DetailedSalesHistoryTable({
   const SortableHeader = ({ tkey, label, className }: { tkey: SortKey; label: string, className?: string }) => (
     <TableHead className={className}>
       <Button variant="ghost" onClick={() => handleSort(tkey)}>
+        {tkey?.toString().startsWith('custom_') && <Calculator className="mr-2 h-4 w-4 text-amber-500" />}
         {label}
         <ArrowUpDown className="ml-2 h-4 w-4" />
       </Button>
@@ -626,6 +629,13 @@ export default function DetailedSalesHistoryTable({
         }
         return null;
     };
+
+    const customCalc = customCalculations.find(c => c.id === columnId);
+    const isPercentage = customCalc?.isPercentage;
+
+    if (isPercentage && typeof value === 'number') {
+      return `${(value * 100).toFixed(2)}%`;
+    }
 
     if (["final","custoFrete","imposto","embalagem","comissao","custoUnitario","valorUnitario","valorCredito","valorDescontos", "valor"]
         .includes(columnId) || (typeof value === 'number' && columnId.startsWith('custom_'))) {
@@ -676,21 +686,16 @@ export default function DetailedSalesHistoryTable({
   }
 
   const visibleColumns = useMemo(() => {
-    if (isLoadingPreferences) {
-        return [];
-    }
     const columnMap = new Map(mainColumns.map(c => [c.id, c]));
     
-    // Se a ordem controlada existe e tem itens, use-a. Caso contrário, use a ordem das mainColumns.
-    const order = (isManaged && columnOrder && columnOrder.length > 0)
-        ? columnOrder
-        : mainColumns.map(c => c.id);
+    const order = (columnOrder && columnOrder.length > 0) ? columnOrder : mainColumns.map(c => c.id);
 
     return order
-        .map(id => columnMap.get(id)) // Mapeia IDs para definições de coluna
-        .filter(Boolean) // Remove qualquer ID que não corresponda a uma coluna
-        .filter(c => (isManaged ? columnVisibility[c!.id] !== false : true)) as ColumnDef[]; // Filtra pela visibilidade
-  }, [mainColumns, columnVisibility, columnOrder, isManaged, isLoadingPreferences]);
+        .map(id => columnMap.get(id))
+        .filter(Boolean)
+        .filter(c => (isManaged ? columnVisibility[c!.id] !== false : true)) as ColumnDef[];
+  }, [mainColumns, columnVisibility, columnOrder, isManaged]);
+
 
   const hasActiveAdvancedFilter = useMemo(() => {
     return vendorFilter.size > 0 || deliverymanFilter.size > 0 || logisticsFilter.size > 0 || cityFilter.size > 0;
@@ -838,7 +843,12 @@ export default function DetailedSalesHistoryTable({
                   col.isSortable ? (
                     <SortableHeader key={col.id} tkey={col.id} label={col.label} className={col.className} />
                   ) : (
-                    <TableHead key={col.id} className={col.className}>{col.label}</TableHead>
+                    <TableHead key={col.id} className={col.className}>
+                       <div className="flex items-center">
+                          {col.id.startsWith('custom_') && <Calculator className="mr-2 h-4 w-4 text-amber-500" />}
+                          {col.label}
+                       </div>
+                    </TableHead>
                   )
                 ))}
               </TableRow>

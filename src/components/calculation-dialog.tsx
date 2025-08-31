@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -41,8 +41,13 @@ export function CalculationDialog({ isOpen, onClose, onSave, onDelete, marketpla
   
   const [interactionTarget, setInteractionTarget] = useState<string>('none');
   const [interactionOperator, setInteractionOperator] = useState<'+' | '-'>('-');
+  const [isMounted, setIsMounted] = useState(false);
   
   const { toast } = useToast();
+  
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
   
   const userMadeCalculations = useMemo(() => {
       return customCalculations.filter(c => c.id.startsWith('custom_'));
@@ -131,6 +136,7 @@ export function CalculationDialog({ isOpen, onClose, onSave, onDelete, marketpla
     }
   };
 
+  if (!isMounted) return null;
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => {
