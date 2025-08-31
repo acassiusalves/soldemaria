@@ -1,3 +1,4 @@
+
 "use client";
 
 import * as React from "react";
@@ -16,7 +17,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2 } from "lucide-react";
+import { Loader2, Sun } from "lucide-react";
 import Image from "next/image";
 
 export default function LoginPage() {
@@ -96,9 +97,14 @@ export default function LoginPage() {
                   onError={() => setImageError(true)}
                 />
               ) : (
-                // Fallback caso a imagem não carregue
-                <div className="w-[120px] h-[120px] bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full flex items-center justify-center mx-auto">
-                  <span className="text-white font-bold text-2xl">SM</span>
+                // Fallback melhorado com tema "Sol de Maria"
+                <div className="w-[120px] h-[120px] bg-gradient-to-br from-yellow-400 via-orange-400 to-red-500 rounded-full flex flex-col items-center justify-center mx-auto shadow-lg border-4 border-white relative overflow-hidden">
+                  <div className="absolute inset-0 bg-gradient-to-br from-yellow-300/30 to-transparent"></div>
+                  <Sun className="h-8 w-8 text-white mb-1" />
+                  <div className="text-white font-bold text-xs leading-tight">
+                    <div>SOL</div>
+                    <div className="text-[10px] font-medium">de Maria</div>
+                  </div>
                 </div>
               )}
             </div>
