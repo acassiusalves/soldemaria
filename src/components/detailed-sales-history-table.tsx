@@ -338,10 +338,20 @@ export default function DetailedSalesHistoryTable({
   }, [columns, data]);
 
 
-  const detailColumns = useMemo(() => {
+const detailColumns = useMemo(() => {
     const detailKeys = ['item', 'descricao', 'quantidade', 'valorCredito', 'valorDescontos', 'custoUnitario', 'valorUnitario'];
-    return effectiveColumns.filter(c => detailKeys.includes(c.id));
-  }, [effectiveColumns]);
+    
+    // IMPORTANTE: Nunca filtrar colunas customizadas como detailColumns
+    return effectiveColumns.filter(c => {
+        // Se for coluna customizada, não é detail
+        if (c.id.startsWith('custom_') || c.id.startsWith('Custom_')) {
+            console.log('🚫 Coluna customizada NÃO será detail:', c.id, c.label);
+            return false;
+        }
+        // Caso contrário, usar a lógica normal
+        return detailKeys.includes(c.id);
+    });
+}, [effectiveColumns]);
   
   const paymentDetailColumns: ColumnDef[] = useMemo(() => [
     { id: "modo_de_pagamento", label: "Modo Pagamento", isSortable: false },
@@ -352,10 +362,21 @@ export default function DetailedSalesHistoryTable({
   ], []);
 
 
-  const mainColumns = useMemo(() => {
+const mainColumns = useMemo(() => {
     const detailKeys = detailColumns.map(c => c.id);
-    return effectiveColumns.filter(c => !detailKeys.includes(c.id));
-  }, [effectiveColumns, detailColumns]);
+    const result = effectiveColumns.filter(c => !detailKeys.includes(c.id));
+    
+    console.log('🔍 Filtrando mainColumns:');
+    console.log('📊 effectiveColumns total:', effectiveColumns.length);
+    console.log('📋 detailKeys:', detailKeys);
+    console.log('✅ mainColumns resultado:', result.length);
+    
+    // Debug específico para colunas customizadas
+    const customInMain = result.filter(c => c.id.startsWith('custom_') || c.id.startsWith('Custom_'));
+    console.log('🧮 Colunas customizadas em mainColumns:', customInMain.map(c => ({ id: c.id, label: c.label })));
+    
+    return result;
+}, [effectiveColumns, detailColumns]);
 
     // DEBUG TEMPORÁRIO - REMOVER DEPOIS
 React.useEffect(() => {
@@ -470,7 +491,7 @@ React.useEffect(() => {
     </TableHead>
   );
 
-  const renderCell = (row: any, columnId: string) => {
+const renderCell = (row: any, columnId: string) => {
     // PRIMEIRO: Tentar pegar o valor direto da row
     let value = row[columnId];
     
@@ -847,5 +868,3 @@ React.useEffect(() => {
     </>
   );
 }
-
-    
