@@ -92,6 +92,7 @@ export default function LoginPage() {
                 width={120}
                 height={120}
                 className="rounded-full mx-auto"
+                priority
             />
             <h1 className="text-3xl font-bold font-headline">Visão de Vendas</h1>
             <p className="text-balance text-muted-foreground">
@@ -141,3 +142,4 @@ export default function LoginPage() {
       </div>
     </div>
   );
+}
