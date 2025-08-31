@@ -531,16 +531,21 @@ const handleSaveCustomCalculation = async (calc: Omit<CustomCalculation, 'id'> &
 
     const user = auth.currentUser;
     if (user) {
+        // 1. FORÇA visibilidade
         const newVisibility = { ...columnVisibility, [finalCalc.id]: true };
+        console.log('🔧 Forçando visibilidade para:', finalCalc.id);
         setColumnVisibility(newVisibility);
         await saveUserPreference(user.uid, 'vendas_columns_visibility', newVisibility);
         
-        setColumnOrder(prev => {
-            const next = Array.isArray(prev) ? [...prev] : [];
-            if (!next.includes(finalCalc.id)) next.push(finalCalc.id);
-            saveUserPreference(user.uid, 'vendas_columns_order', next);
-            return next;
-        });
+        // 2. ADICIONA à ordem se não existir
+        const currentOrder = Array.isArray(columnOrder) ? [...columnOrder] : [];
+        if (!currentOrder.includes(finalCalc.id)) {
+            currentOrder.push(finalCalc.id);
+            console.log('📋 Adicionando à ordem:', finalCalc.id);
+            console.log('📋 Nova ordem:', currentOrder);
+            setColumnOrder(currentOrder);
+            await saveUserPreference(user.uid, 'vendas_columns_order', currentOrder);
+        }
     }
 };
 
@@ -549,6 +554,58 @@ const handleSaveCustomCalculation = async (calc: Omit<CustomCalculation, 'id'> &
       await saveGlobalCalculations(newCalculations);
       toast({ title: "Cálculo Removido!"});
   };
+
+const syncExistingCustomColumns = React.useCallback(async () => {
+    const user = auth.currentUser;
+    if (!user || customCalculations.length === 0) return;
+    
+    console.log('🔄 Sincronizando colunas existentes...');
+    
+    // Garantir que todas as colunas customizadas estejam visíveis
+    const newVisibility = { ...columnVisibility };
+    let needsVisibilityUpdate = false;
+    
+    customCalculations.forEach(calc => {
+        if (newVisibility[calc.id] !== true) {
+            newVisibility[calc.id] = true;
+            needsVisibilityUpdate = true;
+            console.log('✅ Adicionando visibilidade para:', calc.id);
+        }
+    });
+    
+    // Garantir que todas estejam na ordem
+    const currentOrder = Array.isArray(columnOrder) ? [...columnOrder] : [];
+    let needsOrderUpdate = false;
+    
+    customCalculations.forEach(calc => {
+        if (!currentOrder.includes(calc.id)) {
+            currentOrder.push(calc.id);
+            needsOrderUpdate = true;
+            console.log('📋 Adicionando à ordem:', calc.id);
+        }
+    });
+    
+    // Salvar se houve mudanças
+    if (needsVisibilityUpdate) {
+        setColumnVisibility(newVisibility);
+        await saveUserPreference(user.uid, 'vendas_columns_visibility', newVisibility);
+    }
+    
+    if (needsOrderUpdate) {
+        setColumnOrder(currentOrder);
+        await saveUserPreference(user.uid, 'vendas_columns_order', currentOrder);
+    }
+    
+    if (needsVisibilityUpdate || needsOrderUpdate) {
+        console.log('🎯 Sincronização concluída!');
+    }
+}, [customCalculations, columnVisibility, columnOrder]);
+
+React.useEffect(() => {
+    if (!isLoadingPreferences && customCalculations.length > 0) {
+        syncExistingCustomColumns();
+    }
+}, [isLoadingPreferences, customCalculations, syncExistingCustomColumns]);
 
 
   const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): VendaDetalhada[] => {
@@ -887,22 +944,17 @@ const handleSaveCustomCalculation = async (calc: Omit<CustomCalculation, 'id'> &
 
   const mergedColumns = React.useMemo(() => {
     console.log('🔗 Mesclando colunas...');
-    console.log('📋 columns:', columns.length);
-    console.log('🧮 customCalculations:', customCalculations.length);
-    
     const map = new Map<string, ColumnDef>();
     
     // Adicionar colunas normais
     columns.forEach(c => {
         map.set(c.id, c);
-        console.log('📊 Adicionada coluna normal:', c.id, c.label);
     });
     
     // Adicionar colunas customizadas
     customCalculations.forEach(c => {
         const columnDef = { id: c.id, label: c.name, isSortable: true };
         map.set(c.id, columnDef);
-        console.log('🧮 Adicionada coluna customizada:', c.id, c.name);
     });
     
     const resultado = Array.from(map.values());
@@ -1015,6 +1067,48 @@ const handleSaveCustomCalculation = async (calc: Omit<CustomCalculation, 'id'> &
                      <Button variant="outline" onClick={() => setIsCalculationOpen(true)}>
                         <Calculator className="mr-2 h-4 w-4" />
                         Calcular
+                    </Button>
+                    <Button 
+                        variant="outline" 
+                        onClick={async () => {
+                            console.log('🔧 Corrigindo colunas faltantes...');
+                            
+                            // Buscar todas as colunas customizadas que existem
+                            const allCustomColumns = customCalculations.map(c => c.id);
+                            console.log('🧮 Todas as colunas customizadas:', allCustomColumns);
+                            
+                            // Verificar quais estão faltando no columnOrder
+                            const currentOrder = Array.isArray(columnOrder) ? [...columnOrder] : [];
+                            const missing = allCustomColumns.filter(id => !currentOrder.includes(id));
+                            console.log('❌ Colunas faltantes no order:', missing);
+                            
+                            if (missing.length > 0) {
+                                // Adicionar as faltantes
+                                const newOrder = [...currentOrder, ...missing];
+                                console.log('📋 Nova ordem com as faltantes:', newOrder);
+                                
+                                setColumnOrder(newOrder);
+                                
+                                // Garantir visibilidade também
+                                const newVisibility = { ...columnVisibility };
+                                missing.forEach(id => newVisibility[id] = true);
+                                setColumnVisibility(newVisibility);
+                                
+                                // Salvar
+                                const user = auth.currentUser;
+                                if (user) {
+                                    await saveUserPreference(user.uid, 'vendas_columns_order', newOrder);
+                                    await saveUserPreference(user.uid, 'vendas_columns_visibility', newVisibility);
+                                }
+                                
+                                alert(`✅ Corrigido! ${missing.length} colunas adicionadas.`);
+                            } else {
+                                alert('✅ Todas as colunas já estão no order!');
+                            }
+                        }}
+                        className="bg-green-100 border-green-300 text-green-700"
+                    >
+                        🔧 Corrigir Colunas
                     </Button>
                      {stagedData.length > 0 && (
                       <Button
@@ -1140,5 +1234,3 @@ const handleSaveCustomCalculation = async (calc: Omit<CustomCalculation, 'id'> &
     </>
   );
 }
-
-    
