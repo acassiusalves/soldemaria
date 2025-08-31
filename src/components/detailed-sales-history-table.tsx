@@ -108,7 +108,13 @@ const columnLabels: Record<string, string> = {
   instituicao_financeira: 'Instituição Financeira',
 };
 
-const getLabel = (key: string) => columnLabels[key] || key;
+const getLabel = (key: string, customCalculations: CustomCalculation[] = []) => {
+    if (key.startsWith('custom_')) {
+        const calc = customCalculations.find(c => c.id === key);
+        return calc?.name || key;
+    }
+    return columnLabels[key] || key;
+};
 
 const FIXED_COLUMNS: ColumnDef[] = [
   { id: "codigo",       label: "Código",        isSortable: true },
@@ -402,6 +408,10 @@ export default function DetailedSalesHistoryTable({
         "quantidade_movimentada", "costs", "customData"
     ];
     const base = (columns && columns.length > 0) ? columns : FIXED_COLUMNS;
+    const customCalculations = (columns as (ColumnDef | CustomCalculation)[]).filter(
+        c => 'formula' in c
+    ) as CustomCalculation[];
+
 
     const map = new Map<string, ColumnDef>();
     base.forEach(c => map.set(c.id, c));
@@ -409,21 +419,20 @@ export default function DetailedSalesHistoryTable({
       data.forEach(row => {
         Object.keys(row).forEach(k => {
           if (!map.has(k) && !systemColumnsToHide.includes(k)) {
-            map.set(k, { id: k, label: getLabel(k), isSortable: true });
+            map.set(k, { id: k, label: getLabel(k, customCalculations), isSortable: true });
           }
         });
         if (row.customData) {
             Object.keys(row.customData).forEach(k => {
                 if(!map.has(k)) {
-                    const calc = (columns as (ColumnDef | CustomCalculation)[]).find(c => c.id === k);
-                    map.set(k, { id: k, label: calc?.label || k, isSortable: true });
+                    map.set(k, { id: k, label: getLabel(k, customCalculations), isSortable: true });
                 }
             })
         }
       });
     }
     map.forEach((col, key) => {
-        col.label = getLabel(key);
+        col.label = getLabel(key, customCalculations);
     });
 
     return Array.from(map.values()).filter(c => !systemColumnsToHide.includes(c.id));
@@ -462,6 +471,7 @@ export default function DetailedSalesHistoryTable({
         const allColumnIds = mainColumns.map(c => c.id);
         if (!allColumnIds.includes('quantidadeTotal')) {
             // Adicionar quantidadeTotal se não estiver presente
+            const quantColumn = { id: 'quantidadeTotal', label: 'Qtd. Total', isSortable: true };
             allColumnIds.push('quantidadeTotal');
         }
         
@@ -649,6 +659,9 @@ export default function DetailedSalesHistoryTable({
   }
 
   const visibleColumns = useMemo(() => {
+    if (isLoadingPreferences) {
+        return [];
+    }
     const columnMap = new Map(mainColumns.map(c => [c.id, c]));
     
     // Se a ordem controlada existe e tem itens, use-a. Caso contrário, use a ordem das mainColumns.
@@ -660,8 +673,7 @@ export default function DetailedSalesHistoryTable({
         .map(id => columnMap.get(id)) // Mapeia IDs para definições de coluna
         .filter(Boolean) // Remove qualquer ID que não corresponda a uma coluna
         .filter(c => (isManaged ? columnVisibility[c!.id] !== false : true)) as ColumnDef[]; // Filtra pela visibilidade
-  }, [mainColumns, columnVisibility, columnOrder, isManaged]);
-
+  }, [mainColumns, columnVisibility, columnOrder, isManaged, isLoadingPreferences]);
 
   const hasActiveAdvancedFilter = useMemo(() => {
     return vendorFilter.size > 0 || deliverymanFilter.size > 0 || logisticsFilter.size > 0 || cityFilter.size > 0;
@@ -763,7 +775,10 @@ export default function DetailedSalesHistoryTable({
                     Resetar para Padrão
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                 <DropdownMenuItem onSelect={() => onSavePreferences('vendas_columns_visibility', columnVisibility)} disabled={isSavingPreferences}>
+                 <DropdownMenuItem onSelect={() => {
+                    onSavePreferences('vendas_columns_visibility', columnVisibility)
+                    if(onOrderChange) onSavePreferences('vendas_columns_order', columnOrder)
+                 }} disabled={isSavingPreferences}>
                     {isSavingPreferences ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
                     Salvar esta visão
                 </DropdownMenuItem>
@@ -928,4 +943,3 @@ export default function DetailedSalesHistoryTable({
     </>
   );
 }
-
