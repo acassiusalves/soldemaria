@@ -87,7 +87,7 @@ export default function LoginPage() {
             <div className="flex justify-center">
               {!imageError ? (
                 <Image
-                  src="/sol-de-maria-logo.png"
+                  src="/Design sem nome-4.png"
                   alt="Logo Sol de Maria"
                   width={120}
                   height={120}
