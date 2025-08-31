@@ -318,7 +318,9 @@ export default function DetailedSalesHistoryTable({
     if (data.length > 0) {
       data.forEach(row => {
         Object.keys(row).forEach(k => {
-          if (!map.has(k)) map.set(k, { id: k, label: getLabel(k), isSortable: true });
+          if (!map.has(k)) {
+            map.set(k, { id: k, label: getLabel(k), isSortable: true });
+          }
         });
         if (row.customData) {
             Object.keys(row.customData).forEach(k => {
