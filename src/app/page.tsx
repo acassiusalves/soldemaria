@@ -3,7 +3,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { format, parseISO, endOfDay, isValid, startOfMonth, endOfMonth, subDays } from "date-fns";
+import { format, parse, parseISO, endOfDay, isValid, subDays, startOfMonth, endOfMonth } from "date-fns";
 import { ptBR } from 'date-fns/locale';
 import type { DateRange } from "react-day-picker";
 import {
@@ -15,6 +15,7 @@ import {
   LogOut,
   Settings,
   PieChart,
+  Truck,
 } from "lucide-react";
 import { collection, onSnapshot, query, Timestamp } from "firebase/firestore";
 import { useRouter } from "next/navigation";
@@ -49,6 +50,8 @@ import { Logo } from "@/components/icons";
 import KpiCard from "@/components/kpi-card";
 import TopProductsChart from "@/components/top-products-chart";
 import OriginChart from "@/components/origin-chart";
+import LogisticsChart from "@/components/logistics-chart";
+
 
 // Helper to reliably convert various date formats to a Date object
 const toDate = (value: unknown): Date | null => {
@@ -365,7 +368,7 @@ export default function DashboardPage() {
              <Card>
               <CardHeader>
                 <CardTitle className="font-headline text-h3 flex items-center gap-2">
-                  <PieChart className="size-6 text-primary" />
+                  <Truck className="size-6 text-primary" />
                   Comparativo por Logística
                 </CardTitle>
                 <CardDescription>
@@ -373,7 +376,7 @@ export default function DashboardPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <OriginChart data={salesByLogistics} />
+                 <LogisticsChart data={salesByLogistics} />
               </CardContent>
             </Card>
           </div>
