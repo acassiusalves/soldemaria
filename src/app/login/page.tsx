@@ -1,4 +1,3 @@
-
 "use client";
 
 import * as React from "react";
@@ -19,6 +18,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Sun } from "lucide-react";
 import Image from "next/image";
+import logoImage from "../../../public/sol-de-maria-logo.png";
 
 export default function LoginPage() {
   const [email, setEmail] = React.useState("");
@@ -88,12 +88,13 @@ export default function LoginPage() {
             <div className="flex justify-center">
               {!imageError ? (
                 <Image
-                  src="/sol-de-maria-logo.png"
+                  src={logoImage}
                   alt="Logo Sol de Maria"
                   width={120}
                   height={120}
                   className="rounded-full mx-auto"
                   priority
+                  unoptimized // Add this if you still face issues with external SVGs or specific formats
                   onError={() => setImageError(true)}
                 />
               ) : (
