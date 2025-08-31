@@ -6,7 +6,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { signInWithEmailAndPassword, onAuthStateChanged } from "firebase/auth";
 import { auth } from "@/lib/firebase"; 
-import { Logo } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -88,7 +87,14 @@ export default function LoginPage() {
         <div className="mx-auto grid w-[350px] gap-6">
           <div className="grid gap-4 text-center">
              <div className="flex justify-center">
-                <Logo className="size-24 text-primary" />
+                <Image
+                    src="/sol-de-maria-logo.png"
+                    alt="Logo Sol de Maria"
+                    width={120}
+                    height={120}
+                    className="rounded-full mx-auto"
+                    priority
+                />
              </div>
             <h1 className="text-3xl font-bold font-headline">Visão de Vendas</h1>
             <p className="text-balance text-muted-foreground">
