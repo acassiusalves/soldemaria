@@ -533,7 +533,6 @@ const handleSaveCustomCalculation = async (calc: Omit<CustomCalculation, 'id'> &
     if (user) {
         // 1. FORÇA visibilidade
         const newVisibility = { ...columnVisibility, [finalCalc.id]: true };
-        console.log('🔧 Forçando visibilidade para:', finalCalc.id);
         setColumnVisibility(newVisibility);
         await saveUserPreference(user.uid, 'vendas_columns_visibility', newVisibility);
         
@@ -541,8 +540,6 @@ const handleSaveCustomCalculation = async (calc: Omit<CustomCalculation, 'id'> &
         const currentOrder = Array.isArray(columnOrder) ? [...columnOrder] : [];
         if (!currentOrder.includes(finalCalc.id)) {
             currentOrder.push(finalCalc.id);
-            console.log('📋 Adicionando à ordem:', finalCalc.id);
-            console.log('📋 Nova ordem:', currentOrder);
             setColumnOrder(currentOrder);
             await saveUserPreference(user.uid, 'vendas_columns_order', currentOrder);
         }
@@ -559,8 +556,6 @@ const syncExistingCustomColumns = React.useCallback(async () => {
     const user = auth.currentUser;
     if (!user || customCalculations.length === 0) return;
     
-    console.log('🔄 Sincronizando colunas existentes...');
-    
     // Garantir que todas as colunas customizadas estejam visíveis
     const newVisibility = { ...columnVisibility };
     let needsVisibilityUpdate = false;
@@ -569,7 +564,6 @@ const syncExistingCustomColumns = React.useCallback(async () => {
         if (newVisibility[calc.id] !== true) {
             newVisibility[calc.id] = true;
             needsVisibilityUpdate = true;
-            console.log('✅ Adicionando visibilidade para:', calc.id);
         }
     });
     
@@ -581,7 +575,6 @@ const syncExistingCustomColumns = React.useCallback(async () => {
         if (!currentOrder.includes(calc.id)) {
             currentOrder.push(calc.id);
             needsOrderUpdate = true;
-            console.log('📋 Adicionando à ordem:', calc.id);
         }
     });
     
@@ -593,12 +586,9 @@ const syncExistingCustomColumns = React.useCallback(async () => {
     
     if (needsOrderUpdate) {
         setColumnOrder(currentOrder);
-        await saveUserPreference(user.uid, 'vendas_columns_order', currentOrder);
+        await saveUserPreference(user.uid, 'vendas_columns_order', newOrder);
     }
     
-    if (needsVisibilityUpdate || needsOrderUpdate) {
-        console.log('🎯 Sincronização concluída!');
-    }
 }, [customCalculations, columnVisibility, columnOrder]);
 
 React.useEffect(() => {
@@ -609,8 +599,6 @@ React.useEffect(() => {
 
 
   const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): VendaDetalhada[] => {
-    console.log('🧮 Aplicando', customCalculations.length, 'cálculos customizados');
-    console.log('📊 Cálculos:', customCalculations.map(c => ({ id: c.id, name: c.name })));
     if (customCalculations.length === 0) return data;
   
     const labelToId = new Map<string, string>();
@@ -677,7 +665,6 @@ React.useEffect(() => {
   
           newCustomData[calc.id] = numResult;
           flatRow[calc.id] = numResult;
-          console.log(`✅ Cálculo "${calc.name}" (${calc.id}): ${numResult}`);
   
           if (calc.interaction) {
             const base = getNumericField(flatRow, calc.interaction.targetColumn);
@@ -686,22 +673,12 @@ React.useEffect(() => {
             flatRow[calc.interaction.targetColumn] = nv;
           }
         } catch (e) {
-          console.error('❌ Erro na fórmula', calc?.name, e);
           newCustomData[calc.id] = 0;
           flatRow[calc.id] = 0;
         }
       });
   
       const resultado = { ...flatRow, customData: newCustomData };
-      console.log('📊 Row processada:', {
-        codigo: resultado.codigo,
-        temCustomData: !!resultado.customData,
-        valoresCustomData: resultado.customData,
-        valoresDiretos: customCalculations.reduce((acc, calc) => {
-          acc[calc.id] = resultado[calc.id];
-          return acc;
-        }, {} as any)
-      });
       
       return resultado;
     });
@@ -943,7 +920,6 @@ React.useEffect(() => {
   }, [columns, customCalculations]);
 
   const mergedColumns = React.useMemo(() => {
-    console.log('🔗 Mesclando colunas...');
     const map = new Map<string, ColumnDef>();
     
     // Adicionar colunas normais
@@ -958,7 +934,6 @@ React.useEffect(() => {
     });
     
     const resultado = Array.from(map.values());
-    console.log('✅ mergedColumns final:', resultado.map(c => ({ id: c.id, label: c.label })));
     
     return resultado;
 }, [columns, customCalculations]);
@@ -1067,48 +1042,6 @@ React.useEffect(() => {
                      <Button variant="outline" onClick={() => setIsCalculationOpen(true)}>
                         <Calculator className="mr-2 h-4 w-4" />
                         Calcular
-                    </Button>
-                    <Button 
-                        variant="outline" 
-                        onClick={async () => {
-                            console.log('🔧 Corrigindo colunas faltantes...');
-                            
-                            // Buscar todas as colunas customizadas que existem
-                            const allCustomColumns = customCalculations.map(c => c.id);
-                            console.log('🧮 Todas as colunas customizadas:', allCustomColumns);
-                            
-                            // Verificar quais estão faltando no columnOrder
-                            const currentOrder = Array.isArray(columnOrder) ? [...columnOrder] : [];
-                            const missing = allCustomColumns.filter(id => !currentOrder.includes(id));
-                            console.log('❌ Colunas faltantes no order:', missing);
-                            
-                            if (missing.length > 0) {
-                                // Adicionar as faltantes
-                                const newOrder = [...currentOrder, ...missing];
-                                console.log('📋 Nova ordem com as faltantes:', newOrder);
-                                
-                                setColumnOrder(newOrder);
-                                
-                                // Garantir visibilidade também
-                                const newVisibility = { ...columnVisibility };
-                                missing.forEach(id => newVisibility[id] = true);
-                                setColumnVisibility(newVisibility);
-                                
-                                // Salvar
-                                const user = auth.currentUser;
-                                if (user) {
-                                    await saveUserPreference(user.uid, 'vendas_columns_order', newOrder);
-                                    await saveUserPreference(user.uid, 'vendas_columns_visibility', newVisibility);
-                                }
-                                
-                                alert(`✅ Corrigido! ${missing.length} colunas adicionadas.`);
-                            } else {
-                                alert('✅ Todas as colunas já estão no order!');
-                            }
-                        }}
-                        className="bg-green-100 border-green-300 text-green-700"
-                    >
-                        🔧 Corrigir Colunas
                     </Button>
                      {stagedData.length > 0 && (
                       <Button

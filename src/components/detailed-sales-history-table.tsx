@@ -339,13 +339,12 @@ export default function DetailedSalesHistoryTable({
 
 
 const detailColumns = useMemo(() => {
-    const detailKeys = ['item', 'descricao', 'quantidade', 'valorCredito', 'valorDescontos', 'custoUnitario', 'valorUnitario'];
+    const detailKeys = ['item', 'descricao', 'quantidade'];
     
     // IMPORTANTE: Nunca filtrar colunas customizadas como detailColumns
     return effectiveColumns.filter(c => {
         // Se for coluna customizada, não é detail
         if (c.id.startsWith('custom_') || c.id.startsWith('Custom_')) {
-            console.log('🚫 Coluna customizada NÃO será detail:', c.id, c.label);
             return false;
         }
         // Caso contrário, usar a lógica normal
@@ -366,36 +365,8 @@ const mainColumns = useMemo(() => {
     const detailKeys = detailColumns.map(c => c.id);
     const result = effectiveColumns.filter(c => !detailKeys.includes(c.id));
     
-    console.log('🔍 Filtrando mainColumns:');
-    console.log('📊 effectiveColumns total:', effectiveColumns.length);
-    console.log('📋 detailKeys:', detailKeys);
-    console.log('✅ mainColumns resultado:', result.length);
-    
-    // Debug específico para colunas customizadas
-    const customInMain = result.filter(c => c.id.startsWith('custom_') || c.id.startsWith('Custom_'));
-    console.log('🧮 Colunas customizadas em mainColumns:', customInMain.map(c => ({ id: c.id, label: c.label })));
-    
     return result;
 }, [effectiveColumns, detailColumns]);
-
-    // DEBUG TEMPORÁRIO - REMOVER DEPOIS
-React.useEffect(() => {
-  if (mainColumns.length > 0) {
-    console.log('🔍 === DEBUG COLUNAS ===');
-    console.log('📊 Total mainColumns:', mainColumns.length);
-    console.log('📋 mainColumns:', mainColumns.map(c => ({ 
-      id: c.id, 
-      label: c.label,
-      visible: columnVisibility[c.id] 
-    })));
-    console.log('👁️ columnVisibility completo:', columnVisibility);
-    console.log('📐 columnOrder:', columnOrder);
-    console.log('✅ visibleColumns resultantes:', visibleColumns.length);
-    console.log('🎛️ isManaged:', isManaged);
-    console.log('⏳ isLoadingPreferences:', isLoadingPreferences);
-    console.log('========================');
-  }
-}, [mainColumns, columnVisibility, columnOrder, isManaged, isLoadingPreferences]);
 
   const { uniqueVendores, uniqueEntregadores, uniqueLogisticas, uniqueCidades } = useMemo(() => {
     const vendores = new Set<string>();
@@ -492,27 +463,12 @@ React.useEffect(() => {
   );
 
 const renderCell = (row: any, columnId: string) => {
-    // PRIMEIRO: Tentar pegar o valor direto da row
     let value = row[columnId];
     
-    // SEGUNDO: Se não encontrou, tentar em customData
     if (value === null || value === undefined) {
         value = row.customData?.[columnId];
     }
     
-    // TERCEIRO: Debug para colunas customizadas
-    if (columnId.startsWith('custom_') || columnId.startsWith('Custom_')) {
-        console.log(`🧮 Renderizando coluna customizada "${columnId}":`, {
-            valorDireto: row[columnId],
-            valorCustomData: row.customData?.[columnId],
-            valorFinal: value,
-            temCustomData: !!row.customData,
-            chavesDaRow: Object.keys(row),
-            chavesCustomData: row.customData ? Object.keys(row.customData) : []
-        });
-    }
-    
-    // Campos especiais
     if (columnId === 'tipo_pagamento' || columnId === 'tipo_de_pagamento') {
         return showBlank(row.tipo_de_pagamento ?? row.tipo_pagamento);
     }
@@ -520,17 +476,14 @@ const renderCell = (row: any, columnId: string) => {
         return showBlank(row.parcela);
     }
 
-    // Se ainda não tem valor, retornar vazio
     if (value === null || value === undefined || (typeof value === "string" && value.trim() === "")) {
         return "";
     }
     
-    // Formatação de quantidade total
     if (columnId === 'quantidadeTotal' && typeof value === 'number') {
         return value.toString();
     }
 
-    // Função para converter para número
     const toNumber = (x: any) => {
         if (typeof x === "number") return x;
         if (typeof x === "string") {
@@ -541,7 +494,6 @@ const renderCell = (row: any, columnId: string) => {
         return null;
     };
 
-    // Formatação monetária para campos financeiros
     if (["final","custoFrete","imposto","embalagem","comissao","custoUnitario","valorUnitario","valorCredito","valorDescontos", "valor"]
         .includes(columnId) || (typeof value === 'number' && columnId.startsWith('custom_'))) {
         const n = toNumber(value);
@@ -550,13 +502,11 @@ const renderCell = (row: any, columnId: string) => {
         }
     }
 
-    // Formatação de data
     if (columnId === "data") {
         const d = value?.toDate ? value.toDate() : (typeof value === 'string' ? parseISO(value) : value);
         return d instanceof Date && !isNaN(d.getTime()) ? format(d, "dd/MM/yyyy", { locale: ptBR }) : "";
     }
 
-    // Para colunas customizadas numéricas, mostrar como número se não for monetário
     if ((columnId.startsWith('custom_') || columnId.startsWith('Custom_')) && typeof value === 'number') {
         return value.toLocaleString("pt-BR");
     }
