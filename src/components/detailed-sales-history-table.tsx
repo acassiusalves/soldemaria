@@ -548,11 +548,22 @@ const renderCell = (row: any, columnId: string) => {
     const columnMap = new Map(mainColumns.map(c => [c.id, c]));
     const order = columnOrder.length > 0 ? columnOrder : mainColumns.map(c => c.id);
     
-    return order
+    let result = order
         .map(id => columnMap.get(id))
         .filter(Boolean)
         .filter(c => isManaged ? columnVisibility[c!.id] : true) as ColumnDef[];
-  }, [mainColumns, columnVisibility, columnOrder, isManaged]);
+    
+    // FORÇAR quantidadeTotal se não estiver aparecendo
+    const hasQuantidadeTotal = result.some(c => c.id === 'quantidadeTotal');
+    const quantidadeTotalColumn = mainColumns.find(c => c.id === 'quantidadeTotal');
+    
+    if (!hasQuantidadeTotal && quantidadeTotalColumn) {
+        console.log('🚀 FORÇANDO quantidadeTotal a aparecer');
+        result.push(quantidadeTotalColumn);
+    }
+    
+    return result;
+}, [mainColumns, columnVisibility, columnOrder, isManaged]);
 
 
   const hasActiveAdvancedFilter = useMemo(() => {
@@ -590,6 +601,53 @@ const renderCell = (row: any, columnId: string) => {
         onOrderChange(mainColumns.map(c => c.id));
     }
   };
+
+  // DEBUG TEMPORÁRIO - REMOVER DEPOIS
+  React.useEffect(() => {
+    if (mainColumns.length > 0) {
+      console.log('🔍 === DEBUG COLUNAS ===');
+      console.log('📊 Total mainColumns:', mainColumns.length);
+      console.log('📋 mainColumns:', mainColumns.map(c => ({ 
+        id: c.id, 
+        label: c.label,
+        visible: columnVisibility[c.id] 
+      })));
+      console.log('👁️ columnVisibility completo:', columnVisibility);
+      console.log('📐 columnOrder:', columnOrder);
+      console.log('✅ visibleColumns resultantes:', visibleColumns.length);
+      console.log('🎛️ isManaged:', isManaged);
+      console.log('⏳ isLoadingPreferences:', isLoadingPreferences);
+      console.log('========================');
+    }
+  }, [mainColumns, columnVisibility, columnOrder, visibleColumns, isManaged]);
+  
+  React.useEffect(() => {
+    console.log('🔍 DEBUG QUANTIDADE TOTAL:');
+    
+    // Verificar se quantidadeTotal está em mainColumns
+    const quantidadeTotalInMain = mainColumns.find(c => c.id === 'quantidadeTotal');
+    console.log('📊 quantidadeTotal em mainColumns:', quantidadeTotalInMain);
+    
+    // Verificar visibilidade
+    console.log('👁️ Visibilidade de quantidadeTotal:', columnVisibility['quantidadeTotal']);
+    
+    // Verificar se está na ordem
+    console.log('📋 quantidadeTotal está em columnOrder:', columnOrder.includes('quantidadeTotal'));
+    console.log('📋 Posição na ordem:', columnOrder.indexOf('quantidadeTotal'));
+    
+    // Verificar se está em visibleColumns
+    const quantidadeTotalInVisible = visibleColumns.find(c => c.id === 'quantidadeTotal');
+    console.log('✅ quantidadeTotal em visibleColumns:', quantidadeTotalInVisible);
+    
+    // Verificar dados
+    if (data.length > 0) {
+      console.log('🧮 Valor quantidadeTotal no primeiro item:', data[0].quantidadeTotal);
+      console.log('🧮 Tipo do valor:', typeof data[0].quantidadeTotal);
+    }
+    
+    console.log('========================');
+  }, [mainColumns, columnVisibility, columnOrder, visibleColumns, data]);
+
 
   return (
     <>

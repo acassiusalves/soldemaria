@@ -489,7 +489,7 @@ export default function VendasPage() {
     setIsSavingPreferences(false);
   };
   
-const handleSaveCustomCalculation = async (calc: Omit<CustomCalculation, 'id'> & { id?: string }) => {
+  const handleSaveCustomCalculation = async (calc: Omit<CustomCalculation, 'id'> & { id?: string }) => {
     const safeFormula = (calc.formula || []).map((item: any) => {
         if (item?.type === 'number') {
             const n = typeof item.value === 'string'
@@ -748,9 +748,27 @@ React.useEffect(() => {
     
     const headers = Array.from(groups.values()).map(g => {
         const totalQuantity = (g.header.subRows || []).reduce((acc: number, item: any) => acc + (Number(item.quantidade) || 0), 0);
+        
+        // DEBUG: verificar se quantidadeTotal está sendo calculada
+        console.log('🧮 Calculando quantidadeTotal para código:', g.header.codigo);
+        console.log('📊 SubRows:', g.header.subRows?.length || 0);
+        console.log('🔢 Total calculado:', totalQuantity);
+        
         g.header.quantidadeTotal = totalQuantity;
+        
+        // Verificar se foi definida corretamente
+        console.log('✅ quantidadeTotal definida como:', g.header.quantidadeTotal);
+        
         return g.header;
     });
+
+    if (headers.length > 0) {
+      console.log('📊 Primeira row do resultado com quantidadeTotal:', {
+          codigo: headers[0]?.codigo,
+          quantidadeTotal: headers[0]?.quantidadeTotal,
+          temPropriedade: headers[0]?.hasOwnProperty('quantidadeTotal')
+      });
+    }
 
     return applyCustomCalculations(headers);
   }, [filteredData, applyCustomCalculations]);
