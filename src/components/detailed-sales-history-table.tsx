@@ -627,7 +627,7 @@ const renderCell = (row: any, columnId: string) => {
           <DragDropContext onDragEnd={handleDragEnd}>
             <Table>
               <TableHeader>
-                <StrictDroppable droppableId="table-header-droppable" direction="horizontal">
+                <Droppable droppableId="table-header-droppable" direction="horizontal" isCombineEnabled={false}>
                   {(provided) => (
                     <TableRow ref={provided.innerRef} {...provided.droppableProps}>
                       <TableHead className="w-[50px]"></TableHead>
@@ -659,7 +659,7 @@ const renderCell = (row: any, columnId: string) => {
                        {provided.placeholder}
                     </TableRow>
                   )}
-                </StrictDroppable>
+                </Droppable>
               </TableHeader>
               <TableBody>
                 {paginatedData.length > 0 ? (
@@ -770,3 +770,5 @@ const renderCell = (row: any, columnId: string) => {
     </>
   );
 }
+
+    
