@@ -406,7 +406,13 @@ export default function DetailedSalesHistoryTable({
   const columnVisibility = isManaged ? controlledVisibility : internalVisibility;
   const setColumnVisibility = isManaged ? onVisibilityChange! : setInternalVisibility;
   
-  const columnOrder = isManaged ? controlledOrder ?? [] : internalOrder;
+  const columnOrder = useMemo(() => {
+    if (isManaged && controlledOrder) {
+      return controlledOrder;
+    }
+    return internalOrder;
+  }, [isManaged, controlledOrder, internalOrder]);
+
   const setColumnOrder = isManaged ? onOrderChange! : setInternalOrder;
 
 
@@ -740,6 +746,7 @@ export default function DetailedSalesHistoryTable({
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-h3 font-headline">{tableTitle}</h2>
           <div className="flex items-center gap-2">
+            <div className="text-sm font-medium text-muted-foreground">{data.length} registros</div>
             <Input 
               placeholder="Filtrar por Código ou Cliente..."
               value={filter}
