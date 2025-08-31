@@ -271,6 +271,10 @@ const ChartLegendContent = React.forwardRef<
     ref
   ) => {
     const { config } = useChart()
+    const totalValue = React.useMemo(
+      () => payload?.reduce((acc, item) => acc + (item.payload?.value || 0), 0) || 0,
+      [payload]
+    );
 
     if (!payload?.length) {
       return null
@@ -288,6 +292,7 @@ const ChartLegendContent = React.forwardRef<
         {payload.map((item) => {
           const key = `${nameKey || item.dataKey || "value"}`
           const itemConfig = getPayloadConfigFromPayload(config, item, key)
+          const percentage = totalValue > 0 ? ((item.payload?.value || 0) / totalValue) * 100 : 0;
 
           return (
             <div
@@ -306,7 +311,10 @@ const ChartLegendContent = React.forwardRef<
                   }}
                 />
               )}
-              {itemConfig?.label}
+              <div className="flex gap-1">
+                <span className="font-medium">{itemConfig?.label}</span>
+                <span className="text-muted-foreground">({percentage.toFixed(0)}%)</span>
+              </div>
             </div>
           )
         })}
