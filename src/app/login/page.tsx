@@ -20,6 +20,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
 import Image from "next/image";
+import logo from "../../../public/sol-de-maria-logo.png";
 
 export default function LoginPage() {
   const [email, setEmail] = React.useState("");
@@ -87,7 +88,7 @@ export default function LoginPage() {
         <div className="mx-auto grid w-[350px] gap-6">
           <div className="grid gap-4 text-center">
              <Image 
-                src="/sol-de-maria-logo.png"
+                src={logo}
                 alt="Logo Sol de Maria"
                 width={120}
                 height={120}
