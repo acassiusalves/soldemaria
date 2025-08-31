@@ -64,6 +64,24 @@ const toDate = (value: unknown): Date | null => {
   return null;
 };
 
+// Helper para formatar a logística
+const getFormattedLogistica = (logistica: string | undefined): string => {
+  if (!logistica) {
+    return 'Não especificado';
+  }
+  const logisticaStr = String(logistica).trim();
+
+  if (logisticaStr === 'X_Loja' || logisticaStr === 'Loja') {
+    return 'Loja';
+  }
+  if (logisticaStr.includes('/') || logisticaStr.includes('-')) {
+    return 'Delivery';
+  }
+  // Para outros casos como "Correios" ou qualquer outro valor, mantém o original.
+  return logisticaStr;
+};
+
+
 export default function DashboardPage() {
   const [salesData, setSalesData] = React.useState<VendaDetalhada[]>([]);
   const [date, setDate] = React.useState<DateRange | undefined>({
@@ -132,8 +150,8 @@ export default function DashboardPage() {
   const salesByLogistics = React.useMemo(() => {
     const logisticsMap: Record<string, number> = {};
     filteredSales.forEach(sale => {
-        const logistic = sale.logistica || 'Não especificado';
-        logisticsMap[logistic] = (logisticsMap[logistic] || 0) + (sale.final || 0);
+        const formattedLogistic = getFormattedLogistica(sale.logistica);
+        logisticsMap[formattedLogistic] = (logisticsMap[formattedLogistic] || 0) + (sale.final || 0);
     });
     return Object.entries(logisticsMap).map(([name, value]) => ({ name, value }));
   }, [filteredSales]);
