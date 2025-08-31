@@ -84,3 +84,23 @@
     font-feature-settings: "rlig" 1, "calt" 1;
   }
 }
+
+/* Melhorias para drag and drop */
+.dnd-context {
+  position: relative;
+}
+
+.dnd-item {
+  touch-action: none;
+  user-select: none;
+}
+
+.dnd-item:active {
+  cursor: grabbing !important;
+}
+
+.dnd-item.dragging {
+  z-index: 1000;
+  transform: rotate(2deg);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+}

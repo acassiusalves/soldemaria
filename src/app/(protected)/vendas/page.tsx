@@ -42,7 +42,6 @@ import {
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { auth, db } from "@/lib/firebase";
-import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 
 
 import { cn, stripUndefinedDeep } from "@/lib/utils";
@@ -480,14 +479,22 @@ export default function VendasPage() {
   };
   
   const handleOrderChange = async (newOrder: string[]) => {
-    setColumnOrder(newOrder);
+    // Validar que todos os IDs da ordem existem nas colunas
+    const validIds = mergedColumns.map(c => c.id);
+    const validatedOrder = newOrder.filter(id => validIds.includes(id));
+    
+    // Adicionar colunas que não estão na ordem
+    const missingIds = validIds.filter(id => !validatedOrder.includes(id));
+    const finalOrder = [...validatedOrder, ...missingIds];
+    
+    setColumnOrder(finalOrder);
     setIsSavingPreferences(true);
     const user = auth.currentUser;
     if (user) {
-        await saveUserPreference(user.uid, 'vendas_columns_order', newOrder);
+        await saveUserPreference(user.uid, 'vendas_columns_order', finalOrder);
     }
     setIsSavingPreferences(false);
-  };
+};
   
   const handleSaveCustomCalculation = async (calc: Omit<CustomCalculation, 'id'> & { id?: string }) => {
     const safeFormula = (calc.formula || []).map((item: any) => {
@@ -748,27 +755,9 @@ React.useEffect(() => {
     
     const headers = Array.from(groups.values()).map(g => {
         const totalQuantity = (g.header.subRows || []).reduce((acc: number, item: any) => acc + (Number(item.quantidade) || 0), 0);
-        
-        // DEBUG: verificar se quantidadeTotal está sendo calculada
-        console.log('🧮 Calculando quantidadeTotal para código:', g.header.codigo);
-        console.log('📊 SubRows:', g.header.subRows?.length || 0);
-        console.log('🔢 Total calculado:', totalQuantity);
-        
         g.header.quantidadeTotal = totalQuantity;
-        
-        // Verificar se foi definida corretamente
-        console.log('✅ quantidadeTotal definida como:', g.header.quantidadeTotal);
-        
         return g.header;
     });
-
-    if (headers.length > 0) {
-      console.log('📊 Primeira row do resultado com quantidadeTotal:', {
-          codigo: headers[0]?.codigo,
-          quantidadeTotal: headers[0]?.quantidadeTotal,
-          temPropriedade: headers[0]?.hasOwnProperty('quantidadeTotal')
-      });
-    }
 
     return applyCustomCalculations(headers);
   }, [filteredData, applyCustomCalculations]);

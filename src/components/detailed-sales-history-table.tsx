@@ -36,7 +36,6 @@ import {
   DialogFooter,
   DialogClose,
 } from "@/components/ui/dialog";
-import { DragDropContext, Droppable, Draggable, DropResult } from 'react-beautiful-dnd';
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -47,6 +46,23 @@ import { cn, showBlank } from "@/lib/utils";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { Badge } from "./ui/badge";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+  useSortable,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 
 const ITEMS_PER_PAGE = 10;
@@ -188,6 +204,42 @@ const MultiSelectFilter = ({
     )
 };
 
+
+// Componente SortableItem
+const SortableItem = ({ id, label }: { id: string; label: string }) => {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={cn(
+        "flex items-center p-3 border rounded-md bg-background cursor-grab active:cursor-grabbing",
+        isDragging && "shadow-lg border-primary"
+      )}
+      {...attributes}
+      {...listeners}
+    >
+      <GripVertical className="mr-3 h-5 w-5 text-muted-foreground" />
+      <span className="flex-1 select-none">{label}</span>
+    </div>
+  );
+};
+
+// OrderManagerDialog atualizado
 const OrderManagerDialog = ({
     isOpen,
     onClose,
@@ -201,66 +253,105 @@ const OrderManagerDialog = ({
     order: string[];
     onOrderChange: (newOrder: string[]) => void;
 }) => {
+    const [localOrder, setLocalOrder] = useState<string[]>([]);
+    
+    // Inicializar ordem local quando dialog abre
+    useEffect(() => {
+        if (isOpen) {
+            const columnsMap = new Map(columns.map(c => [c.id, c]));
+            const currentOrder = order.length > 0 ? order : columns.map(c => c.id);
+            
+            // Filtrar apenas IDs válidos
+            const validOrder = currentOrder.filter(id => columnsMap.has(id));
+            const missingColumns = columns
+                .filter(c => !validOrder.includes(c.id))
+                .map(c => c.id);
+            
+            setLocalOrder([...validOrder, ...missingColumns]);
+        }
+    }, [isOpen, columns, order]);
+
+    const sensors = useSensors(
+        useSensor(PointerSensor, {
+            activationConstraint: {
+                distance: 8,
+            },
+        }),
+        useSensor(KeyboardSensor, {
+            coordinateGetter: sortableKeyboardCoordinates,
+        })
+    );
+
     const orderedColumns = useMemo(() => {
         const columnsMap = new Map(columns.map(c => [c.id, c]));
-        const currentOrder = order.length > 0 ? order : columns.map(c => c.id);
-        
-        const ordered = currentOrder.map(id => columnsMap.get(id)).filter(Boolean) as ColumnDef[];
-        const unordered = columns.filter(c => !currentOrder.includes(c.id));
-        
-        return [...ordered, ...unordered];
-    }, [columns, order]);
+        return localOrder
+            .map(id => columnsMap.get(id))
+            .filter(Boolean) as ColumnDef[];
+    }, [columns, localOrder]);
     
-    const handleDragEnd = (result: DropResult) => {
-        if (!result.destination) return;
-        const items = Array.from(orderedColumns);
-        const [reorderedItem] = items.splice(result.source.index, 1);
-        items.splice(result.destination.index, 0, reorderedItem);
-        onOrderChange(items.map(item => item.id));
+    const handleDragEnd = (event: DragEndEvent) => {
+        const { active, over } = event;
+        
+        if (over && active.id !== over.id) {
+            setLocalOrder(items => {
+                const oldIndex = items.indexOf(active.id as string);
+                const newIndex = items.indexOf(over.id as string);
+                return arrayMove(items, oldIndex, newIndex);
+            });
+        }
+    };
+    
+    const handleSave = () => {
+        onOrderChange(localOrder);
+        onClose();
     };
 
     return (
         <Dialog open={isOpen} onOpenChange={onClose}>
-            <DialogContent>
+            <DialogContent className="max-w-md">
                 <DialogHeader>
                     <DialogTitle>Organizar Colunas</DialogTitle>
                     <DialogDescription>
-                        Arraste e solte as colunas para definir a ordem de exibição na tabela.
+                        Arraste as colunas para reorganizar a ordem de exibição.
                     </DialogDescription>
                 </DialogHeader>
-                <DragDropContext onDragEnd={handleDragEnd}>
-                    <Droppable droppableId="columns">
-                        {(provided) => (
-                            <div {...provided.droppableProps} ref={provided.innerRef} className="space-y-2 max-h-[60vh] overflow-y-auto">
-                                {orderedColumns.map((col, index) => (
-                                    <Draggable key={col.id} draggableId={col.id} index={index}>
-                                        {(provided) => (
-                                            <div
-                                                ref={provided.innerRef}
-                                                {...provided.draggableProps}
-                                                {...provided.dragHandleProps}
-                                                className="flex items-center p-2 border rounded-md bg-muted/50"
-                                            >
-                                                <GripVertical className="mr-2 h-5 w-5 text-muted-foreground" />
-                                                {col.label}
-                                            </div>
-                                        )}
-                                    </Draggable>
+                
+                <ScrollArea className="max-h-[60vh] pr-4">
+                    <DndContext
+                        sensors={sensors}
+                        collisionDetection={closestCenter}
+                        onDragEnd={handleDragEnd}
+                    >
+                        <SortableContext
+                            items={localOrder}
+                            strategy={verticalListSortingStrategy}
+                        >
+                            <div className="space-y-2">
+                                {orderedColumns.map(col => (
+                                    <SortableItem
+                                        key={col.id}
+                                        id={col.id}
+                                        label={col.label}
+                                    />
                                 ))}
-                                {provided.placeholder}
                             </div>
-                        )}
-                    </Droppable>
-                </DragDropContext>
-                <DialogFooter>
-                    <DialogClose asChild>
-                        <Button>Concluído</Button>
-                    </DialogClose>
+                        </SortableContext>
+                    </DndContext>
+                </ScrollArea>
+                
+                <DialogFooter className="gap-2">
+                    <Button variant="outline" onClick={onClose}>
+                        Cancelar
+                    </Button>
+                    <Button onClick={handleSave}>
+                        Salvar Ordem
+                    </Button>
                 </DialogFooter>
             </DialogContent>
         </Dialog>
     );
 };
+
 
 export default function DetailedSalesHistoryTable({ 
     data, 
@@ -289,6 +380,11 @@ export default function DetailedSalesHistoryTable({
   const [internalVisibility, setInternalVisibility] = useState<ColumnVisibility>({});
   const [internalOrder, setInternalOrder] = useState<ColumnOrder>([]);
   const [isOrderManagerOpen, setIsOrderManagerOpen] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+      setIsMounted(true);
+  }, []);
 
   const initializedRef = useRef(false);
   
@@ -363,13 +459,22 @@ export default function DetailedSalesHistoryTable({
 
   useEffect(() => {
     if (!isManaged && mainColumns.length > 0 && !initializedRef.current) {
-      const defaultVisibility = mainColumns.reduce((acc, col) => {
-        acc[col.id] = true;
-        return acc;
-      }, {} as ColumnVisibility);
-      setInternalVisibility(defaultVisibility);
-      setInternalOrder(mainColumns.map(c => c.id));
-      initializedRef.current = true;
+        // Garantir que quantidadeTotal está incluída
+        const allColumnIds = mainColumns.map(c => c.id);
+        if (!allColumnIds.includes('quantidadeTotal')) {
+            // Adicionar quantidadeTotal se não estiver presente
+            const quantColumn = { id: 'quantidadeTotal', label: 'Qtd. Total', isSortable: true };
+            allColumnIds.push('quantidadeTotal');
+        }
+        
+        const defaultVisibility = allColumnIds.reduce((acc, id) => {
+            acc[id] = true;
+            return acc;
+        }, {} as ColumnVisibility);
+        
+        setInternalVisibility(defaultVisibility);
+        setInternalOrder(allColumnIds);
+        initializedRef.current = true;
     }
   }, [isManaged, mainColumns]);
 
@@ -821,7 +926,7 @@ export default function DetailedSalesHistoryTable({
         </div>
       </CardContent>
     </Card>
-    {isManaged && (
+    {isMounted && isManaged && (
         <OrderManagerDialog
             isOpen={isOrderManagerOpen}
             onClose={() => setIsOrderManagerOpen(false)}
