@@ -11,6 +11,18 @@ export type Venda = {
 // Dados de exemplo do painel foram limpos para um novo começo.
 export const salesData: Venda[] = [];
 
+export type Parcela = {
+    numero: number;
+    taxa: number;
+};
+
+export type Operadora = {
+  id: string;
+  nome: string;
+  taxaDebito: number;
+  taxasCredito: Parcela[];
+};
+
 export type VendaDetalhada = {
   id: string;
   data: any; // Allow different date types during upload

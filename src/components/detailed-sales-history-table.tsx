@@ -5,7 +5,7 @@ import React, { useState, useMemo, useEffect, useRef } from "react";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { ArrowUpDown, Columns, ChevronRight, X, Eye, EyeOff, Save, Loader2, Settings2, GripVertical, Calculator, Search } from "lucide-react";
-import { VendaDetalhada, CustomCalculation } from "@/lib/data";
+import { VendaDetalhada, CustomCalculation, Operadora } from "@/lib/data";
 import {
   Table,
   TableBody,
@@ -142,6 +142,7 @@ interface DetailedSalesHistoryTableProps {
     isLoadingPreferences?: boolean;
     isSavingPreferences?: boolean;
     customCalculations?: CustomCalculation[];
+    taxasOperadoras?: Operadora[];
 }
 
 const MultiSelectFilter = ({
@@ -378,6 +379,7 @@ export default function DetailedSalesHistoryTable({
     isLoadingPreferences = false,
     isSavingPreferences = false,
     customCalculations = [],
+    taxasOperadoras = [],
 }: DetailedSalesHistoryTableProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const [sortKey, setSortKey] = useState<SortKey>("data");
@@ -483,6 +485,7 @@ export default function DetailedSalesHistoryTable({
     { id: "parcela", label: "Parcela", isSortable: false },
     { id: "valor", label: "Valor", isSortable: false },
     { id: "instituicao_financeira", label: "Instituição Financeira", isSortable: false },
+    { id: "taxaCalculada", label: "Taxa (R$)", isSortable: false },
   ], []);
 
   const mainColumns = useMemo(() => {
@@ -676,7 +679,7 @@ export default function DetailedSalesHistoryTable({
       return null;
     };
 
-    if(typeof value === 'number' && ['final', 'custoUnitario', 'valorUnitario', 'valorCredito', 'valorDescontos', 'valor'].includes(columnId)) {
+    if(typeof value === 'number' && ['final', 'custoUnitario', 'valorUnitario', 'valorCredito', 'valorDescontos', 'valor', 'taxaCalculada'].includes(columnId)) {
       return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
     }
 
@@ -690,6 +693,31 @@ export default function DetailedSalesHistoryTable({
     
     return showBlank(value);
   }
+
+  const calculatedCosts = (costs: any[]) => {
+    return costs.map(cost => {
+      const valor = Number(cost.valor) || 0;
+      const modo = (cost.modo_de_pagamento || '').toLowerCase();
+      const tipo = (cost.tipo_pagamento || '').toLowerCase();
+      const instituicao = (cost.instituicao_financeira || '').toLowerCase();
+      const parcela = Number(cost.parcela) || 1;
+
+      let taxaPercentual = 0;
+      const operadora = taxasOperadoras.find(op => op.nome.toLowerCase() === instituicao);
+
+      if (operadora) {
+        if (modo.includes('cartão') && tipo.includes('débito')) {
+          taxaPercentual = operadora.taxaDebito || 0;
+        } else if (modo.includes('cartão') && tipo.includes('crédito')) {
+          const taxaCredito = operadora.taxasCredito.find(t => t.numero === parcela);
+          taxaPercentual = taxaCredito?.taxa || 0;
+        }
+      }
+
+      const taxaCalculada = valor * (taxaPercentual / 100);
+      return { ...cost, taxaCalculada };
+    });
+  };
 
   const visibleColumns = useMemo(() => {
     const columnMap = new Map(mainColumns.map(c => [c.id, c]));
@@ -925,7 +953,7 @@ export default function DetailedSalesHistoryTable({
                                                </TableRow>
                                              </TableHeader>
                                              <TableBody>
-                                                {row.costs.map((cost: any, index: number) => (
+                                                {calculatedCosts(row.costs).map((cost: any, index: number) => (
                                                   <TableRow key={`${cost.id}-${index}`}>
                                                       {paymentDetailColumns.map(col => <TableCell key={col.id}>{renderDetailCell(cost, col.id)}</TableCell>)}
                                                   </TableRow>

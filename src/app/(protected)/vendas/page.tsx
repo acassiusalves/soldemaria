@@ -83,7 +83,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import DetailedSalesHistoryTable, { ColumnDef } from "@/components/detailed-sales-history-table";
-import type { VendaDetalhada, CustomCalculation, FormulaItem } from "@/lib/data";
+import type { VendaDetalhada, CustomCalculation, FormulaItem, Operadora } from "@/lib/data";
 import { SupportDataDialog } from "@/components/support-data-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Progress } from "@/components/ui/progress";
@@ -398,6 +398,7 @@ export default function VendasPage() {
   const [stagedFileNames, setStagedFileNames] = React.useState<string[]>([]);
   const [columns, setColumns] = React.useState<ColumnDef[]>([]);
   const [uploadedFileNames, setUploadedFileNames] = React.useState<string[]>([]);
+  const [taxasOperadoras, setTaxasOperadoras] = React.useState<Operadora[]>([]);
   const { toast } = useToast();
 
   const [date, setDate] = React.useState<DateRange | undefined>(undefined);
@@ -446,9 +447,15 @@ export default function VendasPage() {
       }
     });
 
+    const taxasUnsub = onSnapshot(collection(db, "taxas"), (snapshot) => {
+      const data = snapshot.docs.map(d => ({ ...d.data(), id: d.id })) as Operadora[];
+      setTaxasOperadoras(data);
+    });
+
     return () => { 
         unsubs.forEach(unsub => unsub());
         metaUnsub(); 
+        taxasUnsub();
     };
   }, []);
 
@@ -1215,6 +1222,7 @@ React.useEffect(() => {
                 const user = auth.currentUser;
                 if (user) saveUserPreference(user.uid, key, value);
             }}
+            taxasOperadoras={taxasOperadoras}
         />
       </main>
     </div>
