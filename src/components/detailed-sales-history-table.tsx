@@ -4,7 +4,7 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { ArrowUpDown, Columns, ChevronRight, X, Eye, EyeOff, Save, Loader2, Settings2, GripVertical, Calculator, Search } from "lucide-react";
+import { ArrowUpDown, Columns, ChevronRight, X, Eye, EyeOff, Save, Loader2, Settings2, GripVertical, Calculator, Search, Info } from "lucide-react";
 import { VendaDetalhada, CustomCalculation, Operadora } from "@/lib/data";
 import {
   Table,
@@ -62,6 +62,7 @@ import { cn, showBlank } from "@/lib/utils";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { Badge } from "./ui/badge";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
 
 
 const ITEMS_PER_PAGE = 10;
@@ -109,7 +110,6 @@ const columnLabels: Record<string, string> = {
 };
 
 const getLabel = (key: string, customCalculations: CustomCalculation[] = []) => {
-    // Primeiro, verificar se é uma coluna customizada
     if (key.startsWith('custom_')) {
         const calc = customCalculations.find(c => c.id === key);
         if (calc?.name) {
@@ -117,7 +117,6 @@ const getLabel = (key: string, customCalculations: CustomCalculation[] = []) => 
         }
     }
     
-    // Depois verificar o mapeamento de labels padrão
     return columnLabels[key] || key;
 };
 
@@ -218,7 +217,6 @@ const MultiSelectFilter = ({
 };
 
 
-// Componente SortableItem
 const SortableItem = ({ id, label }: { id: string; label: string }) => {
   const {
     attributes,
@@ -252,7 +250,6 @@ const SortableItem = ({ id, label }: { id: string; label: string }) => {
   );
 };
 
-// OrderManagerDialog atualizado
 const OrderManagerDialog = ({
     isOpen,
     onClose,
@@ -268,13 +265,11 @@ const OrderManagerDialog = ({
 }) => {
     const [localOrder, setLocalOrder] = useState<string[]>([]);
     
-    // Inicializar ordem local quando dialog abre
     useEffect(() => {
         if (isOpen) {
             const columnsMap = new Map(columns.map(c => [c.id, c]));
             const currentOrder = order.length > 0 ? order : columns.map(c => c.id);
             
-            // Filtrar apenas IDs válidos
             const validOrder = currentOrder.filter(id => columnsMap.has(id));
             const missingColumns = columns
                 .filter(c => !validOrder.includes(c.id))
@@ -428,17 +423,15 @@ export default function DetailedSalesHistoryTable({
 
     const map = new Map<string, ColumnDef>();
     
-    // Adicionar colunas base
     base.forEach(c => map.set(c.id, c));
     
-    // Processar dados para descobrir colunas dinâmicas
     if (data.length > 0) {
         data.forEach(row => {
             Object.keys(row).forEach(k => {
                 if (!map.has(k) && !systemColumnsToHide.includes(k)) {
                     map.set(k, { 
                         id: k, 
-                        label: getLabel(k, customCalculations), // ← USAR customCalculations AQUI
+                        label: getLabel(k, customCalculations),
                         isSortable: true 
                     });
                 }
@@ -448,7 +441,7 @@ export default function DetailedSalesHistoryTable({
                     if(!map.has(k)) {
                         map.set(k, { 
                             id: k, 
-                            label: getLabel(k, customCalculations), // ← E AQUI TAMBÉM
+                            label: getLabel(k, customCalculations),
                             isSortable: true 
                         });
                     }
@@ -457,7 +450,6 @@ export default function DetailedSalesHistoryTable({
         });
     }
     
-    // Atualizar labels de todas as colunas (importante!)
     map.forEach((col, key) => {
         col.label = getLabel(key, customCalculations);
     });
@@ -468,13 +460,10 @@ export default function DetailedSalesHistoryTable({
   const detailColumns = useMemo(() => {
     const detailKeys = ['item', 'descricao', 'quantidade', 'valorCredito', 'valorDescontos'];
     
-    // IMPORTANTE: Nunca filtrar colunas customizadas como detailColumns
     return effectiveColumns.filter(c => {
-        // Se for coluna customizada, não é detail
         if (c.id.startsWith('custom_') || c.id.startsWith('Custom_')) {
             return false;
         }
-        // Caso contrário, usar a lógica normal
         return detailKeys.includes(c.id);
     });
   }, [effectiveColumns]);
@@ -495,10 +484,8 @@ export default function DetailedSalesHistoryTable({
 
   useEffect(() => {
     if (!isManaged && mainColumns.length > 0 && !initializedRef.current) {
-        // Garantir que quantidadeTotal está incluída
         const allColumnIds = mainColumns.map(c => c.id);
         if (!allColumnIds.includes('quantidadeTotal')) {
-            // Adicionar quantidadeTotal se não estiver presente
             const quantColumn = { id: 'quantidadeTotal', label: 'Qtd. Total', isSortable: true };
             allColumnIds.push('quantidadeTotal');
         }
@@ -949,7 +936,25 @@ export default function DetailedSalesHistoryTable({
                                            <Table>
                                              <TableHeader>
                                                <TableRow>
-                                                  {paymentDetailColumns.map(col => <TableHead key={col.id}>{col.label}</TableHead>)}
+                                                  {paymentDetailColumns.map(col => (
+                                                     <TableHead key={col.id}>
+                                                        <div className="flex items-center gap-1">
+                                                          {col.label}
+                                                          {col.id === 'taxaCalculada' && (
+                                                            <TooltipProvider>
+                                                              <Tooltip>
+                                                                <TooltipTrigger asChild>
+                                                                  <Info className="h-3 w-3 text-muted-foreground cursor-help" />
+                                                                </TooltipTrigger>
+                                                                <TooltipContent>
+                                                                  <p>Cálculo baseado nas taxas por operadora e<br/>parcela definidas na tela de Taxas.</p>
+                                                                </TooltipContent>
+                                                              </Tooltip>
+                                                            </TooltipProvider>
+                                                          )}
+                                                        </div>
+                                                     </TableHead>
+                                                  ))}
                                                </TableRow>
                                              </TableHeader>
                                              <TableBody>
