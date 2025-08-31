@@ -66,7 +66,7 @@ export default function OriginChart({ data }: OriginChartProps) {
   })
 
   return (
-    <ChartContainer config={chartConfig} className="min-h-[200px] w-full h-[350px]">
+    <ChartContainer config={chartConfig} className="min-h-[200px] w-full h-[300px]">
       <ResponsiveContainer width="100%" height="100%">
         <PieChart>
           <Tooltip
@@ -83,7 +83,7 @@ export default function OriginChart({ data }: OriginChartProps) {
             nameKey="name"
             cx="50%"
             cy="50%"
-            outerRadius={120}
+            outerRadius={100}
             strokeWidth={2}
             labelLine={false}
             label={renderCustomizedLabel}
@@ -92,12 +92,14 @@ export default function OriginChart({ data }: OriginChartProps) {
               <Cell key={`cell-${index}`} fill={entry.fill} />
             ))}
           </Pie>
-           <Legend
-            content={<ChartLegendContent nameKey="name" />}
-            verticalAlign="bottom"
-            align="center"
-            wrapperStyle={{paddingTop: 20}}
-          />
+          {chartData.length > 1 && (
+            <Legend
+              content={<ChartLegendContent nameKey="name" />}
+              verticalAlign="bottom"
+              align="center"
+              wrapperStyle={{paddingTop: 20}}
+            />
+          )}
         </PieChart>
       </ResponsiveContainer>
     </ChartContainer>

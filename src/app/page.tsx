@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import * as React from "react";
@@ -128,6 +127,15 @@ export default function DashboardPage() {
         originMap[origin] = (originMap[origin] || 0) + (sale.final || 0);
     });
     return Object.entries(originMap).map(([name, value]) => ({ name, value }));
+  }, [filteredSales]);
+  
+  const salesByLogistics = React.useMemo(() => {
+    const logisticsMap: Record<string, number> = {};
+    filteredSales.forEach(sale => {
+        const logistic = sale.logistica || 'Não especificado';
+        logisticsMap[logistic] = (logisticsMap[logistic] || 0) + (sale.final || 0);
+    });
+    return Object.entries(logisticsMap).map(([name, value]) => ({ name, value }));
   }, [filteredSales]);
 
 
@@ -287,7 +295,7 @@ export default function DashboardPage() {
         </div>
       </header>
       <main className="flex flex-1 flex-col gap-4 p-4 md:gap-8 md:p-8">
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           <KpiCard
             title="Receita Total"
             value={totalRevenue.toLocaleString("pt-BR", { style: "currency", currency: "BRL"})}
@@ -307,12 +315,6 @@ export default function DashboardPage() {
             changeType="negative"
             icon={<DollarSign className="text-primary" />}
           />
-          <KpiCard
-            title="Categoria Destaque"
-            value={topCategory[0]}
-            change={`${(topCategory[1] / totalRevenue * 100 || 0).toFixed(1)}% do total`}
-            icon={<Trophy className="text-primary" />}
-          />
         </div>
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
@@ -327,20 +329,36 @@ export default function DashboardPage() {
               <TopProductsChart data={topProducts} />
             </CardContent>
           </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle className="font-headline text-h3 flex items-center gap-2">
-                <PieChart className="size-6 text-primary" />
-                Comparativo por Origem
-              </CardTitle>
-              <CardDescription>
-                Distribuição da receita por canal de venda no período.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <OriginChart data={salesByOrigin} />
-            </CardContent>
-          </Card>
+          <div className="flex flex-col gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="font-headline text-h3 flex items-center gap-2">
+                  <PieChart className="size-6 text-primary" />
+                  Comparativo por Origem
+                </CardTitle>
+                <CardDescription>
+                  Distribuição da receita por canal de venda no período.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <OriginChart data={salesByOrigin} />
+              </CardContent>
+            </Card>
+             <Card>
+              <CardHeader>
+                <CardTitle className="font-headline text-h3 flex items-center gap-2">
+                  <PieChart className="size-6 text-primary" />
+                  Comparativo por Logística
+                </CardTitle>
+                <CardDescription>
+                  Distribuição da receita por tipo de logística.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <OriginChart data={salesByLogistics} />
+              </CardContent>
+            </Card>
+          </div>
         </div>
 
       </main>
