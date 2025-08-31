@@ -25,6 +25,9 @@ import {
   EyeOff,
   Settings2,
   GripVertical,
+  DollarSign,
+  Truck,
+  Archive,
 } from "lucide-react";
 import {
   collection,
@@ -86,6 +89,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Progress } from "@/components/ui/progress";
 import { Logo } from "@/components/icons";
 import { CalculationDialog } from "@/components/calculation-dialog";
+import SummaryCard from "@/components/summary-card";
 
 
 /* ========== helpers de datas e normalização ========== */
@@ -769,6 +773,27 @@ React.useEffect(() => {
     return applyCustomCalculations(headers);
   }, [filteredData, applyCustomCalculations]);
 
+  const summaryData = React.useMemo(() => {
+    return groupedForView.reduce(
+        (acc, row) => {
+            acc.faturamento += Number(row.final) || 0;
+            acc.frete += Number(row.custoFrete) || 0;
+            
+            const custoTotalPedido = (row.subRows || []).reduce((subAcc: number, item: any) => {
+                const custo = Number(item.custoUnitario) || 0;
+                const qtd = Number(item.quantidade) || 0;
+                return subAcc + (custo * qtd);
+            }, 0);
+            
+            acc.custoTotal += custoTotalPedido;
+            
+            return acc;
+        },
+        { faturamento: 0, frete: 0, custoTotal: 0 }
+    );
+  }, [groupedForView]);
+
+
   /* ======= UPLOAD / PROCESSAMENTO ======= */
   const handleDataUpload = async (datasets: IncomingDataset[]) => {
     if (!datasets || datasets.length === 0) return;
@@ -1155,6 +1180,25 @@ React.useEffect(() => {
             </div>
           )}
         </Card>
+        
+        <div className="grid gap-4 md:grid-cols-3">
+          <SummaryCard 
+            title="Faturamento" 
+            value={summaryData.faturamento} 
+            icon={<DollarSign className="text-primary" />}
+          />
+          <SummaryCard 
+            title="Custo Total" 
+            value={summaryData.custoTotal}
+            icon={<Archive className="text-primary" />}
+           />
+          <SummaryCard 
+            title="Frete" 
+            value={summaryData.frete}
+            icon={<Truck className="text-primary" />}
+          />
+        </div>
+
 
         <DetailedSalesHistoryTable 
             data={groupedForView} 
@@ -1186,4 +1230,3 @@ React.useEffect(() => {
     </>
   );
 }
-
