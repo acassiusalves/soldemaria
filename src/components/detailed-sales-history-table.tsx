@@ -249,7 +249,7 @@ export default function DetailedSalesHistoryTable({
     if (data.length > 0) {
       data.forEach(row => {
         Object.keys(row).forEach(k => {
-          if (!map.has(k)) {
+          if (!map.has(k) && !systemColumnsToHide.includes(k)) {
             map.set(k, { id: k, label: getLabel(k), isSortable: true });
           }
         });
@@ -272,12 +272,15 @@ export default function DetailedSalesHistoryTable({
 
 
 const detailColumns = useMemo(() => {
-    const detailKeys = ['item', 'descricao', 'quantidade', 'valorCredito', 'valorDescontos', 'custoUnitario', 'valorUnitario'];
+    const detailKeys = ['item', 'descricao', 'quantidade', 'valorCredito', 'valorDescontos'];
     
+    // IMPORTANTE: Nunca filtrar colunas customizadas como detailColumns
     return effectiveColumns.filter(c => {
+        // Se for coluna customizada, não é detail
         if (c.id.startsWith('custom_') || c.id.startsWith('Custom_')) {
             return false;
         }
+        // Caso contrário, usar a lógica normal
         return detailKeys.includes(c.id);
     });
 }, [effectiveColumns]);
@@ -393,15 +396,15 @@ const mainColumns = useMemo(() => {
   );
 
 const renderCell = (row: any, columnId: string) => {
+    // PRIMEIRO: Tentar pegar o valor direto da row
     let value = row[columnId];
     
+    // SEGUNDO: Se não encontrou, tentar em customData
     if (value === null || value === undefined) {
         value = row.customData?.[columnId];
     }
     
-    if (columnId.startsWith('custom_') || columnId.startsWith('Custom_')) {
-    }
-    
+    // Campos especiais
     if (columnId === 'tipo_pagamento' || columnId === 'tipo_de_pagamento') {
         return showBlank(row.tipo_de_pagamento ?? row.tipo_pagamento);
     }
@@ -409,14 +412,17 @@ const renderCell = (row: any, columnId: string) => {
         return showBlank(row.parcela);
     }
 
+    // Se ainda não tem valor, retornar vazio
     if (value === null || value === undefined || (typeof value === "string" && value.trim() === "")) {
         return "";
     }
     
+    // Formatação de quantidade total
     if (columnId === 'quantidadeTotal' && typeof value === 'number') {
         return value.toString();
     }
 
+    // Função para converter para número
     const toNumber = (x: any) => {
         if (typeof x === "number") return x;
         if (typeof x === "string") {
@@ -427,6 +433,7 @@ const renderCell = (row: any, columnId: string) => {
         return null;
     };
 
+    // Formatação monetária para campos financeiros
     if (["final","custoFrete","imposto","embalagem","comissao","custoUnitario","valorUnitario","valorCredito","valorDescontos", "valor"]
         .includes(columnId) || (typeof value === 'number' && columnId.startsWith('custom_'))) {
         const n = toNumber(value);
@@ -435,11 +442,13 @@ const renderCell = (row: any, columnId: string) => {
         }
     }
 
+    // Formatação de data
     if (columnId === "data") {
         const d = value?.toDate ? value.toDate() : (typeof value === 'string' ? parseISO(value) : value);
         return d instanceof Date && !isNaN(d.getTime()) ? format(d, "dd/MM/yyyy", { locale: ptBR }) : "";
     }
 
+    // Para colunas customizadas numéricas, mostrar como número se não for monetário
     if ((columnId.startsWith('custom_') || columnId.startsWith('Custom_')) && typeof value === 'number') {
         return value.toLocaleString("pt-BR");
     }
@@ -627,7 +636,7 @@ const renderCell = (row: any, columnId: string) => {
           <DragDropContext onDragEnd={handleDragEnd}>
             <Table>
               <TableHeader>
-                <Droppable droppableId="table-header-droppable" direction="horizontal" isCombineEnabled={false}>
+                <StrictDroppable droppableId="table-header-droppable" direction="horizontal">
                   {(provided) => (
                     <TableRow ref={provided.innerRef} {...provided.droppableProps}>
                       <TableHead className="w-[50px]"></TableHead>
@@ -659,7 +668,7 @@ const renderCell = (row: any, columnId: string) => {
                        {provided.placeholder}
                     </TableRow>
                   )}
-                </Droppable>
+                </StrictDroppable>
               </TableHeader>
               <TableBody>
                 {paginatedData.length > 0 ? (
@@ -770,5 +779,3 @@ const renderCell = (row: any, columnId: string) => {
     </>
   );
 }
-
-    
