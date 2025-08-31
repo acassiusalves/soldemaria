@@ -109,10 +109,15 @@ const columnLabels: Record<string, string> = {
 };
 
 const getLabel = (key: string, customCalculations: CustomCalculation[] = []) => {
+    // Primeiro, verificar se é uma coluna customizada
     if (key.startsWith('custom_')) {
         const calc = customCalculations.find(c => c.id === key);
-        return calc?.name || key;
+        if (calc?.name) {
+            return calc.name;
+        }
     }
+    
+    // Depois verificar o mapeamento de labels padrão
     return columnLabels[key] || key;
 };
 
@@ -135,6 +140,7 @@ interface DetailedSalesHistoryTableProps {
     onSavePreferences?: (key: "vendas_columns_visibility" | "vendas_columns_order", value: any) => void;
     isLoadingPreferences?: boolean;
     isSavingPreferences?: boolean;
+    customCalculations?: CustomCalculation[];
 }
 
 const MultiSelectFilter = ({
@@ -370,6 +376,7 @@ export default function DetailedSalesHistoryTable({
     onSavePreferences,
     isLoadingPreferences = false,
     isSavingPreferences = false,
+    customCalculations = [],
 }: DetailedSalesHistoryTableProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const [sortKey, setSortKey] = useState<SortKey>("data");
@@ -408,35 +415,45 @@ export default function DetailedSalesHistoryTable({
         "quantidade_movimentada", "costs", "customData"
     ];
     const base = (columns && columns.length > 0) ? columns : FIXED_COLUMNS;
-    const customCalculations = (columns as (ColumnDef | CustomCalculation)[]).filter(
-        c => 'formula' in c
-    ) as CustomCalculation[];
-
 
     const map = new Map<string, ColumnDef>();
+    
+    // Adicionar colunas base
     base.forEach(c => map.set(c.id, c));
+    
+    // Processar dados para descobrir colunas dinâmicas
     if (data.length > 0) {
-      data.forEach(row => {
-        Object.keys(row).forEach(k => {
-          if (!map.has(k) && !systemColumnsToHide.includes(k)) {
-            map.set(k, { id: k, label: getLabel(k, customCalculations), isSortable: true });
-          }
-        });
-        if (row.customData) {
-            Object.keys(row.customData).forEach(k => {
-                if(!map.has(k)) {
-                    map.set(k, { id: k, label: getLabel(k, customCalculations), isSortable: true });
+        data.forEach(row => {
+            Object.keys(row).forEach(k => {
+                if (!map.has(k) && !systemColumnsToHide.includes(k)) {
+                    map.set(k, { 
+                        id: k, 
+                        label: getLabel(k, customCalculations), // ← USAR customCalculations AQUI
+                        isSortable: true 
+                    });
                 }
-            })
-        }
-      });
+            });
+            if (row.customData) {
+                Object.keys(row.customData).forEach(k => {
+                    if(!map.has(k)) {
+                        map.set(k, { 
+                            id: k, 
+                            label: getLabel(k, customCalculations), // ← E AQUI TAMBÉM
+                            isSortable: true 
+                        });
+                    }
+                })
+            }
+        });
     }
+    
+    // Atualizar labels de todas as colunas (importante!)
     map.forEach((col, key) => {
         col.label = getLabel(key, customCalculations);
     });
 
     return Array.from(map.values()).filter(c => !systemColumnsToHide.includes(c.id));
-  }, [columns, data]);
+}, [columns, data, customCalculations]);
 
   const detailColumns = useMemo(() => {
     const detailKeys = ['item', 'descricao', 'quantidade', 'valorCredito', 'valorDescontos'];

@@ -372,9 +372,16 @@ async function persistCalcColumns(calcs: CustomCalculation[]) {
   const current = (snap.exists() ? snap.data() : {});
   const existing = Array.isArray(current.columns) ? current.columns : [];
   const map = new Map(existing.map((c: any) => [c.id, c]));
+  
+  // Atualizar/adicionar colunas de cálculos customizados
   calcs.forEach(c => {
-    if (!map.has(c.id)) map.set(c.id, { id: c.id, label: c.name, isSortable: true });
+      map.set(c.id, { 
+          id: c.id, 
+          label: c.name, // ← USAR c.name diretamente
+          isSortable: true 
+      });
   });
+  
   await setDoc(metaRef, { columns: Array.from(map.values()) }, { merge: true });
 }
 
@@ -934,9 +941,13 @@ React.useEffect(() => {
         map.set(c.id, c);
     });
     
-    // Adicionar colunas customizadas
+    // Adicionar colunas customizadas com nomes corretos
     customCalculations.forEach(c => {
-        const columnDef = { id: c.id, label: c.name, isSortable: true };
+        const columnDef = { 
+            id: c.id, 
+            label: c.name, // ← USAR c.name diretamente, não getLabel
+            isSortable: true 
+        };
         map.set(c.id, columnDef);
     });
     
@@ -1155,6 +1166,7 @@ React.useEffect(() => {
             onOrderChange={handleOrderChange}
             isLoadingPreferences={isLoadingPreferences}
             isSavingPreferences={isSavingPreferences}
+            customCalculations={customCalculations}
             onSavePreferences={(key, value) => {
                 const user = auth.currentUser;
                 if (user) saveUserPreference(user.uid, key, value);
