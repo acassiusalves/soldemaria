@@ -27,6 +27,16 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuPortal,
 } from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+  DialogClose,
+} from "@/components/ui/dialog";
+import { DragDropContext, Droppable, Draggable, DropResult } from 'react-beautiful-dnd';
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -37,7 +47,6 @@ import { cn, showBlank } from "@/lib/utils";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { Badge } from "./ui/badge";
-import { OrderManagerDialog } from "./order-manager-dialog";
 
 
 const ITEMS_PER_PAGE = 10;
@@ -47,7 +56,6 @@ type SortKey = keyof VendaDetalhada | string | null;
 type SortDirection = "asc" | "desc";
 type ColumnVisibility = Record<string, boolean>;
 type ColumnOrder = string[];
-
 
 export type ColumnDef = {
   id: string;
@@ -119,7 +127,6 @@ const MultiSelectFilter = ({
     selectedValues: Set<string>;
     onSelectionChange: (newSelection: Set<string>) => void;
 }) => {
-
     const handleToggle = (value: string) => {
         const newSet = new Set(selectedValues);
         if (newSet.has(value)) {
@@ -181,6 +188,80 @@ const MultiSelectFilter = ({
     )
 };
 
+const OrderManagerDialog = ({
+    isOpen,
+    onClose,
+    columns,
+    order,
+    onOrderChange,
+}: {
+    isOpen: boolean;
+    onClose: () => void;
+    columns: ColumnDef[];
+    order: string[];
+    onOrderChange: (newOrder: string[]) => void;
+}) => {
+    const orderedColumns = useMemo(() => {
+        const columnsMap = new Map(columns.map(c => [c.id, c]));
+        const currentOrder = order.length > 0 ? order : columns.map(c => c.id);
+        
+        const ordered = currentOrder.map(id => columnsMap.get(id)).filter(Boolean) as ColumnDef[];
+        const unordered = columns.filter(c => !currentOrder.includes(c.id));
+        
+        return [...ordered, ...unordered];
+    }, [columns, order]);
+    
+    const handleDragEnd = (result: DropResult) => {
+        if (!result.destination) return;
+        const items = Array.from(orderedColumns);
+        const [reorderedItem] = items.splice(result.source.index, 1);
+        items.splice(result.destination.index, 0, reorderedItem);
+        onOrderChange(items.map(item => item.id));
+    };
+
+    return (
+        <Dialog open={isOpen} onOpenChange={onClose}>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>Organizar Colunas</DialogTitle>
+                    <DialogDescription>
+                        Arraste e solte as colunas para definir a ordem de exibição na tabela.
+                    </DialogDescription>
+                </DialogHeader>
+                <DragDropContext onDragEnd={handleDragEnd}>
+                    <Droppable droppableId="columns">
+                        {(provided) => (
+                            <div {...provided.droppableProps} ref={provided.innerRef} className="space-y-2 max-h-[60vh] overflow-y-auto">
+                                {orderedColumns.map((col, index) => (
+                                    <Draggable key={col.id} draggableId={col.id} index={index}>
+                                        {(provided) => (
+                                            <div
+                                                ref={provided.innerRef}
+                                                {...provided.draggableProps}
+                                                {...provided.dragHandleProps}
+                                                className="flex items-center p-2 border rounded-md bg-muted/50"
+                                            >
+                                                <GripVertical className="mr-2 h-5 w-5 text-muted-foreground" />
+                                                {col.label}
+                                            </div>
+                                        )}
+                                    </Draggable>
+                                ))}
+                                {provided.placeholder}
+                            </div>
+                        )}
+                    </Droppable>
+                </DragDropContext>
+                <DialogFooter>
+                    <DialogClose asChild>
+                        <Button>Concluído</Button>
+                    </DialogClose>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+};
+
 export default function DetailedSalesHistoryTable({ 
     data, 
     columns, 
@@ -209,7 +290,6 @@ export default function DetailedSalesHistoryTable({
   const [internalOrder, setInternalOrder] = useState<ColumnOrder>([]);
   const [isOrderManagerOpen, setIsOrderManagerOpen] = useState(false);
 
-
   const initializedRef = useRef(false);
   
   const isManaged = !!controlledVisibility && !!onVisibilityChange && !!onSavePreferences && !!controlledOrder && !!onOrderChange;
@@ -219,7 +299,6 @@ export default function DetailedSalesHistoryTable({
   
   const columnOrder = isManaged ? controlledOrder : internalOrder;
   const setColumnOrder = isManaged ? onOrderChange! : setInternalOrder;
-
 
   const effectiveColumns = useMemo(() => {
     const systemColumnsToHide = [
@@ -255,11 +334,19 @@ export default function DetailedSalesHistoryTable({
     return Array.from(map.values()).filter(c => !systemColumnsToHide.includes(c.id));
   }, [columns, data]);
 
-
-const detailColumns = useMemo(() => {
-    const detailKeys = ['item', 'descricao', 'quantidade'];
-    return effectiveColumns.filter(c => detailKeys.includes(c.id));
-}, [effectiveColumns]);
+  const detailColumns = useMemo(() => {
+    const detailKeys = ['item', 'descricao', 'quantidade', 'valorCredito', 'valorDescontos', 'custoUnitario', 'valorUnitario'];
+    
+    // IMPORTANTE: Nunca filtrar colunas customizadas como detailColumns
+    return effectiveColumns.filter(c => {
+        // Se for coluna customizada, não é detail
+        if (c.id.startsWith('custom_') || c.id.startsWith('Custom_')) {
+            return false;
+        }
+        // Caso contrário, usar a lógica normal
+        return detailKeys.includes(c.id);
+    });
+  }, [effectiveColumns]);
   
   const paymentDetailColumns: ColumnDef[] = useMemo(() => [
     { id: "modo_de_pagamento", label: "Modo Pagamento", isSortable: false },
@@ -269,15 +356,22 @@ const detailColumns = useMemo(() => {
     { id: "instituicao_financeira", label: "Instituição Financeira", isSortable: false },
   ], []);
 
-
-const mainColumns = useMemo(() => {
+  const mainColumns = useMemo(() => {
     const detailKeys = detailColumns.map(c => c.id);
-    const result = effectiveColumns.filter(c => {
-        if (c.id.startsWith('custom_')) return true;
-        return !detailKeys.includes(c.id);
-    });
-    return result;
-}, [effectiveColumns, detailColumns]);
+    return effectiveColumns.filter(c => !detailKeys.includes(c.id));
+  }, [effectiveColumns, detailColumns]);
+
+  useEffect(() => {
+    if (!isManaged && mainColumns.length > 0 && !initializedRef.current) {
+      const defaultVisibility = mainColumns.reduce((acc, col) => {
+        acc[col.id] = true;
+        return acc;
+      }, {} as ColumnVisibility);
+      setInternalVisibility(defaultVisibility);
+      setInternalOrder(mainColumns.map(c => c.id));
+      initializedRef.current = true;
+    }
+  }, [isManaged, mainColumns]);
 
   const { uniqueVendores, uniqueEntregadores, uniqueLogisticas, uniqueCidades } = useMemo(() => {
     const vendores = new Set<string>();
@@ -300,7 +394,6 @@ const mainColumns = useMemo(() => {
     };
   }, [data]);
 
-
   const filteredData = useMemo(() => {
     return data.filter(group => {
       const textMatch = !filter ||
@@ -315,7 +408,6 @@ const mainColumns = useMemo(() => {
       return textMatch && vendorMatch && deliverymanMatch && logisticsMatch && cityMatch;
     });
   }, [data, filter, vendorFilter, deliverymanFilter, logisticsFilter, cityFilter]);
-
 
   const sortedData = useMemo(() => {
     if (!sortKey) return filteredData;
@@ -373,7 +465,7 @@ const mainColumns = useMemo(() => {
     </TableHead>
   );
 
-const renderCell = (row: any, columnId: string) => {
+  const renderCell = (row: any, columnId: string) => {
     let value = row[columnId];
     
     if (value === null || value === undefined) {
@@ -423,7 +515,7 @@ const renderCell = (row: any, columnId: string) => {
     }
 
     return String(value);
-};
+  };
   
   const renderDetailCell = (sale: VendaDetalhada, columnId: string) => {
     const value = (sale as any)[columnId];
@@ -457,21 +549,24 @@ const renderCell = (row: any, columnId: string) => {
     const columnMap = new Map(mainColumns.map(c => [c.id, c]));
     const order = columnOrder.length > 0 ? columnOrder : mainColumns.map(c => c.id);
     
-    let result = order
+    // INCLUIR quantidadeTotal explicitamente se não estiver na ordem
+    const ensureQuantidadeTotal = (orderList: string[]) => {
+      if (!orderList.includes('quantidadeTotal')) {
+        const quantidadeTotalExists = mainColumns.some(c => c.id === 'quantidadeTotal');
+        if (quantidadeTotalExists) {
+          return [...orderList, 'quantidadeTotal'];
+        }
+      }
+      return orderList;
+    };
+
+    const finalOrder = ensureQuantidadeTotal(order);
+    
+    return finalOrder
         .map(id => columnMap.get(id))
         .filter(Boolean)
-        .filter(c => isManaged ? columnVisibility[c!.id] : true) as ColumnDef[];
-    
-    const hasQuantidadeTotal = result.some(c => c.id === 'quantidadeTotal');
-    const quantidadeTotalColumn = mainColumns.find(c => c.id === 'quantidadeTotal');
-    
-    if (!hasQuantidadeTotal && quantidadeTotalColumn) {
-        result.push(quantidadeTotalColumn);
-    }
-    
-    return result;
-}, [mainColumns, columnVisibility, columnOrder, isManaged]);
-
+        .filter(c => isManaged ? (columnVisibility[c!.id] !== false) : true) as ColumnDef[];
+  }, [mainColumns, columnVisibility, columnOrder, isManaged]);
 
   const hasActiveAdvancedFilter = useMemo(() => {
     return vendorFilter.size > 0 || deliverymanFilter.size > 0 || logisticsFilter.size > 0 || cityFilter.size > 0;
@@ -508,7 +603,6 @@ const renderCell = (row: any, columnId: string) => {
         onOrderChange(mainColumns.map(c => c.id));
     }
   };
-
 
   return (
     <>
@@ -598,120 +692,111 @@ const renderCell = (row: any, columnId: string) => {
             </div>
         )}
         <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[50px]"></TableHead>
-                  {isLoadingPreferences ? (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                 <TableHead className="w-[50px]"></TableHead>
+                {isLoadingPreferences ? (
                     <TableHead colSpan={5} className="text-muted-foreground h-12">
-                      <div className="flex items-center gap-2">
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Carregando suas preferências...
-                      </div>
+                        <div className="flex items-center gap-2">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Carregando suas preferências...
+                        </div>
                     </TableHead>
-                  ) : visibleColumns.length === 0 && isManaged ? (
-                    <TableHead className="text-muted-foreground">
-                      Nenhuma coluna visível — abra "Exibir Colunas" ou clique em "Resetar preferências".
-                    </TableHead>
+                ) : visibleColumns.length === 0 && isManaged ? (
+                  <TableHead className="text-muted-foreground">
+                    Nenhuma coluna visível — abra "Exibir Colunas" ou clique em "Resetar preferências".
+                  </TableHead>
+                ) : visibleColumns.map(col => (
+                  col.isSortable ? (
+                    <SortableHeader key={col.id} tkey={col.id} label={col.label} className={col.className} />
                   ) : (
-                    visibleColumns.map((col) =>
-                      col.isSortable ? (
-                        <SortableHeader
-                          key={col.id}
-                          tkey={col.id}
-                          label={col.label}
-                          className={col.className}
-                        />
-                      ) : (
-                        <TableHead key={col.id} className={col.className}>
-                          {col.label}
-                        </TableHead>
-                      )
-                    )
-                  )}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {paginatedData.length > 0 ? (
-                  paginatedData.map((row) => (
-                    <React.Fragment key={row.id}>
-                      <TableRow>
-                        <TableCell>
-                            {(row.subRows?.length > 0 || row.parcelas?.length > 0 || row.costs?.length > 0) && (
-                              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => toggleRowExpansion(row.id)}>
-                                  <ChevronRight className={cn("h-4 w-4 transition-transform", expandedRows.has(row.id) && "rotate-90")} />
-                              </Button>
-                            )}
-                        </TableCell>
-                        {visibleColumns.map(col => (
-                          <TableCell key={col.id} className={cn(col.className, col.id === 'final' ? 'font-semibold' : '')}>
-                            {renderCell(row, col.id)}
-                          </TableCell>
-                        ))}
-                      </TableRow>
-                      {expandedRows.has(row.id) && (
-                          <TableRow>
-                              <TableCell colSpan={visibleColumns.length + 1} className="p-2 bg-muted/50">
-                                  <Tabs defaultValue="items" className="w-full">
-                                      <TabsList>
-                                          <TabsTrigger value="items" disabled={!row.subRows || row.subRows.length === 0}>Itens do Pedido</TabsTrigger>
-                                          <TabsTrigger value="payment" disabled={!row.costs || row.costs.length === 0}>Detalhes do Pagamento</TabsTrigger>
-                                      </TabsList>
-                                      <TabsContent value="items">
-                                        {row.subRows && row.subRows.length > 0 && (
-                                          <div className="p-2 rounded-md bg-background">
-                                            <Table>
-                                              <TableHeader>
-                                                <TableRow>
-                                                    {detailColumns.map(col => <TableHead key={col.id}>{col.label}</TableHead>)}
-                                                </TableRow>
-                                              </TableHeader>
-                                              <TableBody>
-                                                  {row.subRows.map((item: VendaDetalhada, index: number) => (
-                                                    <TableRow key={`${item.id}-${index}`}>
-                                                        {detailColumns.map(col => <TableCell key={col.id}>{renderDetailCell(item, col.id)}</TableCell>)}
-                                                    </TableRow>
-                                                  ))}
-                                              </TableBody>
-                                            </Table>
-                                          </div>
-                                        )}
-                                      </TabsContent>
-                                      <TabsContent value="payment">
-                                        {row.costs && row.costs.length > 0 && (
-                                            <div className="p-2 rounded-md bg-background">
-                                              <Table>
-                                                <TableHeader>
-                                                  <TableRow>
-                                                    {paymentDetailColumns.map(col => <TableHead key={col.id}>{col.label}</TableHead>)}
+                    <TableHead key={col.id} className={col.className}>{col.label}</TableHead>
+                  )
+                ))}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {paginatedData.length > 0 ? (
+                paginatedData.map((row) => (
+                  <React.Fragment key={row.id}>
+                    <TableRow>
+                       <TableCell>
+                          {(row.subRows?.length > 0 || row.parcelas?.length > 0 || row.costs?.length > 0) && (
+                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => toggleRowExpansion(row.id)}>
+                                <ChevronRight className={cn("h-4 w-4 transition-transform", expandedRows.has(row.id) && "rotate-90")} />
+                            </Button>
+                          )}
+                       </TableCell>
+                       {visibleColumns.map(col => (
+                         <TableCell key={col.id} className={cn(col.className, col.id === 'final' ? 'font-semibold' : '')}>
+                           {renderCell(row, col.id)}
+                         </TableCell>
+                       ))}
+                    </TableRow>
+                    {expandedRows.has(row.id) && (
+                        <TableRow>
+                            <TableCell colSpan={visibleColumns.length + 1} className="p-2 bg-muted/50">
+                                <Tabs defaultValue="items" className="w-full">
+                                    <TabsList>
+                                        <TabsTrigger value="items" disabled={!row.subRows || row.subRows.length === 0}>Itens do Pedido</TabsTrigger>
+                                        <TabsTrigger value="payment" disabled={!row.costs || row.costs.length === 0}>Detalhes do Pagamento</TabsTrigger>
+                                    </TabsList>
+                                    <TabsContent value="items">
+                                      {row.subRows && row.subRows.length > 0 && (
+                                        <div className="p-2 rounded-md bg-background">
+                                           <Table>
+                                             <TableHeader>
+                                               <TableRow>
+                                                  {detailColumns.map(col => <TableHead key={col.id}>{col.label}</TableHead>)}
+                                               </TableRow>
+                                             </TableHeader>
+                                             <TableBody>
+                                                {row.subRows.map((item: VendaDetalhada, index: number) => (
+                                                  <TableRow key={`${item.id}-${index}`}>
+                                                      {detailColumns.map(col => <TableCell key={col.id}>{renderDetailCell(item, col.id)}</TableCell>)}
                                                   </TableRow>
-                                                </TableHeader>
-                                                <TableBody>
-                                                  {row.costs.map((cost: any, index: number) => (
-                                                    <TableRow key={`${cost.id}-${index}`}>
-                                                        {paymentDetailColumns.map(col => <TableCell key={col.id}>{renderDetailCell(cost, col.id)}</TableCell>)}
-                                                    </TableRow>
-                                                  ))}
-                                                </TableBody>
-                                              </Table>
-                                            </div>
-                                        )}
-                                      </TabsContent>
-                                  </Tabs>
-                              </TableCell>
-                          </TableRow>
-                      )}
-                    </React.Fragment>
-                  ))
-                ) : (
-                  <TableRow>
-                    <TableCell colSpan={visibleColumns.length + 1} className="h-24 text-center">
-                      Nenhum resultado encontrado.
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
+                                                ))}
+                                             </TableBody>
+                                           </Table>
+                                        </div>
+                                      )}
+                                    </TabsContent>
+                                    <TabsContent value="payment">
+                                       {row.costs && row.costs.length > 0 && (
+                                          <div className="p-2 rounded-md bg-background">
+                                           <Table>
+                                             <TableHeader>
+                                               <TableRow>
+                                                  {paymentDetailColumns.map(col => <TableHead key={col.id}>{col.label}</TableHead>)}
+                                               </TableRow>
+                                             </TableHeader>
+                                             <TableBody>
+                                                {row.costs.map((cost: any, index: number) => (
+                                                  <TableRow key={`${cost.id}-${index}`}>
+                                                      {paymentDetailColumns.map(col => <TableCell key={col.id}>{renderDetailCell(cost, col.id)}</TableCell>)}
+                                                  </TableRow>
+                                                ))}
+                                             </TableBody>
+                                           </Table>
+                                          </div>
+                                       )}
+                                    </TabsContent>
+                                </Tabs>
+                            </TableCell>
+                        </TableRow>
+                    )}
+                  </React.Fragment>
+                ))
+              ) : (
+                <TableRow>
+                  <TableCell colSpan={visibleColumns.length + 1} className="h-24 text-center">
+                    Nenhum resultado encontrado.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
         </div>
         <div className="flex items-center justify-end space-x-2 py-4">
             <span className="text-sm text-muted-foreground">
@@ -736,7 +821,7 @@ const renderCell = (row: any, columnId: string) => {
         </div>
       </CardContent>
     </Card>
-     {isManaged && (
+    {isManaged && (
         <OrderManagerDialog
             isOpen={isOrderManagerOpen}
             onClose={() => setIsOrderManagerOpen(false)}
@@ -748,5 +833,3 @@ const renderCell = (row: any, columnId: string) => {
     </>
   );
 }
-
-    
