@@ -47,7 +47,7 @@ import {
 } from "@/components/ui/popover";
 import { Logo } from "@/components/icons";
 import KpiCard from "@/components/kpi-card";
-import SalesChart from "@/components/sales-chart";
+import TopProductsChart from "@/components/top-products-chart";
 import InsightsGenerator from "@/components/insights-generator";
 
 // Helper to reliably convert various date formats to a Date object
@@ -126,6 +126,27 @@ export default function DashboardPage() {
         data: toDate(s.data)?.toISOString() || new Date(0).toISOString(),
         receita: s.final || 0,
     }));
+  }, [filteredSales]);
+
+  const topProducts = React.useMemo(() => {
+    const productQuantities: Record<string, number> = {};
+    
+    filteredSales.forEach(sale => {
+      if (sale.subRows && sale.subRows.length > 0) {
+        sale.subRows.forEach(item => {
+          if (item.descricao && item.quantidade) {
+            productQuantities[item.descricao] = (productQuantities[item.descricao] || 0) + item.quantidade;
+          }
+        });
+      } else if(sale.descricao && sale.quantidade) {
+        productQuantities[sale.descricao] = (productQuantities[sale.descricao] || 0) + sale.quantidade;
+      }
+    });
+
+    return Object.entries(productQuantities)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([name, quantity]) => ({ name, quantity }));
   }, [filteredSales]);
 
 
@@ -294,13 +315,13 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           <Card className="lg:col-span-2">
             <CardHeader>
-              <CardTitle className="font-headline text-h3">Visão Geral das Vendas</CardTitle>
+              <CardTitle className="font-headline text-h3">Top 10 Produtos Mais Vendidos</CardTitle>
               <CardDescription>
-                Receita por mês no período selecionado.
+                Produtos com maior quantidade de vendas no período selecionado.
               </CardDescription>
             </CardHeader>
             <CardContent className="pl-2">
-              <SalesChart data={dataForCharts} />
+              <TopProductsChart data={topProducts} />
             </CardContent>
           </Card>
           <InsightsGenerator data={dataForCharts} />
@@ -310,6 +331,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-
-
-    
