@@ -1,4 +1,3 @@
-
 "use client";
 
 import * as React from "react";
@@ -20,12 +19,12 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
 import Image from "next/image";
 
-
 export default function LoginPage() {
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [isLoading, setIsLoading] = React.useState(true);
   const [isLoggingIn, setIsLoggingIn] = React.useState(false);
+  const [imageError, setImageError] = React.useState(false);
   const router = useRouter();
   const { toast } = useToast();
 
@@ -40,7 +39,6 @@ export default function LoginPage() {
 
     return () => unsubscribe();
   }, [router]);
-
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -69,15 +67,15 @@ export default function LoginPage() {
         variant: "destructive",
       });
     } finally {
-        setIsLoggingIn(false);
+      setIsLoggingIn(false);
     }
   };
 
   if (isLoading) {
     return (
-        <div className="flex min-h-screen w-full flex-col items-center justify-center">
-            <Loader2 className="h-10 w-10 animate-spin text-primary" />
-        </div>
+      <div className="flex min-h-screen w-full flex-col items-center justify-center">
+        <Loader2 className="h-10 w-10 animate-spin text-primary" />
+      </div>
     );
   }
 
@@ -86,16 +84,24 @@ export default function LoginPage() {
       <div className="flex items-center justify-center py-12">
         <div className="mx-auto grid w-[350px] gap-6">
           <div className="grid gap-4 text-center">
-             <div className="flex justify-center">
+            <div className="flex justify-center">
+              {!imageError ? (
                 <Image
-                    src="/sol-de-maria-logo.png"
-                    alt="Logo Sol de Maria"
-                    width={120}
-                    height={120}
-                    className="rounded-full mx-auto"
-                    priority
+                  src="/sol-de-maria-logo.png"
+                  alt="Logo Sol de Maria"
+                  width={120}
+                  height={120}
+                  className="rounded-full mx-auto"
+                  priority
+                  onError={() => setImageError(true)}
                 />
-             </div>
+              ) : (
+                // Fallback caso a imagem não carregue
+                <div className="w-[120px] h-[120px] bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full flex items-center justify-center mx-auto">
+                  <span className="text-white font-bold text-2xl">SM</span>
+                </div>
+              )}
+            </div>
             <h1 className="text-3xl font-bold font-headline">Visão de Vendas</h1>
             <p className="text-balance text-muted-foreground">
               Entre com suas credenciais para acessar o painel
