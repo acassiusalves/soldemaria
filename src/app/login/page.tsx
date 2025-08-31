@@ -85,12 +85,11 @@ export default function LoginPage() {
     <div className="flex min-h-screen w-full flex-col items-center justify-center bg-muted/40">
        <div className="mb-8 flex flex-col items-center gap-4 text-center">
             <Image 
-                src="https://picsum.photos/120/120"
-                alt="Logo da Empresa"
+                src="/sol-de-maria-logo.png"
+                alt="Logo Sol de Maria"
                 width={120}
                 height={120}
                 className="rounded-full"
-                data-ai-hint="logo"
             />
             <div>
                 <h1 className="text-3xl font-headline font-bold">Visão de Vendas</h1>
