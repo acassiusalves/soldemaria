@@ -15,6 +15,7 @@ import {
   ChevronDown,
   LogOut,
   Settings,
+  PieChart,
 } from "lucide-react";
 import { collection, onSnapshot, query, Timestamp } from "firebase/firestore";
 import { useRouter } from "next/navigation";
@@ -48,7 +49,7 @@ import {
 import { Logo } from "@/components/icons";
 import KpiCard from "@/components/kpi-card";
 import TopProductsChart from "@/components/top-products-chart";
-import InsightsGenerator from "@/components/insights-generator";
+import OriginChart from "@/components/origin-chart";
 
 // Helper to reliably convert various date formats to a Date object
 const toDate = (value: unknown): Date | null => {
@@ -120,13 +121,15 @@ export default function DashboardPage() {
 
   const displayDate = date;
 
-  const dataForCharts = React.useMemo(() => {
-    return filteredSales.map(s => ({
-        ...s,
-        data: toDate(s.data)?.toISOString() || new Date(0).toISOString(),
-        receita: s.final || 0,
-    }));
+  const salesByOrigin = React.useMemo(() => {
+    const originMap: Record<string, number> = {};
+    filteredSales.forEach(sale => {
+        const origin = sale.origem || 'Desconhecida';
+        originMap[origin] = (originMap[origin] || 0) + (sale.final || 0);
+    });
+    return Object.entries(originMap).map(([name, value]) => ({ name, value }));
   }, [filteredSales]);
+
 
   const topProducts = React.useMemo(() => {
     const productQuantities: Record<string, number> = {};
@@ -324,7 +327,20 @@ export default function DashboardPage() {
               <TopProductsChart data={topProducts} />
             </CardContent>
           </Card>
-          <InsightsGenerator data={dataForCharts} />
+          <Card>
+            <CardHeader>
+              <CardTitle className="font-headline text-h3 flex items-center gap-2">
+                <PieChart className="size-6 text-primary" />
+                Comparativo por Origem
+              </CardTitle>
+              <CardDescription>
+                Distribuição da receita por canal de venda no período.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <OriginChart data={salesByOrigin} />
+            </CardContent>
+          </Card>
         </div>
 
       </main>

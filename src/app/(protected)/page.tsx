@@ -10,7 +10,6 @@ import type { DateRange } from "react-day-picker";
 import {
   ArrowDownRight,
   ArrowUpRight,
-  Bot,
   Box,
   Calendar as CalendarIcon,
   ChevronDown,
@@ -56,9 +55,9 @@ import {
 } from "@/components/ui/popover";
 import { Logo } from "@/components/icons";
 import KpiCard from "@/components/kpi-card";
-import SalesChart from "@/components/sales-chart";
-import InsightsGenerator from "@/components/insights-generator";
 import SalesHistoryTable from "@/components/sales-history-table";
+import TopProductsChart from "@/components/top-products-chart";
+import OriginChart from "@/components/origin-chart";
 
 export default function DashboardPage() {
     const [date, setDate] = React.useState<DateRange | undefined>({
@@ -107,6 +106,27 @@ export default function DashboardPage() {
     if (Object.keys(salesByCategory).length === 0) return ["N/A", 0];
     return Object.entries(salesByCategory).sort((a, b) => b[1] - a[1])[0];
   }, [salesByCategory]);
+
+  const topProducts = React.useMemo(() => {
+    const productQuantities: Record<string, number> = {};
+    filteredSales.forEach(sale => {
+        productQuantities[sale.produto] = (productQuantities[sale.produto] || 0) + sale.unidadesVendidas;
+    });
+
+    return Object.entries(productQuantities)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([name, quantity]) => ({ name, quantity }));
+  }, [filteredSales]);
+  
+  const salesByOrigin = React.useMemo(() => {
+    const originMap: Record<string, number> = {};
+    filteredSales.forEach(sale => {
+        const origin = 'Loja Física';
+        originMap[origin] = (originMap[origin] || 0) + sale.receita;
+    });
+    return Object.entries(originMap).map(([name, value]) => ({ name, value }));
+  }, [filteredSales]);
 
   const displayDate = date ?? {
     from: new Date(2023, 0, 1),
@@ -270,16 +290,26 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           <Card className="lg:col-span-2">
             <CardHeader>
-              <CardTitle className="font-headline text-h3">Visão Geral das Vendas</CardTitle>
+              <CardTitle className="font-headline text-h3">Top 10 Produtos Mais Vendidos</CardTitle>
               <CardDescription>
-                Receita por mês no período selecionado.
+                Produtos com maior quantidade de vendas no período selecionado.
               </CardDescription>
             </CardHeader>
             <CardContent className="pl-2">
-              <SalesChart data={filteredSales} />
+              <TopProductsChart data={topProducts} />
             </CardContent>
           </Card>
-          <InsightsGenerator data={filteredSales} />
+          <Card>
+             <CardHeader>
+                <CardTitle className="font-headline text-h3">Comparativo por Origem</CardTitle>
+                <CardDescription>
+                    Distribuição da receita por canal de venda no período.
+                </CardDescription>
+            </CardHeader>
+            <CardContent>
+                <OriginChart data={salesByOrigin} />
+            </CardContent>
+          </Card>
         </div>
 
         <Card>
