@@ -20,7 +20,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
 import Image from "next/image";
-import logo from "../../../public/sol-de-maria-logo.png";
+
 
 export default function LoginPage() {
   const [email, setEmail] = React.useState("");
@@ -87,14 +87,9 @@ export default function LoginPage() {
       <div className="flex items-center justify-center py-12">
         <div className="mx-auto grid w-[350px] gap-6">
           <div className="grid gap-4 text-center">
-             <Image 
-                src={logo}
-                alt="Logo Sol de Maria"
-                width={120}
-                height={120}
-                className="rounded-full mx-auto"
-                priority
-            />
+             <div className="flex justify-center">
+                <Logo className="size-24 text-primary" />
+             </div>
             <h1 className="text-3xl font-bold font-headline">Visão de Vendas</h1>
             <p className="text-balance text-muted-foreground">
               Entre com suas credenciais para acessar o painel
