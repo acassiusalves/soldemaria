@@ -522,26 +522,10 @@ export default function VendasPage() {
 };
   
   const handleSaveCustomCalculation = async (calc: Omit<CustomCalculation, 'id'> & { id?: string }) => {
-    const safeFormula = (calc.formula || []).map((item: any) => {
-        if (item?.type === 'number') {
-            const n = typeof item.value === 'string'
-                ? parseFloat(String(item.value).replace(',', '.'))
-                : Number(item.value);
-            return { type: 'number', value: String(Number.isFinite(n) ? n : 0), label: String(Number.isFinite(n) ? n : 0) };
-        }
-        if (item?.type === 'column') {
-            return { type: 'column', value: String(item.value), label: String(item.label) };
-        }
-        if (item?.type === 'op') {
-            return { type: 'op', value: String(item.value), label: String(item.label) };
-        }
-        return undefined;
-    }).filter(Boolean) as { type: 'number' | 'column' | 'op'; value: string; label: string }[];
-
     const finalCalc: CustomCalculation = {
         id: calc.id || `custom_${Date.now()}`,
         name: (calc.name || 'Sem nome').trim(),
-        formula: safeFormula,
+        formula: calc.formula, // Assume formula is already clean from the dialog
         isPercentage: calc.isPercentage || false,
         ...(calc.interaction?.targetColumn
             ? { interaction: {
@@ -551,31 +535,14 @@ export default function VendasPage() {
             : {})
     };
 
-
     const newList = customCalculations.some(c => c.id === finalCalc.id)
         ? customCalculations.map(c => (c.id === finalCalc.id ? finalCalc : c))
         : [...customCalculations, finalCalc];
     
-    setCustomCalculations(newList);
     await saveGlobalCalculations(newList);
     await persistCalcColumns(newList);
-    toast({ title: "Cálculo Salvo!", description: `A coluna "${finalCalc.name}" foi salva.` });
 
-    const user = auth.currentUser;
-    if (user) {
-        // 1. FORÇA visibilidade
-        const newVisibility = { ...columnVisibility, [finalCalc.id]: true };
-        setColumnVisibility(newVisibility);
-        await saveUserPreference(user.uid, 'vendas_columns_visibility', newVisibility);
-        
-        // 2. ADICIONA à ordem se não existir
-        const currentOrder = Array.isArray(columnOrder) ? [...columnOrder] : [];
-        if (!currentOrder.includes(finalCalc.id)) {
-            currentOrder.push(finalCalc.id);
-            setColumnOrder(currentOrder);
-            await saveUserPreference(user.uid, 'vendas_columns_order', currentOrder);
-        }
-    }
+    toast({ title: "Cálculo Salvo!", description: `A coluna "${finalCalc.name}" foi salva.` });
 };
 
   const handleDeleteCustomCalculation = async (calcId: string) => {
@@ -588,7 +555,6 @@ const syncExistingCustomColumns = React.useCallback(async () => {
     const user = auth.currentUser;
     if (!user || customCalculations.length === 0) return;
     
-    // Garantir que todas as colunas customizadas estejam visíveis
     const newVisibility = { ...columnVisibility };
     let needsVisibilityUpdate = false;
     
@@ -599,7 +565,6 @@ const syncExistingCustomColumns = React.useCallback(async () => {
         }
     });
     
-    // Garantir que todas estejam na ordem
     const currentOrder = Array.isArray(columnOrder) ? [...columnOrder] : [];
     let needsOrderUpdate = false;
     
@@ -610,7 +575,6 @@ const syncExistingCustomColumns = React.useCallback(async () => {
         }
     });
     
-    // Salvar se houve mudanças
     if (needsVisibilityUpdate) {
         setColumnVisibility(newVisibility);
         await saveUserPreference(user.uid, 'vendas_columns_visibility', newVisibility);
@@ -632,16 +596,14 @@ React.useEffect(() => {
 const mergedColumns = React.useMemo(() => {
     const map = new Map<string, ColumnDef>();
     
-    // Adicionar colunas normais
     columns.forEach(c => {
         map.set(c.id, c);
     });
     
-    // Adicionar colunas customizadas com nomes corretos
     customCalculations.forEach(c => {
         const columnDef = { 
             id: c.id, 
-            label: c.name, // ← USAR c.name diretamente, não getLabel
+            label: c.name,
             isSortable: true 
         };
         map.set(c.id, columnDef);
@@ -657,21 +619,18 @@ React.useEffect(() => {
   if (!columns || columns.length === 0) return;
 
   const user = auth.currentUser;
-  const allIds = mergedColumns.map(c => c.id); // use mergedColumns para incluir custom também
+  const allIds = mergedColumns.map(c => c.id);
 
-  // 1) Completar a ordem com colunas novas
   const orderNow = Array.isArray(columnOrder) ? [...columnOrder] : [];
   const missingInOrder = allIds.filter(id => !orderNow.includes(id));
   const nextOrder = missingInOrder.length ? [...orderNow, ...missingInOrder] : orderNow;
 
-  // 2) Garantir visibilidade true para colunas sem definição
   const visNow = { ...(columnVisibility || {}) };
   let visChanged = false;
   for (const id of allIds) {
     if (visNow[id] === undefined) { visNow[id] = true; visChanged = true; }
   }
 
-  // 3) Aplicar/salvar se mudou
   const promises: Promise<any>[] = [];
   if (missingInOrder.length) {
     setColumnOrder(nextOrder);
@@ -682,50 +641,54 @@ React.useEffect(() => {
     if (user) promises.push(saveUserPreference(user.uid, 'vendas_columns_visibility', visNow));
   }
   if (promises.length) { Promise.all(promises).catch(console.error); }
-}, [isLoadingPreferences, columns, mergedColumns]);
+}, [isLoadingPreferences, columns, mergedColumns, columnOrder, columnVisibility]);
 
   const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): VendaDetalhada[] => {
     if (customCalculations.length === 0) return data;
   
     const getNumericField = (row: any, keyOrLabel: string): number => {
-      const val = row[keyOrLabel] ?? row.customData?.[keyOrLabel];
-      if (typeof val === 'number') return val;
-      if (typeof val === 'string') {
-        const num = parseFloat(val.replace(',', '.'));
-        return Number.isFinite(num) ? num : 0;
-      }
-      return 0;
+        const val = row[keyOrLabel] ?? row.customData?.[keyOrLabel];
+        if (typeof val === 'number') return val;
+        if (typeof val === 'string') {
+          const num = parseFloat(val.replace(',', '.'));
+          return Number.isFinite(num) ? num : 0;
+        }
+        return 0;
     };
   
     return data.map(row => {
       const newCustomData: Record<string, number> = { ...(row.customData || {}) };
-      const flatRowForCalcs: any = { ...row }; // Mutable copy for iterative calculations
+      const flatRowForCalcs: any = { ...row };
   
       customCalculations.forEach(calc => {
         try {
-          const expr = (calc.formula || []).map((item: any) => {
-            if (item?.type === 'column') {
-              return getNumericField(flatRowForCalcs, String(item.value));
+          const formulaString = (calc.formula || []).map(item => {
+            if (item.type === 'column') {
+              return getNumericField(flatRowForCalcs, item.value);
             }
-            if (item?.type === 'number') {
+            if (item.type === 'number') {
               return parseFloat(String(item.value).replace(',', '.')) || 0;
             }
-            if (item?.type === 'op') {
-              return String(item.value);
+            if (item.type === 'op') {
+              return item.value;
             }
             return '';
           }).join(' ');
-  
-          // Basic check for expression validity
-          if (!expr || /[\+\-\*\/]$/.test(expr.trim())) {
-              throw new Error("Invalid expression");
+
+          if (!formulaString) {
+            throw new Error("Empty formula");
           }
   
-          const result = new Function(`return ${expr}`)();
+          // Super basic safety check
+          if (/[^0-9\s\.\+\-\*\/\(\)]/.test(formulaString)) {
+              throw new Error("Invalid characters in formula string for evaluation.");
+          }
+          
+          const result = new Function(`return ${formulaString}`)();
           const numResult = typeof result === 'number' && Number.isFinite(result) ? result : 0;
   
           newCustomData[calc.id] = numResult;
-          flatRowForCalcs[calc.id] = numResult; // Update for next calcs in the same loop
+          flatRowForCalcs[calc.id] = numResult; 
   
           if (calc.interaction?.targetColumn) {
             const base = getNumericField(flatRowForCalcs, calc.interaction.targetColumn);
@@ -795,18 +758,14 @@ React.useEffect(() => {
         }
         const g = groups.get(code);
 
-        // Se a linha tiver uma chave de item (ex: 'item', 'descricao'), é uma sub-linha
         if (isDetailRow(row)) {
             g.header.subRows.push(row);
-            // Acumula a quantidade na linha do cabeçalho
             g.header.quantidadeTotal += Number(row.quantidade) || 0;
         }
         
-        // Garante que o cabeçalho seja enriquecido com dados de qualquer linha do mesmo código
         g.header = mergeForHeader(g.header, row);
     }
     
-    // Corrige o caso em que a primeira linha lida não era de detalhe mas tinha quantidade
     for (const g of groups.values()) {
         if (g.header.subRows.length === 0 && g.header.quantidade) {
             g.header.quantidadeTotal = Number(g.header.quantidade) || 0;
@@ -1008,7 +967,6 @@ React.useEffect(() => {
         "quantidade_movimentada", "costs", "customData"
     ];
     
-    // Adiciona colunas que podem não estar no metadata mas existem nos dados
     if (allData.length > 0) {
         const dataKeys = Object.keys(allData[0]);
         dataKeys.forEach(key => {

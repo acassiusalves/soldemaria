@@ -11,7 +11,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Calculator, Sparkles, Plus, Minus, X, Divide, Sigma, Trash2, Hash, Edit, Zap, Search } from 'lucide-react';
+import { Calculator, Sparkles, Plus, Minus, X as MultiplyIcon, Divide, Sigma, Trash2, Hash, Edit, Zap, Search } from 'lucide-react';
 import type { FormulaItem, CustomCalculation } from '@/lib/data';
 import { Badge } from './ui/badge';
 import { ScrollArea } from './ui/scroll-area';
@@ -69,10 +69,10 @@ export function CalculationDialog({ isOpen, onClose, onSave, onDelete, marketpla
   const handleItemClick = (item: FormulaItem) => {
     const lastItem = formula[formula.length - 1];
     
-    if (item.type === 'operator' && item.value !== '(' && (!lastItem || lastItem.type === 'operator')) {
+    if (item.type === 'op' && item.value !== '(' && (!lastItem || lastItem.type === 'op')) {
         return;
     }
-    if ((item.type === 'column' || item.type === 'number') && lastItem && lastItem.type !== 'operator') {
+    if ((item.type === 'column' || item.type === 'number') && lastItem && lastItem.type !== 'op') {
         return;
     }
     
@@ -98,15 +98,23 @@ export function CalculationDialog({ isOpen, onClose, onSave, onDelete, marketpla
           toast({ variant: 'destructive', title: 'Nome da Coluna Obrigatório', description: 'Por favor, dê um nome para sua nova coluna.' });
           return;
       }
-      if (formula.length === 0 || (formula[formula.length - 1].type === 'operator' && formula[formula.length - 1].value !== ')')) {
+      if (formula.length === 0 || (formula[formula.length - 1].type === 'op' && formula[formula.length - 1].value !== ')')) {
           toast({ variant: 'destructive', title: 'Fórmula Inválida', description: 'A fórmula não pode estar vazia ou terminar com um operador.' });
           return;
       }
       
+      const cleanFormula = (formula || []).map((item: any) => {
+          if (item?.type === 'number') return { type: 'number', value: String(item.value), label: String(item.label) };
+          if (item?.type === 'column') return { type: 'column', value: String(item.value), label: String(item.label) };
+          if (item?.type === 'op') return { type: 'op', value: String(item.value), label: String(item.label) };
+          return undefined;
+      }).filter(Boolean) as FormulaItem[];
+
+
       const newCalculation: Omit<CustomCalculation, 'id'> & { id?: string } = {
           id: editingId || undefined,
           name: columnName,
-          formula: formula,
+          formula: cleanFormula,
           isPercentage: isPercentage,
           ...(targetMarketplace !== 'all' && { targetMarketplace: targetMarketplace }),
           ...(interactionTarget !== 'none' && {
@@ -249,12 +257,12 @@ export function CalculationDialog({ isOpen, onClose, onSave, onDelete, marketpla
                     <div className="space-y-2">
                         <p className="text-sm font-semibold">Operadores</p>
                         <div className="flex flex-wrap gap-2">
-                            <Button variant="outline" size="icon" onClick={() => handleItemClick({ type: 'operator', value: '+', label: '+'})}><Plus/></Button>
-                            <Button variant="outline" size="icon" onClick={() => handleItemClick({ type: 'operator', value: '-', label: '-' })}><Minus/></Button>
-                            <Button variant="outline" size="icon" onClick={() => handleItemClick({ type: 'operator', value: '*', label: '×' })}><X/></Button>
-                            <Button variant="outline" size="icon" onClick={() => handleItemClick({ type: 'operator', value: '/', label: '÷' })}><Divide/></Button>
-                            <Button variant="outline" size="sm" onClick={() => handleItemClick({ type: 'operator', value: '(', label: '(' })}>(</Button>
-                            <Button variant="outline" size="sm" onClick={() => handleItemClick({ type: 'operator', value: ')', label: ')' })}>)</Button>
+                            <Button variant="outline" size="icon" onClick={() => handleItemClick({ type: 'op', value: '+', label: '+'})}><Plus/></Button>
+                            <Button variant="outline" size="icon" onClick={() => handleItemClick({ type: 'op', value: '-', label: '-' })}><Minus/></Button>
+                            <Button variant="outline" size="icon" onClick={() => handleItemClick({ type: 'op', value: '*', label: '×' })}><MultiplyIcon/></Button>
+                            <Button variant="outline" size="icon" onClick={() => handleItemClick({ type: 'op', value: '/', label: '÷' })}><Divide/></Button>
+                            <Button variant="outline" size="sm" onClick={() => handleItemClick({ type: 'op', value: '(', label: '(' })}>(</Button>
+                            <Button variant="outline" size="sm" onClick={() => handleItemClick({ type: 'op', value: ')', label: ')' })}>)</Button>
                         </div>
                     </div>
 
