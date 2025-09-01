@@ -687,15 +687,8 @@ React.useEffect(() => {
   const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): VendaDetalhada[] => {
     if (customCalculations.length === 0) return data;
   
-    const labelToId = new Map<string, string>();
-    [...columns, ...customCalculations.map(c => ({ id: c.id, label: c.name }))]
-      .forEach(c => { if (c?.label && c?.id) labelToId.set(String(c.label), String(c.id)); });
-  
     const getNumericField = (row: any, keyOrLabel: string): number => {
-      const key = Object.prototype.hasOwnProperty.call(row, keyOrLabel)
-        ? keyOrLabel
-        : (labelToId.get(keyOrLabel) || keyOrLabel);
-      const val = row[key] ?? row.customData?.[key];
+      const val = row[keyOrLabel] ?? row.customData?.[keyOrLabel];
       if (typeof val === 'number') return val;
       if (typeof val === 'string') {
         const num = parseFloat(val.replace(',', '.'));
@@ -704,71 +697,51 @@ React.useEffect(() => {
       return 0;
     };
   
-    const asNumberLiteral = (v: unknown): string => {
-      const n = typeof v === 'string'
-        ? parseFloat(v.replace(',', '.'))
-        : Number(v);
-      return String(Number.isFinite(n) ? n : 0);
-    };
-  
-    const isOp = (t: string) => t === '+' || t === '-' || t === '*' || t === '/' || t === '(' || t === ')';
-    const isVal = (t: string) => /^-?\d+(\.\d+)?$/.test(t);
-  
     return data.map(row => {
       const newCustomData: Record<string, number> = { ...(row.customData || {}) };
-      const flatRow: any = { ...row };
+      const flatRowForCalcs: any = { ...row }; // Mutable copy for iterative calculations
   
       customCalculations.forEach(calc => {
         try {
-          const tokensRaw = (calc.formula || []).map((item: any) => {
+          const expr = (calc.formula || []).map((item: any) => {
             if (item?.type === 'column') {
-              return asNumberLiteral(getNumericField(flatRow, String(item.value)));
+              return getNumericField(flatRowForCalcs, String(item.value));
             }
             if (item?.type === 'number') {
-              return asNumberLiteral(item.value);
+              return parseFloat(String(item.value).replace(',', '.')) || 0;
             }
             if (item?.type === 'op') {
-              const op = String(item.value).trim();
-              return isOp(op) ? op : '+';
+              return String(item.value);
             }
             return '';
-          }).filter(Boolean);
+          }).join(' ');
   
-          const tokens: string[] = [];
-          for (let i = 0; i < tokensRaw.length; i++) {
-            const t = tokensRaw[i];
-            const prev = tokens[tokens.length - 1];
-            const needImplicitMul =
-              prev && ((isVal(prev) || prev === ')') && (isVal(t) || t === '('));
-            if (needImplicitMul) tokens.push('*');
-            tokens.push(t);
+          // Basic check for expression validity
+          if (!expr || /[\+\-\*\/]$/.test(expr.trim())) {
+              throw new Error("Invalid expression");
           }
-  
-          const expr = tokens.join(' ');
   
           const result = new Function(`return ${expr}`)();
           const numResult = typeof result === 'number' && Number.isFinite(result) ? result : 0;
   
           newCustomData[calc.id] = numResult;
-          flatRow[calc.id] = numResult;
+          flatRowForCalcs[calc.id] = numResult; // Update for next calcs in the same loop
   
-          if (calc.interaction) {
-            const base = getNumericField(flatRow, calc.interaction.targetColumn);
+          if (calc.interaction?.targetColumn) {
+            const base = getNumericField(flatRowForCalcs, calc.interaction.targetColumn);
             const nv = calc.interaction.operator === '-' ? base - numResult : base + numResult;
             newCustomData[calc.interaction.targetColumn] = nv;
-            flatRow[calc.interaction.targetColumn] = nv;
+            flatRowForCalcs[calc.interaction.targetColumn] = nv;
           }
         } catch (e) {
           newCustomData[calc.id] = 0;
-          flatRow[calc.id] = 0;
+          flatRowForCalcs[calc.id] = 0;
         }
       });
   
-      const resultado = { ...flatRow, customData: newCustomData };
-      
-      return resultado;
+      return { ...row, ...flatRowForCalcs, customData: newCustomData };
     });
-  }, [customCalculations, columns]);
+  }, [customCalculations]);
 
   /* ======= Mescla banco + staged (staged tem prioridade) ======= */
   const allData = React.useMemo(() => {
@@ -1303,6 +1276,3 @@ React.useEffect(() => {
     </>
   );
 }
-
-
-
