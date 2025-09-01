@@ -103,17 +103,18 @@ export function CalculationDialog({ isOpen, onClose, onSave, onDelete, marketpla
           return;
       }
       
-      const cleanFormula = (formula || []).map((item: any) => {
-          if (item?.type === 'number') return { type: 'number', value: String(item.value), label: String(item.label) };
-          if (item?.type === 'column') return { type: 'column', value: String(item.value), label: String(item.label) };
-          if (item?.type === 'op') return { type: 'op', value: String(item.value), label: String(item.label) };
-          return undefined;
+      const cleanFormula = formula.map((item) => {
+          return {
+              type: item.type,
+              value: String(item.value),
+              label: String(item.label)
+          };
       }).filter(Boolean) as FormulaItem[];
 
 
       const newCalculation: Omit<CustomCalculation, 'id'> & { id?: string } = {
           id: editingId || undefined,
-          name: columnName,
+          name: columnName.trim(),
           formula: cleanFormula,
           isPercentage: isPercentage,
           ...(targetMarketplace !== 'all' && { targetMarketplace: targetMarketplace }),
@@ -237,7 +238,7 @@ export function CalculationDialog({ isOpen, onClose, onSave, onDelete, marketpla
                                 className="pl-9"
                             />
                         </div>
-                        <ScrollArea className="h-24 rounded-md border">
+                        <ScrollArea className="h-40 rounded-md border">
                             <div className="flex flex-col gap-1 p-2">
                                 {filteredColumns.map(col => (
                                     <Button 

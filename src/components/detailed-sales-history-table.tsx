@@ -595,62 +595,62 @@ export default function DetailedSalesHistoryTable({
   );
 
   const renderCell = (row: any, columnId: string) => {
-    let value = row[columnId];
-    
-    if (value === null || value === undefined) {
-        value = row.customData?.[columnId];
-    }
-    
-    if (columnId === 'tipo_pagamento' || columnId === 'tipo_de_pagamento') {
-        return showBlank(row.tipo_de_pagamento ?? row.tipo_pagamento);
-    }
-    if (columnId === 'parcela') {
-        return showBlank(row.parcela);
-    }
-
-    if (value === null || value === undefined || (typeof value === "string" && value.trim() === "")) {
-        return "";
-    }
-    
-    if (columnId === 'quantidadeTotal' && typeof value === 'number') {
-        return value.toString();
-    }
-
-    const toNumber = (x: any) => {
-        if (typeof x === "number") return x;
-        if (typeof x === "string") {
-            const cleaned = x.replace(/\u00A0/g, "").replace(/[^0-9,.-]/g, "").replace(/\./g, "").replace(",", ".");
-            const n = Number(cleaned);
-            if (!Number.isNaN(n)) return n;
-        }
-        return null;
-    };
-
-    const customCalc = customCalculations.find(c => c.id === columnId);
-    const isPercentage = customCalc?.isPercentage;
-
-    if (isPercentage && typeof value === 'number') {
-      return `${(value * 100).toFixed(2)}%`;
-    }
-
-    if (["final","custoFrete","imposto","embalagem","comissao","custoUnitario","valorUnitario","valorCredito","valorDescontos", "valor"]
-        .includes(columnId) || (typeof value === 'number' && columnId.startsWith('custom_'))) {
-        const n = toNumber(value);
-        if (n !== null) {
-            return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-        }
-    }
-
-    if (columnId === "data") {
-        const d = value?.toDate ? value.toDate() : (typeof value === 'string' ? parseISO(value) : value);
-        return d instanceof Date && !isNaN(d.getTime()) ? format(d, "dd/MM/yyyy", { locale: ptBR }) : "";
-    }
-
-    if ((columnId.startsWith('custom_') || columnId.startsWith('Custom_')) && typeof value === 'number') {
-        return value.toLocaleString("pt-BR");
-    }
-
-    return String(value);
+      let value = row[columnId];
+      
+      if (columnId.startsWith('custom_') || value === null || value === undefined) {
+          value = row.customData?.[columnId] ?? value;
+      }
+      
+      if (columnId === 'tipo_pagamento' || columnId === 'tipo_de_pagamento') {
+          return showBlank(row.tipo_de_pagamento ?? row.tipo_pagamento);
+      }
+      if (columnId === 'parcela') {
+          return showBlank(row.parcela);
+      }
+  
+      if (value === null || value === undefined || (typeof value === "string" && value.trim() === "")) {
+          return "";
+      }
+      
+      if (columnId === 'quantidadeTotal' && typeof value === 'number') {
+          return value.toString();
+      }
+  
+      const toNumber = (x: any) => {
+          if (typeof x === "number") return x;
+          if (typeof x === "string") {
+              const cleaned = x.replace(/\u00A0/g, "").replace(/[^0-9,.-]/g, "").replace(/\./g, "").replace(",", ".");
+              const n = Number(cleaned);
+              if (!Number.isNaN(n)) return n;
+          }
+          return null;
+      };
+  
+      const customCalc = customCalculations.find(c => c.id === columnId);
+      const isPercentage = customCalc?.isPercentage;
+  
+      if (isPercentage && typeof value === 'number') {
+        return `${(value * 100).toFixed(2)}%`;
+      }
+  
+      if (["final","custoFrete","imposto","embalagem","comissao","custoUnitario","valorUnitario","valorCredito","valorDescontos", "valor"]
+          .includes(columnId) || (typeof value === 'number' && columnId.startsWith('custom_') && !isPercentage)) {
+          const n = toNumber(value);
+          if (n !== null) {
+              return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+          }
+      }
+  
+      if (columnId === "data") {
+          const d = value?.toDate ? value.toDate() : (typeof value === 'string' ? parseISO(value) : value);
+          return d instanceof Date && !isNaN(d.getTime()) ? format(d, "dd/MM/yyyy", { locale: ptBR }) : "";
+      }
+  
+      if ((columnId.startsWith('custom_') || columnId.startsWith('Custom_')) && typeof value === 'number' && !isPercentage) {
+          return value.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      }
+  
+      return String(value);
   };
   
   const renderDetailCell = (sale: VendaDetalhada, columnId: string) => {
@@ -709,12 +709,10 @@ export default function DetailedSalesHistoryTable({
   const visibleColumns = useMemo(() => {
     const columnMap = new Map(mainColumns.map(c => [c.id, c]));
     
-    // baseOrder = o que veio salvo OU todas as colunas atuais
     const baseOrder = (columnOrder && columnOrder.length > 0)
       ? columnOrder
       : mainColumns.map(c => c.id);
   
-    // fullOrder = baseOrder + quaisquer colunas novas que não estavam salvas
     const fullOrder = [
       ...baseOrder,
       ...mainColumns.map(c => c.id).filter(id => !baseOrder.includes(id)),
@@ -1028,4 +1026,3 @@ export default function DetailedSalesHistoryTable({
     </>
   );
 }
-
