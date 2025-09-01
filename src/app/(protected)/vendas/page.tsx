@@ -1029,9 +1029,29 @@ React.useEffect(() => {
   
     const availableFormulaColumns = React.useMemo(() => {
     const allColumns = [...columns, ...customCalculations.map(c => ({ id: c.id, label: c.name, isSortable: true }))];
+    const systemColumnsToHide = [
+        "id", "sourceFile", "uploadTimestamp", "subRows", "parcelas", 
+        "total_valor_parcelas", "mov_estoque", "valor_da_parcela", "tipo_de_pagamento",
+        "quantidade_movimentada", "costs", "customData"
+    ];
+    
+    // Adiciona colunas que podem não estar no metadata mas existem nos dados
+    if (allData.length > 0) {
+        const dataKeys = Object.keys(allData[0]);
+        dataKeys.forEach(key => {
+            if (!allColumns.some(c => c.id === key) && !systemColumnsToHide.includes(key)) {
+                allColumns.push({ id: key, label: getLabel(key), isSortable: true });
+            }
+        });
+    }
+
     const uniqueCols = Array.from(new Map(allColumns.map(c => [c.id, c])).values());
-    return uniqueCols.map(c => ({ key: c.id, label: c.label }));
-  }, [columns, customCalculations]);
+    
+    return uniqueCols
+        .filter(c => !systemColumnsToHide.includes(c.id))
+        .map(c => ({ key: c.id, label: c.label || getLabel(c.id) }));
+
+  }, [columns, customCalculations, allData]);
 
   return (
     <>
@@ -1283,5 +1303,6 @@ React.useEffect(() => {
     </>
   );
 }
+
 
 
