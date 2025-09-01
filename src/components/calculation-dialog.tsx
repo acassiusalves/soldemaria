@@ -11,7 +11,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Calculator, Sparkles, Plus, Minus, X, Divide, Sigma, Trash2, Hash, Edit, Zap } from 'lucide-react';
+import { Calculator, Sparkles, Plus, Minus, X, Divide, Sigma, Trash2, Hash, Edit, Zap, Search } from 'lucide-react';
 import type { FormulaItem, CustomCalculation } from '@/lib/data';
 import { Badge } from './ui/badge';
 import { ScrollArea } from './ui/scroll-area';
@@ -38,6 +38,7 @@ export function CalculationDialog({ isOpen, onClose, onSave, onDelete, marketpla
   const [targetMarketplace, setTargetMarketplace] = useState<string>("all");
   const [numberValue, setNumberValue] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
   
   const [interactionTarget, setInteractionTarget] = useState<string>('none');
   const [interactionOperator, setInteractionOperator] = useState<'+' | '-'>('-');
@@ -60,6 +61,7 @@ export function CalculationDialog({ isOpen, onClose, onSave, onDelete, marketpla
     setTargetMarketplace("all");
     setNumberValue('');
     setEditingId(null);
+    setSearchTerm('');
     setInteractionTarget('none');
     setInteractionOperator('-');
   };
@@ -136,6 +138,12 @@ export function CalculationDialog({ isOpen, onClose, onSave, onDelete, marketpla
     }
   };
 
+  const filteredColumns = useMemo(() => {
+    return availableColumns.filter(col =>
+      col.label.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [availableColumns, searchTerm]);
+
   if (!isMounted) return null;
 
   return (
@@ -209,10 +217,21 @@ export function CalculationDialog({ isOpen, onClose, onSave, onDelete, marketpla
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
                     <div className="space-y-2">
-                        <p className="text-sm font-semibold">Colunas Disponíveis</p>
-                        <ScrollArea className="h-24 rounded-md border p-2">
-                            <div className="flex flex-col gap-1">
-                                {availableColumns.map(col => (
+                        <div className="flex justify-between items-center mb-2">
+                          <p className="text-sm font-semibold">Colunas Disponíveis</p>
+                        </div>
+                        <div className="relative">
+                            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                            <Input
+                                placeholder="Pesquisar coluna..."
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                className="pl-9"
+                            />
+                        </div>
+                        <ScrollArea className="h-24 rounded-md border">
+                            <div className="flex flex-col gap-1 p-2">
+                                {filteredColumns.map(col => (
                                     <Button 
                                         key={col.key} 
                                         variant="ghost" 
