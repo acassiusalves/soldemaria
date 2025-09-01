@@ -698,37 +698,68 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
             const flatRowForCalcs = { ...row, ...newRow.customData };
             
             try {
-                const formulaString = calc.formula.reduce((acc, item) => {
-                    let part = '';
-                    if (item.type === 'column') {
-                        part = getNumericField(flatRowForCalcs, item.value).toString();
-                    } else if (item.type === 'number') {
-                        part = (parseFloat(String(item.value).replace(',', '.')) || 0).toString();
-                    } else if (item.type === 'op') {
-                        part = item.value;
-                    }
-                    return `${acc} ${part}`;
-                }, '').trim();
+                // Debug: Mostrar cada passo da construção da fórmula
+                console.log(`\n=== CONSTRUINDO FÓRMULA PARA ${calc.name} ===`);
+                console.log('Fórmula original:', calc.formula);
                 
-                console.log(`Calculando ${calc.name}: ${formulaString}`);
+                let formulaString = '';
+                
+                for (let i = 0; i < calc.formula.length; i++) {
+                    const item = calc.formula[i];
+                    console.log(`Passo ${i + 1}:`, item);
+                    
+                    if (item.type === 'column') {
+                        const value = getNumericField(flatRowForCalcs, item.value);
+                        console.log(`  Coluna "${item.value}" = ${value}`);
+                        formulaString += value.toString();
+                    } else if (item.type === 'number') {
+                        const numValue = parseFloat(String(item.value).replace(',', '.')) || 0;
+                        console.log(`  Número "${item.value}" = ${numValue}`);
+                        formulaString += numValue.toString();
+                    } else if (item.type === 'op') {
+                        console.log(`  Operador: "${item.value}"`);
+                        formulaString += ` ${item.value} `;
+                    }
+                    
+                    console.log(`  Fórmula até agora: "${formulaString}"`);
+                }
+                
+                formulaString = formulaString.trim();
+                console.log(`Fórmula final: "${formulaString}"`);
+                
+                // Verificações adicionais
+                console.log('Caracteres únicos na fórmula:', [...new Set(formulaString.split(''))]);
+                console.log('Teste regex:', /^[\d\s\.\+\-\*\/\(\)]+$/.test(formulaString));
+                console.log('Teste números consecutivos:', /\d\s+\d/.test(formulaString));
                 
                 if (!formulaString) {
                     throw new Error("Fórmula vazia");
                 }
-  
-                if (/[^0-9\s\.\+\-\*\/\(\)]/.test(formulaString)) {
-                    throw new Error("Caracteres inválidos na fórmula");
+            
+                if (!/^[\d\s\.\+\-\*\/\(\)]+$/.test(formulaString)) {
+                    throw new Error(`Caracteres inválidos na fórmula: ${formulaString}`);
                 }
                 
+                if (/\d\s+\d/.test(formulaString)) {
+                    throw new Error(`Números consecutivos sem operador: ${formulaString}`);
+                }
+                
+                console.log('Executando cálculo...');
                 const result = new Function(`return ${formulaString}`)();
+                console.log(`Resultado: ${result}`);
+                
                 let numResult = typeof result === 'number' && Number.isFinite(result) ? result : 0;
+                
+                console.log(`Resultado bruto ${calc.name}: ${result} -> ${numResult}`);
                 
                 if (calc.isPercentage) {
                     numResult = numResult / 100;
                 }
-  
+            
                 newRow.customData[calc.id] = numResult;
                 
+                console.log(`Resultado final ${calc.name}: ${numResult}`);
+            
                 if (calc.interaction?.targetColumn) {
                     const baseValue = getNumericField({...flatRowForCalcs, ...newRow.customData}, calc.interaction.targetColumn);
                     const newValue = calc.interaction.operator === '-' 
@@ -736,9 +767,16 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
                         : baseValue + numResult;
                     
                     newRow.customData[calc.interaction.targetColumn] = newValue;
+                    
+                    console.log(`Interação aplicada em ${calc.interaction.targetColumn}: ${baseValue} ${calc.interaction.operator} ${numResult} = ${newValue}`);
                 }
+            
             } catch (e: any) {
-                console.error(`Erro no cálculo ${calc.name}:`, e.message);
+                console.error(`\n❌ ERRO DETALHADO no cálculo ${calc.name}:`);
+                console.error('Mensagem:', e.message);
+                console.error('Fórmula que causou erro:', calc.formula);
+                console.error('Row data:', flatRowForCalcs);
+                console.error('Stack trace:', e.stack);
                 newRow.customData[calc.id] = 0;
             }
         });

@@ -69,11 +69,29 @@ export function CalculationDialog({ isOpen, onClose, onSave, onDelete, marketpla
   const handleItemClick = (item: FormulaItem) => {
     const lastItem = formula[formula.length - 1];
     
-    if (item.type === 'op' && item.value !== '(' && (!lastItem || lastItem.type === 'op')) {
-        return;
+    // Validação mais rigorosa
+    if (item.type === 'op' && item.value !== '(' && item.value !== ')') {
+        // Não permitir operador se não há itens ou se o último item já é um operador
+        if (!lastItem || (lastItem.type === 'op' && lastItem.value !== ')')) {
+            toast({ 
+                variant: 'destructive', 
+                title: 'Sequência inválida', 
+                description: 'Não é possível adicionar um operador aqui.' 
+            });
+            return;
+        }
     }
-    if ((item.type === 'column' || item.type === 'number') && lastItem && lastItem.type !== 'op') {
-        return;
+    
+    if ((item.type === 'column' || item.type === 'number')) {
+        // Não permitir número/coluna após número/coluna (sem operador entre eles)
+        if (lastItem && (lastItem.type === 'column' || lastItem.type === 'number') && lastItem.value !== '(') {
+            toast({ 
+                variant: 'destructive', 
+                title: 'Sequência inválida', 
+                description: 'Você precisa adicionar um operador entre os valores.' 
+            });
+            return;
+        }
     }
     
     setFormula(prev => [...prev, item]);
@@ -94,40 +112,68 @@ export function CalculationDialog({ isOpen, onClose, onSave, onDelete, marketpla
   };
   
   const handleSaveCalculation = async () => {
-      if (!columnName.trim()) {
-          toast({ variant: 'destructive', title: 'Nome da Coluna Obrigatório', description: 'Por favor, dê um nome para sua nova coluna.' });
-          return;
-      }
-      if (formula.length === 0 || (formula[formula.length - 1].type === 'op' && formula[formula.length - 1].value !== ')')) {
-          toast({ variant: 'destructive', title: 'Fórmula Inválida', description: 'A fórmula não pode estar vazia ou terminar com um operador.' });
-          return;
-      }
-      
-      const cleanFormula = formula.map((item) => {
-          return {
-              type: item.type,
-              value: String(item.value),
-              label: String(item.label)
-          };
-      }).filter(Boolean) as FormulaItem[];
+    if (!columnName.trim()) {
+        toast({ variant: 'destructive', title: 'Nome da Coluna Obrigatório', description: 'Por favor, dê um nome para sua nova coluna.' });
+        return;
+    }
+    
+    if (formula.length === 0) {
+        toast({ variant: 'destructive', title: 'Fórmula Vazia', description: 'Adicione pelo menos um elemento à fórmula.' });
+        return;
+    }
+    
+    // Validação mais completa da fórmula
+    const lastItem = formula[formula.length - 1];
+    if (lastItem.type === 'op' && lastItem.value !== ')') {
+        toast({ variant: 'destructive', title: 'Fórmula Incompleta', description: 'A fórmula não pode terminar com um operador.' });
+        return;
+    }
+    
+    // Validar se há pelo menos um valor na fórmula
+    const hasValues = formula.some(item => item.type === 'column' || item.type === 'number');
+    if (!hasValues) {
+        toast({ variant: 'destructive', title: 'Fórmula Inválida', description: 'A fórmula deve conter pelo menos uma coluna ou número.' });
+        return;
+    }
+    
+    // Validar balanceamento de parênteses
+    let parenthesesCount = 0;
+    for (const item of formula) {
+        if (item.value === '(') parenthesesCount++;
+        if (item.value === ')') parenthesesCount--;
+        if (parenthesesCount < 0) {
+            toast({ variant: 'destructive', title: 'Parênteses Desbalanceados', description: 'Há parênteses de fechamento sem abertura correspondente.' });
+            return;
+        }
+    }
+    if (parenthesesCount !== 0) {
+        toast({ variant: 'destructive', title: 'Parênteses Desbalanceados', description: 'Há parênteses não fechados na fórmula.' });
+        return;
+    }
+    
+    const cleanFormula = formula.map((item) => ({
+        type: item.type,
+        value: String(item.value),
+        label: String(item.label)
+    }));
 
+    const newCalculation: Omit<CustomCalculation, 'id'> & { id?: string } = {
+        id: editingId || undefined,
+        name: columnName.trim(),
+        formula: cleanFormula,
+        isPercentage: isPercentage,
+        ...(targetMarketplace !== 'all' && { targetMarketplace: targetMarketplace }),
+        ...(interactionTarget !== 'none' && {
+            interaction: {
+                targetColumn: interactionTarget,
+                operator: interactionOperator,
+            }
+        }),
+    };
 
-      const newCalculation: Omit<CustomCalculation, 'id'> & { id?: string } = {
-          id: editingId || undefined,
-          name: columnName.trim(),
-          formula: cleanFormula,
-          isPercentage: isPercentage,
-          ...(targetMarketplace !== 'all' && { targetMarketplace: targetMarketplace }),
-          ...(interactionTarget !== 'none' && {
-              interaction: {
-                  targetColumn: interactionTarget,
-                  operator: interactionOperator,
-              }
-          }),
-      };
-
-      await onSave(newCalculation);
-      handleClear();
+    console.log('Salvando cálculo:', newCalculation);
+    await onSave(newCalculation);
+    handleClear();
   };
 
   const handleEditClick = (calc: CustomCalculation) => {
