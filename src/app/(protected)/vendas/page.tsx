@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import * as React from "react";
@@ -691,25 +692,27 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
     };
   
     return data.map(row => {
-        const newCustomData: Record<string, number> = { ...(row.customData || {}) };
+        const newRow = { ...row, customData: { ...(row.customData || {}) } };
   
         customCalculations.forEach(calc => {
+            const flatRowForCalcs = { ...row, ...newRow.customData };
+            
             try {
-                let formulaString = '';
-                
-                calc.formula.forEach(item => {
+                const formulaString = calc.formula.reduce((acc, item) => {
+                    let part = '';
                     if (item.type === 'column') {
-                        const value = getNumericField(row, item.value);
-                        formulaString += ` ${value.toString()} `;
+                        part = getNumericField(flatRowForCalcs, item.value).toString();
                     } else if (item.type === 'number') {
-                        const numValue = parseFloat(String(item.value).replace(',', '.')) || 0;
-                        formulaString += ` ${numValue.toString()} `;
+                        part = (parseFloat(String(item.value).replace(',', '.')) || 0).toString();
                     } else if (item.type === 'op') {
-                        formulaString += ` ${item.value} `;
+                        part = item.value;
                     }
-                });
+                    return `${acc} ${part}`;
+                }, '').trim();
                 
-                if (!formulaString.trim()) {
+                console.log(`Calculando ${calc.name}: ${formulaString}`);
+                
+                if (!formulaString) {
                     throw new Error("Fórmula vazia");
                 }
   
@@ -724,28 +727,23 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
                     numResult = numResult / 100;
                 }
   
-                newCustomData[calc.id] = numResult;
+                newRow.customData[calc.id] = numResult;
                 
                 if (calc.interaction?.targetColumn) {
-                    const baseValue = getNumericField({...row, customData: newCustomData}, calc.interaction.targetColumn);
+                    const baseValue = getNumericField({...flatRowForCalcs, ...newRow.customData}, calc.interaction.targetColumn);
                     const newValue = calc.interaction.operator === '-' 
                         ? baseValue - numResult 
                         : baseValue + numResult;
                     
-                    const isCustomColumn = calc.interaction.targetColumn.startsWith('custom_');
-                    if (isCustomColumn) {
-                        newCustomData[calc.interaction.targetColumn] = newValue;
-                    } else {
-                        newCustomData[`${calc.interaction.targetColumn}_modified`] = newValue;
-                    }
+                    newRow.customData[calc.interaction.targetColumn] = newValue;
                 }
             } catch (e: any) {
                 console.error(`Erro no cálculo ${calc.name}:`, e.message);
-                newCustomData[calc.id] = 0;
+                newRow.customData[calc.id] = 0;
             }
         });
   
-        return { ...row, customData: newCustomData };
+        return newRow;
     });
 }, [customCalculations, mergedColumns]);
 
