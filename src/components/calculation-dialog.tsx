@@ -211,12 +211,13 @@ export function CalculationDialog({ isOpen, onClose, onSave, onDelete, marketpla
                     <div className="space-y-2">
                         <p className="text-sm font-semibold">Colunas Disponíveis</p>
                         <ScrollArea className="h-24 rounded-md border p-2">
-                            <div className="flex flex-wrap gap-2">
+                            <div className="flex flex-col gap-1">
                                 {availableColumns.map(col => (
                                     <Button 
                                         key={col.key} 
-                                        variant="outline" 
+                                        variant="ghost" 
                                         size="sm" 
+                                        className="justify-start"
                                         onClick={() => handleItemClick({ type: 'column', value: col.key, label: col.label })}
                                     >
                                         {col.label}
