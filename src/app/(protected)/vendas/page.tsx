@@ -384,6 +384,8 @@ async function saveGlobalCalculations(calculations: CustomCalculation[]) {
         })
     );
     
+    console.log('Salvando cálculos no Firestore:', cleanCalcs);
+    
     await setDoc(docRef, { calculations: cleanCalcs }, { merge: true });
 }
 
@@ -528,35 +530,45 @@ export default function VendasPage() {
     setIsSavingPreferences(false);
 };
   
-  const handleSaveCustomCalculation = async (calc: Omit<CustomCalculation, 'id'> & { id?: string }) => {
-      const finalCalc: CustomCalculation = {
-          id: calc.id || `custom_${Date.now()}`,
-          name: (calc.name || 'Sem nome').trim(),
-          formula: calc.formula,
-          isPercentage: calc.isPercentage || false,
-          ...(calc.targetMarketplace && calc.targetMarketplace !== 'all' 
-              ? { targetMarketplace: calc.targetMarketplace } 
-              : {}),
-          ...(calc.interaction?.targetColumn && calc.interaction.targetColumn !== 'none'
-              ? { interaction: {
-                      targetColumn: String(calc.interaction.targetColumn),
-                      operator: calc.interaction.operator === '-' ? '-' : '+',
-                  } }
-              : {})
-      };
-  
-      const newList = customCalculations.some(c => c.id === finalCalc.id)
-          ? customCalculations.map(c => (c.id === finalCalc.id ? finalCalc : c))
-          : [...customCalculations, finalCalc];
-      
-      try {
-          await saveGlobalCalculations(newList);
-          await persistCalcColumns(newList);
-          toast({ title: "Cálculo Salvo!", description: `A coluna "${finalCalc.name}" foi salva.` });
-      } catch (error: any) {
-          toast({ title: "Erro!", description: `Erro ao salvar: ${error.message}`, variant: "destructive" });
-      }
-  };
+const handleSaveCustomCalculation = async (calc: Omit<CustomCalculation, 'id'> & { id?: string }) => {
+    console.log('=== SALVANDO CÁLCULO ===');
+    console.log('Dados recebidos:', calc);
+    
+    const finalCalc: CustomCalculation = {
+        id: calc.id || `custom_${Date.now()}`,
+        name: (calc.name || 'Sem nome').trim(),
+        formula: calc.formula,
+        isPercentage: calc.isPercentage || false,
+        ...(calc.targetMarketplace && calc.targetMarketplace !== 'all' 
+            ? { targetMarketplace: calc.targetMarketplace } 
+            : {}),
+        ...(calc.interaction?.targetColumn && calc.interaction.targetColumn !== 'none'
+            ? { interaction: {
+                    targetColumn: String(calc.interaction.targetColumn),
+                    operator: calc.interaction.operator === '-' ? '-' : '+',
+                } }
+            : {})
+    };
+
+    console.log('Cálculo final a ser salvo:', finalCalc);
+    
+    const newList = customCalculations.some(c => c.id === finalCalc.id)
+        ? customCalculations.map(c => (c.id === finalCalc.id ? finalCalc : c))
+        : [...customCalculations, finalCalc];
+    
+    console.log('Nova lista de cálculos:', newList);
+    
+    try {
+        await saveGlobalCalculations(newList);
+        await persistCalcColumns(newList);
+        console.log('Cálculo salvo com sucesso!');
+        toast({ title: "Cálculo Salvo!", description: `A coluna "${finalCalc.name}" foi salva.` });
+    } catch (error: any) {
+        console.error('Erro ao salvar cálculo:', error);
+        toast({ title: "Erro!", description: `Erro ao salvar: ${error.message}`, variant: "destructive" });
+    }
+    console.log('========================');
+};
 
   const handleDeleteCustomCalculation = async (calcId: string) => {
       const newCalculations = customCalculations.filter(c => c.id !== calcId);
@@ -688,10 +700,10 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
                 calc.formula.forEach(item => {
                     if (item.type === 'column') {
                         const value = getNumericField(row, item.value);
-                        formulaString += value.toString();
+                        formulaString += ` ${value.toString()} `;
                     } else if (item.type === 'number') {
                         const numValue = parseFloat(String(item.value).replace(',', '.')) || 0;
-                        formulaString += numValue.toString();
+                        formulaString += ` ${numValue.toString()} `;
                     } else if (item.type === 'op') {
                         formulaString += ` ${item.value} `;
                     }
@@ -1016,13 +1028,26 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
   }, [columns, customCalculations, allData]);
 
   React.useEffect(() => {
-    if (customCalculations.length > 0) {
-      customCalculations.forEach(calc => {});
-    }
-  }, [customCalculations]);
+    console.log('=== DEBUG CÁLCULOS CUSTOMIZADOS ===');
+    console.log('Custom calculations carregados:', customCalculations);
+    console.log('Merged columns:', mergedColumns);
+    console.log('All data sample:', allData.slice(0, 1));
+    console.log('Grouped for view sample:', groupedForView.slice(0, 1));
+    console.log('=====================================');
+  }, [customCalculations, mergedColumns, allData, groupedForView]);
 
   React.useEffect(() => {
-  }, [customCalculations, mergedColumns, allData, groupedForView]);
+    if (customCalculations.length > 0) {
+        console.log('Cálculos customizados atualizados:', customCalculations);
+        customCalculations.forEach(calc => {
+            console.log(`Cálculo ${calc.name}:`, {
+                formula: calc.formula,
+                interaction: calc.interaction,
+                isPercentage: calc.isPercentage
+            });
+        });
+    }
+  }, [customCalculations]);
 
   return (
     <>
