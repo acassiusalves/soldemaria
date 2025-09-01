@@ -359,7 +359,11 @@ async function saveGlobalCalculations(calculations: CustomCalculation[]) {
         calculations.map(c => ({
         id: c.id,
         name: c.name ?? 'Sem nome',
-        formula: Array.isArray(c.formula) ? c.formula : [],
+        formula: Array.isArray(c.formula) ? c.formula.map(item => ({
+            type: item.type,
+            value: String(item.value),
+            label: String(item.label)
+        })) : [],
         isPercentage: c.isPercentage || false,
         ...(c.interaction?.targetColumn
             ? { interaction: {
@@ -658,9 +662,11 @@ React.useEffect(() => {
   
     return data.map(row => {
       const newCustomData: Record<string, number> = { ...(row.customData || {}) };
-      const flatRowForCalcs: any = { ...row };
   
       customCalculations.forEach(calc => {
+        // Reset the calculation context for each formula to prevent state leakage
+        const flatRowForCalcs: any = { ...row, ...newCustomData };
+  
         try {
           const formulaString = (calc.formula || []).map(item => {
             if (item.type === 'column') {
@@ -688,21 +694,18 @@ React.useEffect(() => {
           const numResult = typeof result === 'number' && Number.isFinite(result) ? result : 0;
   
           newCustomData[calc.id] = numResult;
-          flatRowForCalcs[calc.id] = numResult; 
   
           if (calc.interaction?.targetColumn) {
             const base = getNumericField(flatRowForCalcs, calc.interaction.targetColumn);
             const nv = calc.interaction.operator === '-' ? base - numResult : base + numResult;
             newCustomData[calc.interaction.targetColumn] = nv;
-            flatRowForCalcs[calc.interaction.targetColumn] = nv;
           }
         } catch (e) {
           newCustomData[calc.id] = 0;
-          flatRowForCalcs[calc.id] = 0;
         }
       });
   
-      return { ...row, ...flatRowForCalcs, customData: newCustomData };
+      return { ...row, customData: newCustomData };
     });
   }, [customCalculations]);
 
