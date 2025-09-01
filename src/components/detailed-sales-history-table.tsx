@@ -458,7 +458,7 @@ export default function DetailedSalesHistoryTable({
 }, [columns, data, customCalculations]);
 
   const detailColumns = useMemo(() => {
-    const detailKeys = ['item', 'descricao', 'quantidade', 'valorCredito', 'valorDescontos'];
+    const detailKeys = ['item', 'descricao', 'quantidade', 'valorUnitario', 'custoUnitario', 'valorCredito', 'valorDescontos'];
     
     return effectiveColumns.filter(c => {
         if (c.id.startsWith('custom_') || c.id.startsWith('Custom_')) {

@@ -442,7 +442,12 @@ export default function VendasPage() {
     const metaUnsub = onSnapshot(doc(db, "metadata", "vendas"), (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
-        setColumns(data.columns || []);
+        let fetchedColumns = data.columns || [];
+        // Ensure 'quantidadeTotal' is in the columns list from metadata
+        if (!fetchedColumns.some((c: ColumnDef) => c.id === 'quantidadeTotal')) {
+            fetchedColumns.push({ id: 'quantidadeTotal', label: 'Qtd. Total', isSortable: true });
+        }
+        setColumns(fetchedColumns);
         setUploadedFileNames(data.uploadedFileNames || []);
       }
     });
@@ -753,32 +758,38 @@ React.useEffect(() => {
   const groupedForView = React.useMemo(() => {
     const groups = new Map<string, any>();
     for (const row of filteredData) {
-      const code = normCode((row as any).codigo);
-      if (!code) continue;
+        const code = normCode((row as any).codigo);
+        if (!code) continue;
 
-      if (!groups.has(code)) {
-        groups.set(code, { header: { ...row, subRows: [] as any[] } });
-      }
-      const g = groups.get(code);
+        if (!groups.has(code)) {
+            groups.set(code, { header: { ...row, subRows: [] as any[], quantidadeTotal: 0 } });
+        }
+        const g = groups.get(code);
 
-      if (isDetailRow(row)) g.header.subRows.push(row);
-      g.header = mergeForHeader(g.header, row);
-    }
-
-    for (const g of groups.values()) {
-      g.header.subRows.sort((a: any, b: any) =>
-        (toDate(a.data)?.getTime() ?? 0) - (toDate(b.data)?.getTime() ?? 0)
-      );
+        // Se a linha tiver uma chave de item (ex: 'item', 'descricao'), é uma sub-linha
+        if (isDetailRow(row)) {
+            g.header.subRows.push(row);
+            // Acumula a quantidade na linha do cabeçalho
+            g.header.quantidadeTotal += Number(row.quantidade) || 0;
+        }
+        
+        // Garante que o cabeçalho seja enriquecido com dados de qualquer linha do mesmo código
+        g.header = mergeForHeader(g.header, row);
     }
     
-    const headers = Array.from(groups.values()).map(g => {
-        const totalQuantity = (g.header.subRows || []).reduce((acc: number, item: any) => acc + (Number(item.quantidade) || 0), 0);
-        g.header.quantidadeTotal = totalQuantity;
-        return g.header;
-    });
+    // Corrige o caso em que a primeira linha lida não era de detalhe mas tinha quantidade
+    for (const g of groups.values()) {
+        if (g.header.subRows.length === 0 && g.header.quantidade) {
+            g.header.quantidadeTotal = Number(g.header.quantidade) || 0;
+        }
+        g.header.subRows.sort((a: any, b: any) =>
+            (toDate(a.data)?.getTime() ?? 0) - (toDate(b.data)?.getTime() ?? 0)
+        );
+    }
 
+    const headers = Array.from(groups.values()).map(g => g.header);
     return applyCustomCalculations(headers);
-  }, [filteredData, applyCustomCalculations]);
+}, [filteredData, applyCustomCalculations]);
 
   const summaryData = React.useMemo(() => {
     return groupedForView.reduce(
@@ -887,6 +898,7 @@ React.useEffect(() => {
       dataToSave.forEach(row => Object.keys(row).forEach(k => allKeys.add(k)));
       vendasData.forEach(row => Object.keys(row).forEach(k => allKeys.add(k)));
       if (!allKeys.has("data") && dataToSave.some(r => (r as any).data)) allKeys.add("data");
+      allKeys.add('quantidadeTotal');
 
       const current = new Map(columns.map(c => [c.id, c]));
       allKeys.forEach(key => { if (!current.has(key)) current.set(key, { id: key, label: getLabel(key), isSortable: true }); });
@@ -997,7 +1009,7 @@ React.useEffect(() => {
             href="/"
             className="flex items-center gap-2 text-lg font-semibold md:text-base"
           >
-            <Logo className="size-8 text-primary" />
+            <Image src="/Design sem nome-4.png" width={32} height={32} alt="Logo" className="rounded-full" />
             <span className="text-xl font-semibold font-headline">Visão de Vendas</span>
           </Link>
           <Link
