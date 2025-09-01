@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import * as React from "react";
@@ -385,8 +384,6 @@ async function saveGlobalCalculations(calculations: CustomCalculation[]) {
         })
     );
     
-    console.log('Salvando cálculos no Firestore:', cleanCalcs);
-    
     await setDoc(docRef, { calculations: cleanCalcs }, { merge: true });
 }
 
@@ -672,6 +669,25 @@ React.useEffect(() => {
 const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): VendaDetalhada[] => {
     if (customCalculations.length === 0) return data;
   
+    const sanitizeOp = (raw: string) => {
+        const m = {
+          'x': '*', 'X': '*', '×': '*',
+          '÷': '/', ':': '/',
+        } as Record<string, string>;
+        return m[raw] || raw;
+    };
+
+    const sanitizeNumberLiteral = (raw: string) => {
+        let s = String(raw).trim();
+        const hasPercent = s.endsWith('%');
+        s = s.replace('%', '').replace(',', '.');
+        const n = Number(s);
+        return {
+            value: Number.isFinite(n) ? n : 0,
+            hadPercent: hasPercent,
+        };
+    };
+
     const getNumericField = (row: any, keyOrLabel: string): number => {
         let val = row.customData?.[keyOrLabel] ?? row[keyOrLabel];
         
@@ -699,35 +715,46 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
             
             try {
                 let formulaString = '';
-                
+
                 for (let i = 0; i < calc.formula.length; i++) {
-                    const item = calc.formula[i];
-                    
-                    if (item.type === 'column') {
-                        const value = getNumericField(flatRowForCalcs, item.value);
-                        formulaString += value.toString();
-                    } else if (item.type === 'number') {
-                        const numValue = parseFloat(String(item.value).replace(',', '.')) || 0;
-                        formulaString += numValue.toString();
-                    } else if (item.type === 'op') {
-                        formulaString += ` ${item.value} `;
+                  const item = calc.formula[i];
+
+                  if (item.type === 'column') {
+                    const value = getNumericField(flatRowForCalcs, item.value);
+                    const safe = Number.isFinite(value) ? String(value) : '0';
+                    formulaString += safe;
+                    continue;
+                  }
+
+                  if (item.type === 'number') {
+                    const parsed = sanitizeNumberLiteral(String(item.value));
+                    let numValue = parsed.value;
+                    if (parsed.hadPercent) numValue = numValue / 100;
+                    formulaString += String(numValue);
+                    continue;
+                  }
+
+                  if (item.type === 'op') {
+                    const op = sanitizeOp(String(item.value));
+                    if (!/^[\+\-\*\/\(\)]$/.test(op)) {
+                      continue;
                     }
+                    formulaString += ` ${op} `;
+                    continue;
+                  }
                 }
                 
-                formulaString = formulaString.trim();
+                formulaString = formulaString.replace(/\s+/g, ' ').trim();
+                formulaString = formulaString.replace(/[\+\-\*\/]\s*$/, '');
+
+                if (!/^[\d\.\s\+\-\*\/\(\)]+$/.test(formulaString)) {
+                  console.warn(`Fórmula com chars fora do permitido, sanitizada:`, formulaString);
+                }
                 
                 if (!formulaString) {
                     throw new Error("Fórmula vazia");
                 }
   
-                if (!/^[\d\s\.\+\-\*\/\(\)]+$/.test(formulaString)) {
-                    throw new Error(`Caracteres inválidos na fórmula: ${formulaString}`);
-                }
-                
-                if (/\d\s+\d/.test(formulaString)) {
-                    throw new Error(`Números consecutivos sem operador: ${formulaString}`);
-                }
-                
                 const result = new Function(`return ${formulaString}`)();
                 let numResult = typeof result === 'number' && Number.isFinite(result) ? result : 0;
                 
@@ -744,14 +771,8 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
                         : baseValue + numResult;
                     
                     newRow.customData[calc.interaction.targetColumn] = newValue;
-                    
                 }
             } catch (e: any) {
-                console.error(`\n❌ ERRO DETALHADO no cálculo ${calc.name}:`);
-                console.error('Mensagem:', e.message);
-                console.error('Fórmula que causou erro:', calc.formula);
-                console.error('Row data:', flatRowForCalcs);
-                console.error('Stack trace:', e.stack);
                 newRow.customData[calc.id] = 0;
             }
         });
@@ -943,7 +964,7 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
       allKeys.add('quantidadeTotal');
 
       const current = new Map(columns.map(c => [c.id, c]));
-      allKeys.forEach(key => { if (!current.has(key)) current.set(key, { id: key, label: getLabel(key), isSortable: true }); });
+      allKeys.forEach(key => { if (!current.has(key)) current.set(key, { id: key, label: getLabel(key, customCalculations), isSortable: true }); });
       const newColumns = Array.from(current.values());
 
       const newUploadedFileNames = [...new Set([...uploadedFileNames, ...stagedFileNames])];
@@ -1025,7 +1046,7 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
         const dataKeys = Object.keys(allData[0]);
         dataKeys.forEach(key => {
             if (!allColumns.some(c => c.id === key) && !systemColumnsToHide.includes(key)) {
-                allColumns.push({ id: key, label: getLabel(key), isSortable: true });
+                allColumns.push({ id: key, label: getLabel(key, customCalculations), isSortable: true });
             }
         });
     }
@@ -1038,25 +1059,9 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
 
   }, [columns, customCalculations, allData]);
 
-  React.useEffect(() => {
-    // Debug: Log das configurações carregadas
-    console.log('=== DEBUG CÁLCULOS CUSTOMIZADOS ===');
-    console.log('Custom calculations carregados:', customCalculations);
-    console.log('Merged columns:', mergedColumns);
-    console.log('All data sample:', allData.slice(0, 1));
-    console.log('Grouped for view sample:', groupedForView.slice(0, 1));
-    console.log('=====================================');
-}, [customCalculations, mergedColumns, allData, groupedForView]);
-
 React.useEffect(() => {
     if (customCalculations.length > 0) {
-        console.log('Cálculos customizados atualizados:', customCalculations);
         customCalculations.forEach(calc => {
-            console.log(`Cálculo ${calc.name}:`, {
-                formula: calc.formula,
-                interaction: calc.interaction,
-                isPercentage: calc.isPercentage
-            });
         });
     }
 }, [customCalculations]);
@@ -1311,3 +1316,5 @@ React.useEffect(() => {
     </>
   );
 }
+
+    

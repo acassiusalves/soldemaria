@@ -165,7 +165,6 @@ export function CalculationDialog({ isOpen, onClose, onSave, onDelete, marketpla
         }),
     };
 
-    console.log('Salvando cálculo:', newCalculation);
     await onSave(newCalculation);
     handleClear();
   };
@@ -394,3 +393,5 @@ export function CalculationDialog({ isOpen, onClose, onSave, onDelete, marketpla
     </Dialog>
   );
 }
+
+    
