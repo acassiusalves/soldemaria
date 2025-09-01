@@ -69,9 +69,7 @@ export function CalculationDialog({ isOpen, onClose, onSave, onDelete, marketpla
   const handleItemClick = (item: FormulaItem) => {
     const lastItem = formula[formula.length - 1];
     
-    // Validação mais rigorosa
     if (item.type === 'op' && item.value !== '(' && item.value !== ')') {
-        // Não permitir operador se não há itens ou se o último item já é um operador
         if (!lastItem || (lastItem.type === 'op' && lastItem.value !== ')')) {
             toast({ 
                 variant: 'destructive', 
@@ -83,7 +81,6 @@ export function CalculationDialog({ isOpen, onClose, onSave, onDelete, marketpla
     }
     
     if ((item.type === 'column' || item.type === 'number')) {
-        // Não permitir número/coluna após número/coluna (sem operador entre eles)
         if (lastItem && (lastItem.type === 'column' || lastItem.type === 'number') && lastItem.value !== '(') {
             toast({ 
                 variant: 'destructive', 
@@ -122,21 +119,18 @@ export function CalculationDialog({ isOpen, onClose, onSave, onDelete, marketpla
         return;
     }
     
-    // Validação mais completa da fórmula
     const lastItem = formula[formula.length - 1];
     if (lastItem.type === 'op' && lastItem.value !== ')') {
         toast({ variant: 'destructive', title: 'Fórmula Incompleta', description: 'A fórmula não pode terminar com um operador.' });
         return;
     }
     
-    // Validar se há pelo menos um valor na fórmula
     const hasValues = formula.some(item => item.type === 'column' || item.type === 'number');
     if (!hasValues) {
         toast({ variant: 'destructive', title: 'Fórmula Inválida', description: 'A fórmula deve conter pelo menos uma coluna ou número.' });
         return;
     }
     
-    // Validar balanceamento de parênteses
     let parenthesesCount = 0;
     for (const item of formula) {
         if (item.value === '(') parenthesesCount++;

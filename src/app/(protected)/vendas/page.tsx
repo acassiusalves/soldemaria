@@ -671,14 +671,14 @@ React.useEffect(() => {
 
 const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): VendaDetalhada[] => {
     if (customCalculations.length === 0) return data;
-
-    const getNumericField = (row: any, keyOrLabel: string, currentCustomData: Record<string, number>): number => {
-        let val = currentCustomData[keyOrLabel] ?? row[keyOrLabel];
+  
+    const getNumericField = (row: any, keyOrLabel: string): number => {
+        let val = row.customData?.[keyOrLabel] ?? row[keyOrLabel];
         
         if (val === undefined || val === null) {
             const column = mergedColumns.find(c => c.label === keyOrLabel || c.id === keyOrLabel);
             if (column) {
-                val = currentCustomData[column.id] ?? row[column.id];
+                val = row.customData?.[column.id] ?? row[column.id];
             }
         }
         
@@ -692,9 +692,11 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
     };
   
     return data.map(row => {
-        const newCustomData: Record<string, number> = { ...(row.customData || {}) };
+        const newRow = { ...row, customData: { ...(row.customData || {}) } };
   
         customCalculations.forEach(calc => {
+            const flatRowForCalcs = { ...row, ...newRow.customData };
+            
             try {
                 let formulaString = '';
                 
@@ -702,7 +704,7 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
                     const item = calc.formula[i];
                     
                     if (item.type === 'column') {
-                        const value = getNumericField(row, item.value, newCustomData);
+                        const value = getNumericField(flatRowForCalcs, item.value);
                         formulaString += value.toString();
                     } else if (item.type === 'number') {
                         const numValue = parseFloat(String(item.value).replace(',', '.')) || 0;
@@ -712,13 +714,13 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
                     }
                 }
                 
-                formulaString = formulaString.trim().replace(/\s+/g, ' ');
+                formulaString = formulaString.trim();
                 
                 if (!formulaString) {
                     throw new Error("Fórmula vazia");
                 }
   
-                if (/[^0-9\s\.\+\-\*\/\(\)]/.test(formulaString)) {
+                if (!/^[\d\s\.\+\-\*\/\(\)]+$/.test(formulaString)) {
                     throw new Error(`Caracteres inválidos na fórmula: ${formulaString}`);
                 }
                 
@@ -733,30 +735,28 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
                     numResult = numResult / 100;
                 }
   
-                newCustomData[calc.id] = numResult;
-  
+                newRow.customData[calc.id] = numResult;
+                
                 if (calc.interaction?.targetColumn) {
-                    const baseValue = getNumericField(row, calc.interaction.targetColumn, newCustomData);
-                    
-                    const interactionValue = newCustomData[calc.id];
-
+                    const baseValue = getNumericField({...flatRowForCalcs, ...newRow.customData}, calc.interaction.targetColumn);
                     const newValue = calc.interaction.operator === '-' 
-                        ? baseValue - interactionValue 
-                        : baseValue + interactionValue;
+                        ? baseValue - numResult 
+                        : baseValue + numResult;
                     
-                    newCustomData[calc.interaction.targetColumn] = newValue;
+                    newRow.customData[calc.interaction.targetColumn] = newValue;
+                    
                 }
             } catch (e: any) {
                 console.error(`\n❌ ERRO DETALHADO no cálculo ${calc.name}:`);
                 console.error('Mensagem:', e.message);
                 console.error('Fórmula que causou erro:', calc.formula);
-                console.error('Row data:', row);
+                console.error('Row data:', flatRowForCalcs);
                 console.error('Stack trace:', e.stack);
-                newCustomData[calc.id] = 0;
+                newRow.customData[calc.id] = 0;
             }
         });
   
-        return { ...row, customData: newCustomData };
+        return newRow;
     });
 }, [customCalculations, mergedColumns]);
 
@@ -1039,15 +1039,16 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
   }, [columns, customCalculations, allData]);
 
   React.useEffect(() => {
+    // Debug: Log das configurações carregadas
     console.log('=== DEBUG CÁLCULOS CUSTOMIZADOS ===');
     console.log('Custom calculations carregados:', customCalculations);
     console.log('Merged columns:', mergedColumns);
     console.log('All data sample:', allData.slice(0, 1));
     console.log('Grouped for view sample:', groupedForView.slice(0, 1));
     console.log('=====================================');
-  }, [customCalculations, mergedColumns, allData, groupedForView]);
+}, [customCalculations, mergedColumns, allData, groupedForView]);
 
-  React.useEffect(() => {
+React.useEffect(() => {
     if (customCalculations.length > 0) {
         console.log('Cálculos customizados atualizados:', customCalculations);
         customCalculations.forEach(calc => {
@@ -1058,7 +1059,7 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
             });
         });
     }
-  }, [customCalculations]);
+}, [customCalculations]);
 
   return (
     <>
@@ -1310,5 +1311,3 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
     </>
   );
 }
-
-    
