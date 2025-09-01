@@ -171,6 +171,7 @@ const headerMappingNormalized: Record<string, string> = {
   "item": "item",
   "descricao": "descricao",
   "qtd": "quantidade",
+  "quantidade movimentada": "quantidade",
   "custo unitario": "custoUnitario",
   "valor unitario": "valorUnitario",
   "valor final": "final",
@@ -1282,4 +1283,5 @@ React.useEffect(() => {
     </>
   );
 }
+
 
