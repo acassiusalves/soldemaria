@@ -709,12 +709,21 @@ export default function DetailedSalesHistoryTable({
   const visibleColumns = useMemo(() => {
     const columnMap = new Map(mainColumns.map(c => [c.id, c]));
     
-    const order = (columnOrder && columnOrder.length > 0) ? columnOrder : mainColumns.map(c => c.id);
-
-    return order
-        .map(id => columnMap.get(id))
-        .filter(Boolean)
-        .filter(c => (isManaged ? columnVisibility[c!.id] !== false : true)) as ColumnDef[];
+    // baseOrder = o que veio salvo OU todas as colunas atuais
+    const baseOrder = (columnOrder && columnOrder.length > 0)
+      ? columnOrder
+      : mainColumns.map(c => c.id);
+  
+    // fullOrder = baseOrder + quaisquer colunas novas que não estavam salvas
+    const fullOrder = [
+      ...baseOrder,
+      ...mainColumns.map(c => c.id).filter(id => !baseOrder.includes(id)),
+    ];
+  
+    return fullOrder
+      .map(id => columnMap.get(id))
+      .filter(Boolean)
+      .filter(c => (isManaged ? columnVisibility[c!.id] !== false : true)) as ColumnDef[];
   }, [mainColumns, columnVisibility, columnOrder, isManaged]);
 
 
@@ -1019,3 +1028,4 @@ export default function DetailedSalesHistoryTable({
     </>
   );
 }
+

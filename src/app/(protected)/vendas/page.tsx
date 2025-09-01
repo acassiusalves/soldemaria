@@ -617,7 +617,7 @@ const syncExistingCustomColumns = React.useCallback(async () => {
     
     if (needsOrderUpdate) {
         setColumnOrder(currentOrder);
-        await saveUserPreference(user.uid, 'vendas_columns_order', newOrder);
+        await saveUserPreference(user.uid, 'vendas_columns_order', currentOrder);
     }
     
 }, [customCalculations, columnVisibility, columnOrder]);
@@ -628,6 +628,60 @@ React.useEffect(() => {
     }
 }, [isLoadingPreferences, customCalculations, syncExistingCustomColumns]);
 
+const mergedColumns = React.useMemo(() => {
+    const map = new Map<string, ColumnDef>();
+    
+    // Adicionar colunas normais
+    columns.forEach(c => {
+        map.set(c.id, c);
+    });
+    
+    // Adicionar colunas customizadas com nomes corretos
+    customCalculations.forEach(c => {
+        const columnDef = { 
+            id: c.id, 
+            label: c.name, // ← USAR c.name diretamente, não getLabel
+            isSortable: true 
+        };
+        map.set(c.id, columnDef);
+    });
+    
+    const resultado = Array.from(map.values());
+    
+    return resultado;
+}, [columns, customCalculations]);
+
+React.useEffect(() => {
+  if (isLoadingPreferences) return;
+  if (!columns || columns.length === 0) return;
+
+  const user = auth.currentUser;
+  const allIds = mergedColumns.map(c => c.id); // use mergedColumns para incluir custom também
+
+  // 1) Completar a ordem com colunas novas
+  const orderNow = Array.isArray(columnOrder) ? [...columnOrder] : [];
+  const missingInOrder = allIds.filter(id => !orderNow.includes(id));
+  const nextOrder = missingInOrder.length ? [...orderNow, ...missingInOrder] : orderNow;
+
+  // 2) Garantir visibilidade true para colunas sem definição
+  const visNow = { ...(columnVisibility || {}) };
+  let visChanged = false;
+  for (const id of allIds) {
+    if (visNow[id] === undefined) { visNow[id] = true; visChanged = true; }
+  }
+
+  // 3) Aplicar/salvar se mudou
+  const promises: Promise<any>[] = [];
+  if (missingInOrder.length) {
+    setColumnOrder(nextOrder);
+    if (user) promises.push(saveUserPreference(user.uid, 'vendas_columns_order', nextOrder));
+  }
+  if (visChanged) {
+    setColumnVisibility(visNow);
+    if (user) promises.push(saveUserPreference(user.uid, 'vendas_columns_visibility', visNow));
+  }
+  if (promises.length) { Promise.all(promises).catch(console.error); }
+}, [isLoadingPreferences, columns, mergedColumns]);
 
   const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): VendaDetalhada[] => {
     if (customCalculations.length === 0) return data;
@@ -978,29 +1032,6 @@ React.useEffect(() => {
     return uniqueCols.map(c => ({ key: c.id, label: c.label }));
   }, [columns, customCalculations]);
 
-  const mergedColumns = React.useMemo(() => {
-    const map = new Map<string, ColumnDef>();
-    
-    // Adicionar colunas normais
-    columns.forEach(c => {
-        map.set(c.id, c);
-    });
-    
-    // Adicionar colunas customizadas com nomes corretos
-    customCalculations.forEach(c => {
-        const columnDef = { 
-            id: c.id, 
-            label: c.name, // ← USAR c.name diretamente, não getLabel
-            isSortable: true 
-        };
-        map.set(c.id, columnDef);
-    });
-    
-    const resultado = Array.from(map.values());
-    
-    return resultado;
-}, [columns, customCalculations]);
-
   return (
     <>
     <div className="flex min-h-screen w-full flex-col">
@@ -1251,3 +1282,4 @@ React.useEffect(() => {
     </>
   );
 }
+
