@@ -45,6 +45,7 @@ import {
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { auth, db } from "@/lib/firebase";
+import Image from "next/image";
 
 
 import { cn, stripUndefinedDeep } from "@/lib/utils";
