@@ -639,9 +639,7 @@ React.useEffect(() => {
 const mergedColumns = React.useMemo(() => {
     const map = new Map<string, ColumnDef>();
     
-    columns.forEach(c => {
-        map.set(c.id, c);
-    });
+    columns.forEach(c => map.set(c.id, c));
     
     customCalculations.forEach(c => {
         const columnDef = { 
@@ -688,33 +686,33 @@ React.useEffect(() => {
 
 const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): VendaDetalhada[] => {
     if (customCalculations.length === 0) return data;
-
-    const sanitizeOp = (raw: string) => {
-        const m = {
-            'x': '*', 'X': '*', '×': '*',
-            '÷': '/', ':': '/',
-        } as Record<string, string>;
-        return m[raw] || raw;
-    };
-
-    const sanitizeNumberLiteral = (raw: string) => {
-        let s = String(raw).trim();
-        const hasPercent = s.endsWith('%');
-        s = s.replace('%', '').replace(',', '.');
-        const n = Number(s);
-        return {
-            value: Number.isFinite(n) ? n : 0,
-            hadPercent: hasPercent,
-        };
-    };
   
+    const sanitizeOp = (raw: string) => {
+      const m = {
+        'x': '*', 'X': '*', '×': '*',
+        '÷': '/', ':': '/',
+      } as Record<string, string>;
+      return m[raw] || raw;
+    };
+    
+    const sanitizeNumberLiteral = (raw: string) => {
+      let s = String(raw).trim();
+      const hasPercent = s.endsWith('%');
+      s = s.replace('%', '').replace(',', '.');
+      const n = Number(s);
+      return {
+        value: Number.isFinite(n) ? n : 0,
+        hadPercent: hasPercent,
+      };
+    };
+
     const getNumericField = (row: any, keyOrLabel: string): number => {
-        let val = newRow.customData?.[keyOrLabel] ?? row[keyOrLabel];
+        let val = row.customData?.[keyOrLabel] ?? row[keyOrLabel];
         
         if (val === undefined || val === null) {
             const column = mergedColumns.find(c => c.label === keyOrLabel || c.id === keyOrLabel);
             if (column) {
-                val = newRow.customData?.[column.id] ?? row[column.id];
+                val = row.customData?.[column.id] ?? row[column.id];
             }
         }
         
@@ -768,7 +766,12 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
                 formulaString = formulaString.replace(/[\+\-\*\/]\s*$/, '');
 
                 if (!/^[\d\.\s\+\-\*\/\(\)]+$/.test(formulaString)) {
-                    console.warn(`Fórmula com chars fora do permitido, sanitizada:`, formulaString);
+                  console.warn(`Fórmula com chars fora do permitido, sanitizada:`, formulaString);
+                }
+                
+                if (!formulaString) {
+                    newRow.customData[calc.id] = 0;
+                    return;
                 }
   
                 const result = new Function(`return ${formulaString}`)();
@@ -781,7 +784,7 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
                 newRow.customData[calc.id] = numResult;
                 
                 if (calc.interaction?.targetColumn) {
-                    const baseValue = getNumericField({...flatRowForCalcs, ...newRow.customData}, calc.interaction.targetColumn);
+                    const baseValue = getNumericField(flatRowForCalcs, calc.interaction.targetColumn);
                     const newValue = calc.interaction.operator === '-' 
                         ? baseValue - numResult 
                         : baseValue + numResult;
@@ -1352,3 +1355,5 @@ React.useEffect(() => {
     </>
   );
 }
+
+    
