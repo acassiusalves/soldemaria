@@ -155,7 +155,17 @@ const columnLabels: Record<string, string> = {
   valor: 'Valor',
   origemCliente: 'Origem Cliente',
 };
-const getLabel = (key: string) => columnLabels[key] || key;
+const getLabel = (key: string, customCalculations: CustomCalculation[] = []) => {
+    if (key.startsWith('custom_')) {
+        const calc = customCalculations.find(c => c.id === key);
+        if (calc?.name) {
+            return calc.name;
+        }
+    }
+    
+    return columnLabels[key] || key;
+};
+
 
 /* ========== mapeamento por cabeçalho conhecido ========== */
 const headerMappingNormalized: Record<string, string> = {
@@ -668,11 +678,11 @@ React.useEffect(() => {
 
 const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): VendaDetalhada[] => {
     if (customCalculations.length === 0) return data;
-  
+
     const sanitizeOp = (raw: string) => {
         const m = {
-          'x': '*', 'X': '*', '×': '*',
-          '÷': '/', ':': '/',
+            'x': '*', 'X': '*', '×': '*',
+            '÷': '/', ':': '/',
         } as Record<string, string>;
         return m[raw] || raw;
     };
@@ -687,7 +697,7 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
             hadPercent: hasPercent,
         };
     };
-
+  
     const getNumericField = (row: any, keyOrLabel: string): number => {
         let val = row.customData?.[keyOrLabel] ?? row[keyOrLabel];
         
@@ -717,38 +727,38 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
                 let formulaString = '';
 
                 for (let i = 0; i < calc.formula.length; i++) {
-                  const item = calc.formula[i];
+                    const item = calc.formula[i];
 
-                  if (item.type === 'column') {
-                    const value = getNumericField(flatRowForCalcs, item.value);
-                    const safe = Number.isFinite(value) ? String(value) : '0';
-                    formulaString += safe;
-                    continue;
-                  }
-
-                  if (item.type === 'number') {
-                    const parsed = sanitizeNumberLiteral(String(item.value));
-                    let numValue = parsed.value;
-                    if (parsed.hadPercent) numValue = numValue / 100;
-                    formulaString += String(numValue);
-                    continue;
-                  }
-
-                  if (item.type === 'op') {
-                    const op = sanitizeOp(String(item.value));
-                    if (!/^[\+\-\*\/\(\)]$/.test(op)) {
-                      continue;
+                    if (item.type === 'column') {
+                        const value = getNumericField(flatRowForCalcs, item.value);
+                        const safe = Number.isFinite(value) ? String(value) : '0';
+                        formulaString += safe;
+                        continue;
                     }
-                    formulaString += ` ${op} `;
-                    continue;
-                  }
+
+                    if (item.type === 'number') {
+                        const parsed = sanitizeNumberLiteral(String(item.value));
+                        let numValue = parsed.value;
+                        if (parsed.hadPercent) numValue = numValue / 100;
+                        formulaString += String(numValue);
+                        continue;
+                    }
+
+                    if (item.type === 'op') {
+                        const op = sanitizeOp(String(item.value));
+                        if (!/^[\+\-\*\/\(\)]$/.test(op)) {
+                            continue;
+                        }
+                        formulaString += ` ${op} `;
+                        continue;
+                    }
                 }
                 
                 formulaString = formulaString.replace(/\s+/g, ' ').trim();
                 formulaString = formulaString.replace(/[\+\-\*\/]\s*$/, '');
 
                 if (!/^[\d\.\s\+\-\*\/\(\)]+$/.test(formulaString)) {
-                  console.warn(`Fórmula com chars fora do permitido, sanitizada:`, formulaString);
+                    console.warn(`Fórmula com chars fora do permitido, sanitizada:`, formulaString);
                 }
                 
                 if (!formulaString) {
@@ -773,6 +783,11 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
                     newRow.customData[calc.interaction.targetColumn] = newValue;
                 }
             } catch (e: any) {
+                console.error(`\n❌ ERRO DETALHADO no cálculo ${calc.name}:`);
+                console.error('Mensagem:', e.message);
+                console.error('Fórmula que causou erro:', calc.formula);
+                console.error('Row data:', flatRowForCalcs);
+                console.error('Stack trace:', e.stack);
                 newRow.customData[calc.id] = 0;
             }
         });
@@ -1061,10 +1076,25 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
 
 React.useEffect(() => {
     if (customCalculations.length > 0) {
+        console.log('Cálculos customizados atualizados:', customCalculations);
         customCalculations.forEach(calc => {
+            console.log(`Cálculo ${calc.name}:`, {
+                formula: calc.formula,
+                interaction: calc.interaction,
+                isPercentage: calc.isPercentage
+            });
         });
     }
 }, [customCalculations]);
+
+React.useEffect(() => {
+    console.log('=== DEBUG CÁLCULOS CUSTOMIZADOS ===');
+    console.log('Custom calculations carregados:', customCalculations);
+    console.log('Merged columns:', mergedColumns);
+    console.log('All data sample:', allData.slice(0, 1));
+    console.log('Grouped for view sample:', groupedForView.slice(0, 1));
+    console.log('=====================================');
+}, [customCalculations, mergedColumns, allData, groupedForView]);
 
   return (
     <>
@@ -1316,5 +1346,3 @@ React.useEffect(() => {
     </>
   );
 }
-
-    
