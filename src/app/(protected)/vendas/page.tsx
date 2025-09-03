@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import * as React from "react";
@@ -708,14 +709,14 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
 
     const getNumericField = (row: any, keyOrLabel: string): number => {
         let val = row.customData?.[keyOrLabel] ?? row[keyOrLabel];
-        
+
         if (val === undefined || val === null) {
             const column = mergedColumns.find(c => c.label === keyOrLabel || c.id === keyOrLabel);
             if (column) {
                 val = row.customData?.[column.id] ?? row[column.id];
             }
         }
-        
+
         if (typeof val === 'number') return val;
         if (typeof val === 'string') {
             const cleaned = val.replace(/[^\d,.-]/g, '').replace(',', '.');
@@ -724,28 +725,27 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
         }
         return 0;
     };
-  
+
     return data.map(row => {
         const newRow = { ...row, customData: { ...(row.customData || {}) } };
-  
+
         customCalculations.forEach(calc => {
             const flatRowForCalcs = { ...row, ...newRow.customData };
-            
+
             try {
                 let formulaString = '';
-
                 for (let i = 0; i < calc.formula.length; i++) {
                     const item = calc.formula[i];
 
                     if (item.type === 'column') {
                         const value = getNumericField(flatRowForCalcs, item.value);
                         const safe = Number.isFinite(value) ? String(value) : '0';
-                        formulaString += safe;
+                        formulaString += ` ${safe} `;
                     } else if (item.type === 'number') {
                         const parsed = sanitizeNumberLiteral(String(item.value));
                         let numValue = parsed.value;
                         if (parsed.hadPercent) numValue = numValue / 100;
-                        formulaString += String(numValue);
+                        formulaString += ` ${String(numValue)} `;
                     } else if (item.type === 'op') {
                         const op = sanitizeOp(String(item.value));
                         if (!/^[\+\-\*\/\(\)]$/.test(op)) {
@@ -758,29 +758,29 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
                 formulaString = formulaString.replace(/\s+/g, ' ').trim();
                 formulaString = formulaString.replace(/[\+\-\*\/]\s*$/, '');
                 
-                if (!formulaString) {
-                    throw new Error("Fórmula vazia");
-                }
-                
                 if (!/^[\d\.\s\+\-\*\/\(\)]+$/.test(formulaString)) {
                     console.warn(`Fórmula com chars fora do permitido, sanitizada:`, formulaString);
                 }
-                
+
+                if (!formulaString) {
+                    throw new Error("Fórmula vazia");
+                }
+
                 const result = new Function(`return ${formulaString}`)();
                 let numResult = typeof result === 'number' && Number.isFinite(result) ? result : 0;
                 
                 if (calc.isPercentage) {
                     numResult = numResult / 100;
                 }
-  
+
                 newRow.customData[calc.id] = numResult;
                 
                 if (calc.interaction?.targetColumn) {
-                    const baseValue = getNumericField(flatRowForCalcs, calc.interaction.targetColumn);
-                    const newValue = calc.interaction.operator === '-' 
-                        ? baseValue - numResult 
+                    const baseValue = getNumericField({...flatRowForCalcs, ...newRow.customData}, calc.interaction.targetColumn);
+                    const newValue = calc.interaction.operator === '-'
+                        ? baseValue - numResult
                         : baseValue + numResult;
-                    
+
                     newRow.customData[calc.interaction.targetColumn] = newValue;
                 }
             } catch (e: any) {
@@ -792,32 +792,10 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
                 newRow.customData[calc.id] = 0;
             }
         });
-  
+
         return newRow;
     });
 }, [customCalculations, mergedColumns]);
-
-React.useEffect(() => {
-    console.log('=== DEBUG CÁLCULOS CUSTOMIZADOS ===');
-    console.log('Custom calculations carregados:', customCalculations);
-    console.log('Merged columns:', mergedColumns);
-    console.log('All data sample:', allData.slice(0, 1));
-    console.log('Grouped for view sample:', groupedForView.slice(0, 1));
-    console.log('=====================================');
-}, [customCalculations, mergedColumns, allData, groupedForView]);
-
-React.useEffect(() => {
-    if (customCalculations.length > 0) {
-        console.log('Cálculos customizados atualizados:', customCalculations);
-        customCalculations.forEach(calc => {
-            console.log(`Cálculo ${calc.name}:`, {
-                formula: calc.formula,
-                interaction: calc.interaction,
-                isPercentage: calc.isPercentage
-            });
-        });
-    }
-}, [customCalculations]);
 
   /* ======= Mescla banco + staged (staged tem prioridade) ======= */
   const allData = React.useMemo(() => {
@@ -912,6 +890,28 @@ React.useEffect(() => {
     );
   }, [groupedForView]);
 
+
+React.useEffect(() => {
+    console.log('=== DEBUG CÁLCULOS CUSTOMIZADOS ===');
+    console.log('Custom calculations carregados:', customCalculations);
+    console.log('Merged columns:', mergedColumns);
+    console.log('All data sample:', allData.slice(0, 1));
+    console.log('Grouped for view sample:', groupedForView.slice(0, 1));
+    console.log('=====================================');
+}, [customCalculations, mergedColumns, allData, groupedForView]);
+
+React.useEffect(() => {
+    if (customCalculations.length > 0) {
+        console.log('Cálculos customizados atualizados:', customCalculations);
+        customCalculations.forEach(calc => {
+            console.log(`Cálculo ${calc.name}:`, {
+                formula: calc.formula,
+                interaction: calc.interaction,
+                isPercentage: calc.isPercentage
+            });
+        });
+    }
+}, [customCalculations]);
 
   /* ======= UPLOAD / PROCESSAMENTO ======= */
   const handleDataUpload = async (datasets: IncomingDataset[]) => {
@@ -1096,28 +1096,6 @@ React.useEffect(() => {
         .map(c => ({ key: c.id, label: c.label || getLabel(c.id) }));
 
   }, [columns, customCalculations, allData]);
-
-React.useEffect(() => {
-    if (customCalculations.length > 0) {
-        console.log('Cálculos customizados atualizados:', customCalculations);
-        customCalculations.forEach(calc => {
-            console.log(`Cálculo ${calc.name}:`, {
-                formula: calc.formula,
-                interaction: calc.interaction,
-                isPercentage: calc.isPercentage
-            });
-        });
-    }
-}, [customCalculations]);
-
-React.useEffect(() => {
-    console.log('=== DEBUG CÁLCULOS CUSTOMIZADOS ===');
-    console.log('Custom calculations carregados:', customCalculations);
-    console.log('Merged columns:', mergedColumns);
-    console.log('All data sample:', allData.slice(0, 1));
-    console.log('Grouped for view sample:', groupedForView.slice(0, 1));
-    console.log('=====================================');
-}, [customCalculations, mergedColumns, allData, groupedForView]);
 
   return (
     <>
