@@ -467,9 +467,19 @@ export default function VendasPage() {
       if (docSnap.exists()) {
         const data = docSnap.data();
         let fetchedColumns = data.columns || [];
-        if (!fetchedColumns.some((c: ColumnDef) => c.id === 'quantidadeTotal')) {
-            fetchedColumns.push({ id: 'quantidadeTotal', label: 'Qtd. Total', isSortable: true });
-        }
+        
+        const requiredCols = [
+            { id: 'quantidadeTotal', label: 'Qtd. Total', isSortable: true },
+            { id: 'custoUnitario', label: 'Custo Unitário', isSortable: true },
+            { id: 'valorDescontos', label: 'Valor Descontos', isSortable: true },
+        ];
+        
+        requiredCols.forEach(reqCol => {
+            if (!fetchedColumns.some((c: ColumnDef) => c.id === reqCol.id)) {
+                fetchedColumns.push(reqCol);
+            }
+        });
+
         setColumns(fetchedColumns);
         setUploadedFileNames(data.uploadedFileNames || []);
       }
@@ -699,12 +709,12 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
     };
   
     const getNumericField = (row: any, keyOrLabel: string): number => {
-        let val = row.customData?.[keyOrLabel] ?? row[keyOrLabel];
+        let val = newRow.customData?.[keyOrLabel] ?? row[keyOrLabel];
         
         if (val === undefined || val === null) {
             const column = mergedColumns.find(c => c.label === keyOrLabel || c.id === keyOrLabel);
             if (column) {
-                val = row.customData?.[column.id] ?? row[column.id];
+                val = newRow.customData?.[column.id] ?? row[column.id];
             }
         }
         
@@ -759,10 +769,6 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
 
                 if (!/^[\d\.\s\+\-\*\/\(\)]+$/.test(formulaString)) {
                     console.warn(`Fórmula com chars fora do permitido, sanitizada:`, formulaString);
-                }
-                
-                if (!formulaString) {
-                    throw new Error("Fórmula vazia");
                 }
   
                 const result = new Function(`return ${formulaString}`)();
