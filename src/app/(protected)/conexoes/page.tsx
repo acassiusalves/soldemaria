@@ -138,6 +138,9 @@ export default function ConexoesPage() {
               <DropdownMenuItem asChild>
                 <Link href="/taxas/custos">Custos sobre Vendas</Link>
               </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link href="/taxas/custos-embalagem">Custos Embalagem</Link>
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
           <Link

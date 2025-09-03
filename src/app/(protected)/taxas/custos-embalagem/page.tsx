@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import * as React from "react";
@@ -70,7 +69,7 @@ import { SupportDataDialog } from "@/components/support-data-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Progress } from "@/components/ui/progress";
 import { Logo } from "@/components/icons";
-import { organizeCosts } from "@/ai/flows/organize-costs";
+import { organizeCosts } from "@/ai/flows/organize-costs"; // Reutilizando a organização por enquanto
 
 /* ========== helpers de normalização ========== */
 export const normalizeHeader = (s: string) =>
@@ -91,13 +90,11 @@ const cleanNumericValue = (value: any): number | string => {
   if (typeof value === "number") return value;
   if (typeof value !== "string") return value;
 
-  let s = value.replace(/\u00A0/g, " ").trim(); // tira NBSP
+  let s = value.replace(/\u00A0/g, " ").trim();
   if (!s) return s;
 
-  // não tentar converter datas
   if (isDateLike(s)) return s;
 
-  // remove símbolos de moeda e espaços
   s = s.replace(/\s/g, "").replace(/R\$/i, "");
 
   const hasComma = s.includes(",");
@@ -106,19 +103,15 @@ const cleanNumericValue = (value: any): number | string => {
   if (hasComma && hasDot) {
     const lastDot = s.lastIndexOf('.');
     const lastComma = s.lastIndexOf(',');
-    // 1.234,56 (pt-BR) -> 1234.56
     if (lastComma > lastDot) {
       s = s.replace(/\./g, "").replace(",", ".");
-    } else { // 1,234.56 (en-US) -> 1234.56
+    } else { 
       s = s.replace(/,/g, "");
     }
   } else if (hasComma) {
-    // 1234,56 -> 1234.56
     s = s.replace(",", ".");
   }
-  // Se tiver só ponto (1234.56), já está ok
-  // Se não tiver nem ponto nem vírgula, já está ok
-
+  
   const num = Number(s);
   return Number.isFinite(num) && /[0-9]/.test(s) ? num : value;
 };
@@ -131,42 +124,11 @@ export const resolveSystemKey = (normalized: string): string => {
 /* ========== normalizador de código (chave) ========== */
 const normCode = (v: any) => {
   let s = String(v ?? "").replace(/\u00A0/g, " ").trim();
-
-  // 357528.0 -> 357528
   if (/^\d+(?:\.0+)?$/.test(s)) s = s.replace(/\.0+$/, "");
-
-  // remove tudo que não é dígito (ponto, traço, espaço, etc.)
   s = s.replace(/[^\d]/g, "");
-  // remove zeros à esquerda
   s = s.replace(/^0+/, "");
   return s;
 };
-
-const isEmptyCell = (v: any) => {
-  if (v === null || v === undefined) return true;
-  if (typeof v === "string") {
-    const s = v.replace(/\u00A0/g, " ").trim().toLowerCase();
-    return s === "" || s === "n/a" || s === "na" || s === "-" || s === "--";
-  }
-  if (typeof v === "number") return Number.isNaN(v);
-  return false;
-};
-
-/* ========== reconhecer linhas de detalhe ========== */
-const ITEM_KEYS = [
-  "item","descricao","quantidade","custoUnitario","valorUnitario",
-  "valorCredito","valorDescontos"
-];
-// campos vindos de planilhas de apoio (recebimentos)
-const SUPPORT_DETAIL_KEYS = [
-  "valor_da_parcela","modo_de_pagamento","instituicao_financeira",
-  "bandeira1","bandeira2","parcelas1","parcelas2",
-  "valorParcela1","valorParcela2","taxaCartao1","taxaCartao2"
-];
-
-const isDetailRow = (row: Record<string, any>) =>
-  ITEM_KEYS.some(k => !isEmptyCell(row[k])) ||
-  SUPPORT_DETAIL_KEYS.some(k => !isEmptyCell(row[k]));
 
 /* ========== mapear linha bruta -> chaves do sistema ========== */
 const mapRowToSystem = (row: Record<string, any>) => {
@@ -176,70 +138,33 @@ const mapRowToSystem = (row: Record<string, any>) => {
     const sysKey = resolveSystemKey(normalized);
     const val = cleanNumericValue(row[rawHeader]);
     if (sysKey) out[sysKey] = val;
-    else out[normalized.replace(/\s+/g, "_")] = val; // fallback snake_case
+    else out[normalized.replace(/\s+/g, "_")] = val;
   }
   if (out.codigo != null) out.codigo = normCode(out.codigo);
   return out;
 };
 
-/* ========== agrega valores para compor o cabeçalho do pedido ========== */
-const mergeForHeader = (base: any, row: any) => {
-  const out = { ...base };
-
-  // preenche primeiro valor não-vazio para campos do header
-  const headerFields = [
-    "data","codigo","tipo","nomeCliente","vendedor","cidade",
-    "origem","logistica","final","custoFrete","mov_estoque"
-  ];
-  for (const k of headerFields) {
-    if (isEmptyCell(out[k]) && !isEmptyCell(row[k])) out[k] = row[k];
-  }
-
-  // totaliza parcelas e guarda lista (para o painel no expandido)
-  if (!isEmptyCell(row.valor_da_parcela)) {
-    const v = Number(row.valor_da_parcela) || 0;
-    out.total_valor_parcelas = (out.total_valor_parcelas || 0) + v;
-    (out.parcelas = out.parcelas || []).push({
-      valor: v,
-      modo: row.modo_de_pagamento ?? row.modoPagamento2,
-      bandeira: row.bandeira1 ?? row.bandeira2,
-      instituicao: row.instituicao_financeira,
-    });
-  }
-
-  return out;
-};
-
-const MotionCard = motion(Card);
 
 type IncomingDataset = { rows: any[]; fileName: string; assocKey?: string };
 const API_KEY_STORAGE_KEY = "gemini_api_key";
 
-// Colunas fixas para a tela de Custos
+// Colunas fixas para a tela de Custos de Embalagem
 const fixedColumns: ColumnDef[] = [
     { id: "codigo", label: "Código", isSortable: true },
-    { id: "modo_de_pagamento", label: "Modo de Pagamento", isSortable: true },
-    { id: "tipo_pagamento", label: "Tipo de Pagamento", isSortable: true },
-    { id: "parcela", label: "Parcela", isSortable: true },
+    { id: "descricao", label: "Descrição", isSortable: true },
+    { id: "fornecedor", label: "Fornecedor", isSortable: true },
     { id: "valor", label: "Valor", isSortable: true, className: "text-right" },
-    { id: "instituicao_financeira", label: "Instituição Financeira", isSortable: true },
 ];
 
 /* ========== mapeamento por cabeçalho conhecido ========== */
 const headerMappingNormalized: Record<string, string> = {
   "codigo": "codigo",
-  "modo de pagamento": "modo_de_pagamento",
+  "descricao": "descricao",
+  "fornecedor": "fornecedor",
   "valor": "valor",
-  "instituicao financeira": "instituicao_financeira",
-  "tipo de pagamento": "tipo_pagamento",
-  "parcelas": "parcela",
-  "mov_estoque": "codigo",
-  "valor_da_parcela": "valor",
-  "tipo": "tipo_pagamento",
-  "parcelas1": "parcela"
 };
 
-export default function CustosVendasPage() {
+export default function CustosEmbalagemPage() {
   const [custosData, setCustosData] = React.useState<VendaDetalhada[]>([]);
   const [stagedData, setStagedData] = React.useState<VendaDetalhada[]>([]);
   const [stagedFileNames, setStagedFileNames] = React.useState<string[]>([]);
@@ -260,7 +185,7 @@ export default function CustosVendasPage() {
 
   /* ======= Realtime listeners ======= */
   React.useEffect(() => {
-    const qy = query(collection(db, "custos"));
+    const qy = query(collection(db, "custos-embalagem"));
     const unsub = onSnapshot(qy, (snapshot) => {
       if (snapshot.metadata.hasPendingWrites) return;
       let newData: VendaDetalhada[] = [];
@@ -286,7 +211,7 @@ export default function CustosVendasPage() {
       });
     });
 
-    const metaUnsub = onSnapshot(doc(db, "metadata", "custos"), (docSnap) => {
+    const metaUnsub = onSnapshot(doc(db, "metadata", "custos-embalagem"), (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
         setUploadedFileNames(data.uploadedFileNames || []);
@@ -306,15 +231,6 @@ export default function CustosVendasPage() {
     return Array.from(map.values());
   }, [custosData, stagedData]);
 
-
-  /* ======= DADOS SIMPLES SEM AGRUPAMENTO ======= */
-    const groupedForView = React.useMemo(() => {
-    // Para custos, não agrupamos - exibimos lista simples
-    return allData.map(row => ({
-        ...row,
-        subRows: [] // array vazio para compatibilidade com a tabela
-    }));
-    }, [allData]);
 
   /* ======= UPLOAD / PROCESSAMENTO ======= */
   const handleDataUpload = async (datasets: IncomingDataset[]) => {
@@ -347,34 +263,6 @@ export default function CustosVendasPage() {
     });
   };
 
-  /* ======= Organizar com IA ======= */
-  const handleOrganizeWithAI = async () => {
-    const apiKey = localStorage.getItem(API_KEY_STORAGE_KEY);
-    if (!apiKey) {
-      toast({ title: "Chave de API não encontrada", description: "Por favor, adicione sua chave de API na página de Conexões.", variant: "destructive" });
-      return;
-    }
-    if (stagedData.length === 0) {
-      toast({ title: "Nenhum dado para organizar", description: "Adicione dados à área de revisão primeiro.", variant: "default" });
-      return;
-    }
-    setIsOrganizing(true);
-    try {
-      const result = await organizeCosts({ costsData: stagedData, apiKey });
-      if (result.organizedData) {
-        setStagedData(result.organizedData);
-        toast({ title: "Sucesso!", description: "Os dados foram organizados." });
-      } else {
-        throw new Error("A organização não retornou dados.");
-      }
-    } catch (error: any) {
-      console.error("Error organizing data:", error);
-      toast({ title: "Erro na Organização", description: error.message || "Houve um problema ao organizar os dados.", variant: "destructive" });
-    } finally {
-      setIsOrganizing(false);
-    }
-  };
-
   /* ======= Salvar no Firestore ======= */
   const handleSaveChangesToDb = async () => {
     if (stagedData.length === 0) {
@@ -397,8 +285,8 @@ export default function CustosVendasPage() {
         const batch = writeBatch(db);
 
         chunk.forEach((item) => {
-          const docId = doc(collection(db, "custos")).id;
-          const custoRef = doc(db, "custos", docId);
+          const docId = doc(collection(db, "custos-embalagem")).id;
+          const custoRef = doc(db, "custos-embalagem", docId);
           const { id, ...payload } = item;
           
           payload.id = docId;
@@ -413,20 +301,10 @@ export default function CustosVendasPage() {
         setSaveProgress(((i + 1) / chunks.length) * 100);
       }
 
-      // Optimistic update
-      setCustosData(prev => {
-          const map = new Map(prev.map(s => [s.id, s]));
-          dataToSave.forEach(s => {
-              const newRecord = { ...s };
-              if (!map.has(s.id)) {
-                  map.set(s.id, newRecord);
-              }
-          });
-          return Array.from(map.values());
-      });
+      setCustosData(prev => [...prev, ...dataToSave]);
 
       const newUploadedFileNames = [...new Set([...uploadedFileNames, ...stagedFileNames])];
-      const metaRef = doc(db, "metadata", "custos");
+      const metaRef = doc(db, "metadata", "custos-embalagem");
       await setDoc(metaRef, { columns: fixedColumns, uploadedFileNames: newUploadedFileNames }, { merge: true });
 
       setStagedData([]);
@@ -452,7 +330,7 @@ export default function CustosVendasPage() {
       return;
     }
     try {
-      const metaRef = doc(db, "metadata", "custos");
+      const metaRef = doc(db, "metadata", "custos-embalagem");
       await updateDoc(metaRef, { uploadedFileNames: arrayRemove(fileName) });
       _t({ title: "Removido do Histórico", description: `O arquivo ${fileName} foi removido da lista.` });
     } catch (e) {
@@ -469,7 +347,7 @@ export default function CustosVendasPage() {
 
   const handleClearAllData = async () => {
     try {
-      const custosQuery = query(collection(db, "custos"));
+      const custosQuery = query(collection(db, "custos-embalagem"));
       const custosSnapshot = await getDocsFromServer(custosQuery);
       if (custosSnapshot.empty) { _t({ title: "Banco já está limpo" }); return; }
 
@@ -481,11 +359,11 @@ export default function CustosVendasPage() {
         await batch.commit();
       }
 
-      const metaRef = doc(db, "metadata", "custos");
+      const metaRef = doc(db, "metadata", "custos-embalagem");
       await setDoc(metaRef, { uploadedFileNames: [], columns: [] }, { merge: true });
 
       setCustosData([]);
-      _t({ title: "Limpeza Concluída!", description: "Todos os dados de custos foram apagados do banco de dados." });
+      _t({ title: "Limpeza Concluída!", description: "Todos os dados de custos de embalagem foram apagados." });
     } catch (error) {
       console.error("Error clearing all data:", error);
       _t({ title: "Erro na Limpeza", description: "Não foi possível apagar todos os dados. Verifique o console.", variant: "destructive" });
@@ -580,8 +458,8 @@ export default function CustosVendasPage() {
           <CardHeader>
             <div className="flex justify-between items-start">
                 <div>
-                  <CardTitle className="font-headline text-h3">Custos sobre Vendas</CardTitle>
-                  <CardDescription>Carregue e organize suas planilhas de custos.</CardDescription>
+                  <CardTitle className="font-headline text-h3">Custos de Embalagem</CardTitle>
+                  <CardDescription>Carregue e organize suas planilhas de custos com embalagens.</CardDescription>
                 </div>
                  <div className="flex items-center gap-2">
                     <SupportDataDialog
@@ -595,20 +473,6 @@ export default function CustosVendasPage() {
                         Dados de Apoio
                       </Button>
                     </SupportDataDialog>
-                    {stagedData.length > 0 && (
-                      <Button
-                        onClick={handleOrganizeWithAI}
-                        variant="outline"
-                        disabled={isOrganizing || isSaving}
-                      >
-                        {isOrganizing ? (
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        ) : (
-                          <Wand2 className="mr-2 h-4 w-4" />
-                        )}
-                        {isOrganizing ? "Organizando..." : "Organizar"}
-                      </Button>
-                    )}
                      {stagedData.length > 0 && (
                       <Button
                         onClick={handleClearStagedData}
@@ -645,7 +509,7 @@ export default function CustosVendasPage() {
                                     <AlertDialogTitle>Você tem certeza absoluta?</AlertDialogTitle>
                                     <AlertDialogDescription>
                                         Esta ação não pode ser desfeita. Isso irá apagar permanentemente
-                                        TODOS os dados de custos do seu banco de dados.
+                                        TODOS os dados de custos de embalagem do seu banco de dados.
                                     </AlertDialogDescription>
                                 </AlertDialogHeader>
                                 <AlertDialogFooter>
@@ -670,7 +534,7 @@ export default function CustosVendasPage() {
           )}
         </Card>
 
-        <DetailedSalesHistoryTable data={groupedForView} columns={fixedColumns} tableTitle="Relatório de Custos" />
+        <DetailedSalesHistoryTable data={allData} columns={fixedColumns} tableTitle="Relatório de Custos de Embalagem" />
       </main>
     </div>
   );

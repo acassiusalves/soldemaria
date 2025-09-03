@@ -184,7 +184,7 @@ const headerMappingNormalized: Record<string, string> = {
   "quantidade movimentada": "quantidade",
   "custo unitario": "custoUnitario",
   "valor unitario": "valorUnitario",
-  "valor final": "final",
+  "final": "final",
   "valor entrega": "custoFrete",
   "valor credito": "valorCredito",
   "valor descontos": "valorDescontos",
@@ -686,24 +686,24 @@ React.useEffect(() => {
 
 const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): VendaDetalhada[] => {
     if (customCalculations.length === 0) return data;
-  
+
     const sanitizeOp = (raw: string) => {
-      const m = {
-        'x': '*', 'X': '*', '×': '*',
-        '÷': '/', ':': '/',
-      } as Record<string, string>;
-      return m[raw] || raw;
+        const m = {
+            'x': '*', 'X': '*', '×': '*',
+            '÷': '/', ':': '/',
+        } as Record<string, string>;
+        return m[raw] || raw;
     };
-    
+
     const sanitizeNumberLiteral = (raw: string) => {
-      let s = String(raw).trim();
-      const hasPercent = s.endsWith('%');
-      s = s.replace('%', '').replace(',', '.');
-      const n = Number(s);
-      return {
-        value: Number.isFinite(n) ? n : 0,
-        hadPercent: hasPercent,
-      };
+        let s = String(raw).trim();
+        const hasPercent = s.endsWith('%');
+        s = s.replace('%', '').replace(',', '.');
+        const n = Number(s);
+        return {
+            value: Number.isFinite(n) ? n : 0,
+            hadPercent: hasPercent,
+        };
     };
 
     const getNumericField = (row: any, keyOrLabel: string): number => {
@@ -741,39 +741,31 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
                         const value = getNumericField(flatRowForCalcs, item.value);
                         const safe = Number.isFinite(value) ? String(value) : '0';
                         formulaString += safe;
-                        continue;
-                    }
-
-                    if (item.type === 'number') {
+                    } else if (item.type === 'number') {
                         const parsed = sanitizeNumberLiteral(String(item.value));
                         let numValue = parsed.value;
                         if (parsed.hadPercent) numValue = numValue / 100;
                         formulaString += String(numValue);
-                        continue;
-                    }
-
-                    if (item.type === 'op') {
+                    } else if (item.type === 'op') {
                         const op = sanitizeOp(String(item.value));
                         if (!/^[\+\-\*\/\(\)]$/.test(op)) {
                             continue;
                         }
                         formulaString += ` ${op} `;
-                        continue;
                     }
                 }
                 
                 formulaString = formulaString.replace(/\s+/g, ' ').trim();
                 formulaString = formulaString.replace(/[\+\-\*\/]\s*$/, '');
-
-                if (!/^[\d\.\s\+\-\*\/\(\)]+$/.test(formulaString)) {
-                  console.warn(`Fórmula com chars fora do permitido, sanitizada:`, formulaString);
-                }
                 
                 if (!formulaString) {
-                    newRow.customData[calc.id] = 0;
-                    return;
+                    throw new Error("Fórmula vazia");
                 }
-  
+                
+                if (!/^[\d\.\s\+\-\*\/\(\)]+$/.test(formulaString)) {
+                    console.warn(`Fórmula com chars fora do permitido, sanitizada:`, formulaString);
+                }
+                
                 const result = new Function(`return ${formulaString}`)();
                 let numResult = typeof result === 'number' && Number.isFinite(result) ? result : 0;
                 
@@ -804,6 +796,28 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
         return newRow;
     });
 }, [customCalculations, mergedColumns]);
+
+React.useEffect(() => {
+    console.log('=== DEBUG CÁLCULOS CUSTOMIZADOS ===');
+    console.log('Custom calculations carregados:', customCalculations);
+    console.log('Merged columns:', mergedColumns);
+    console.log('All data sample:', allData.slice(0, 1));
+    console.log('Grouped for view sample:', groupedForView.slice(0, 1));
+    console.log('=====================================');
+}, [customCalculations, mergedColumns, allData, groupedForView]);
+
+React.useEffect(() => {
+    if (customCalculations.length > 0) {
+        console.log('Cálculos customizados atualizados:', customCalculations);
+        customCalculations.forEach(calc => {
+            console.log(`Cálculo ${calc.name}:`, {
+                formula: calc.formula,
+                interaction: calc.interaction,
+                isPercentage: calc.isPercentage
+            });
+        });
+    }
+}, [customCalculations]);
 
   /* ======= Mescla banco + staged (staged tem prioridade) ======= */
   const allData = React.useMemo(() => {
@@ -1149,6 +1163,9 @@ React.useEffect(() => {
               <DropdownMenuItem asChild>
                 <Link href="/taxas/custos">Custos sobre Vendas</Link>
               </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link href="/taxas/custos-embalagem">Custos Embalagem</Link>
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
            <Link
@@ -1355,5 +1372,3 @@ React.useEffect(() => {
     </>
   );
 }
-
-    
