@@ -107,6 +107,7 @@ const columnLabels: Record<string, string> = {
   tipo_pagamento: 'Tipo Pagamento',
   parcela: 'Parcela',
   instituicao_financeira: 'Instituição Financeira',
+  custo: 'Custo',
 };
 
 const getLabel = (key: string, customCalculations: CustomCalculation[] = []) => {
@@ -897,7 +898,7 @@ export default function DetailedSalesHistoryTable({
                   <React.Fragment key={row.id}>
                     <TableRow>
                        <TableCell>
-                          {(row.subRows?.length > 0 || row.costs?.length > 0) && (
+                          {(row.subRows?.length > 0 || row.costs?.length > 0 || row.embalagens?.length > 0) && (
                             <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => toggleRowExpansion(row.id)}>
                                 <ChevronRight className={cn("h-4 w-4 transition-transform", expandedRows.has(row.id) && "rotate-90")} />
                             </Button>
@@ -916,6 +917,7 @@ export default function DetailedSalesHistoryTable({
                                     <TabsList>
                                         <TabsTrigger value="items" disabled={!row.subRows || row.subRows.length === 0}>Itens do Pedido</TabsTrigger>
                                         <TabsTrigger value="payment" disabled={!row.costs || row.costs.length === 0}>Detalhes do Pagamento</TabsTrigger>
+                                        <TabsTrigger value="packaging" disabled={!row.embalagens || row.embalagens.length === 0}>Embalagens</TabsTrigger>
                                     </TabsList>
                                     <TabsContent value="items">
                                       {row.subRows && row.subRows.length > 0 && (
@@ -975,7 +977,12 @@ export default function DetailedSalesHistoryTable({
                                                 </TableBody>
                                                 </Table>
                                             </div>
-                                            {row.embalagens && row.embalagens.length > 0 && (
+                                          </div>
+                                       )}
+                                    </TabsContent>
+                                    <TabsContent value="packaging">
+                                        {row.embalagens && row.embalagens.length > 0 && (
+                                            <div className="p-2 rounded-md bg-background space-y-4">
                                                 <div>
                                                     <h4 className="font-semibold text-sm mb-2 flex items-center gap-2"><Package size={16}/> Embalagens Aplicadas</h4>
                                                     <Table>
@@ -999,9 +1006,8 @@ export default function DetailedSalesHistoryTable({
                                                         </TableBody>
                                                     </Table>
                                                 </div>
-                                            )}
-                                          </div>
-                                       )}
+                                            </div>
+                                        )}
                                     </TabsContent>
                                 </Tabs>
                             </TableCell>
@@ -1054,3 +1060,4 @@ export default function DetailedSalesHistoryTable({
     </>
   );
 }
+
