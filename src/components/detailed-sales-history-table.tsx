@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState, useMemo, useEffect, useRef } from "react";
@@ -108,6 +109,7 @@ const columnLabels: Record<string, string> = {
   parcela: 'Parcela',
   instituicao_financeira: 'Instituição Financeira',
   custo: 'Custo',
+  custoEmbalagem: 'Custo Embalagem',
 };
 
 const getLabel = (key: string, customCalculations: CustomCalculation[] = []) => {
@@ -418,7 +420,7 @@ export default function DetailedSalesHistoryTable({
     const systemColumnsToHide = [
         "id", "sourceFile", "uploadTimestamp", "subRows", "parcelas", 
         "total_valor_parcelas", "mov_estoque", "valor_da_parcela", "tipo_de_pagamento",
-        "quantidade_movimentada", "costs", "customData", "embalagens", "custoEmbalagem"
+        "quantidade_movimentada", "costs", "customData", "embalagens",
     ];
     const base = (columns && columns.length > 0) ? columns : FIXED_COLUMNS;
 
@@ -634,7 +636,7 @@ export default function DetailedSalesHistoryTable({
         return `${value.toFixed(2)}%`;
       }
   
-      if (["final","custoFrete","imposto","embalagem","comissao","custoUnitario","valorUnitario","valorCredito","valorDescontos", "valor"]
+      if (["final","custoFrete","imposto","embalagem","comissao","custoUnitario","valorUnitario","valorCredito","valorDescontos", "valor", "custoEmbalagem"]
           .includes(columnId) || (typeof value === 'number' && columnId.startsWith('custom_') && !isPercentage)) {
           const n = toNumber(value);
           if (n !== null) {
@@ -671,7 +673,7 @@ export default function DetailedSalesHistoryTable({
       return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
     }
 
-    if (["final","custoFrete","imposto","embalagem","comissao","custoUnitario","valorUnitario","valorCredito","valorDescontos", "valor"]
+    if (["final","custoFrete","imposto","embalagem","comissao","custoUnitario","valorUnitario","valorCredito","valorDescontos", "valor", "custo"]
         .includes(columnId)) {
       const n = toNumber(value);
       if (n !== null) {
@@ -761,6 +763,38 @@ export default function DetailedSalesHistoryTable({
         onOrderChange(mainColumns.map(c => c.id));
     }
   };
+  
+const renderEmbalagemTab = (row: any) => {
+  const itens = Array.isArray(row.embalagens) ? row.embalagens : [];
+  return (
+    <div className="p-2 rounded-md bg-background space-y-3">
+        <div className="text-sm text-muted-foreground">
+            Modalidade: <b>{/loja/i.test(String(row.logistica)) ? 'Loja' : 'Delivery'}</b> ·
+            Qtd. Total de Itens: <b>{Number(row.quantidadeTotal) || 0}</b> ·
+            Custo Total Embalagem: <b>{renderCell(row, 'custoEmbalagem')}</b>
+        </div>
+        <div className="border rounded-lg overflow-hidden">
+            <div className="grid grid-cols-4 gap-0 bg-muted/40 px-3 py-2 text-sm font-medium">
+                <div>Item</div>
+                <div className="text-right">Qtd.</div>
+                <div className="text-right">Custo unit.</div>
+                <div className="text-right">Subtotal</div>
+            </div>
+            {itens.length === 0 ? (
+                <div className="px-3 py-2 text-sm text-center text-muted-foreground">Sem itens de embalagem aplicados.</div>
+            ) : itens.map((e: any, idx: number) => (
+                <div key={idx} className="grid grid-cols-4 gap-0 px-3 py-2 text-sm border-t">
+                    <div>{String(e.nome)}</div>
+                    <div className="text-right">{e.quantity}</div>
+                    <div className="text-right">{renderDetailCell(e, 'custo')}</div>
+                    <div className="text-right">{renderDetailCell(e, 'calculatedCost')}</div>
+                </div>
+            ))}
+        </div>
+    </div>
+  );
+};
+
 
   return (
     <>
@@ -981,39 +1015,7 @@ export default function DetailedSalesHistoryTable({
                                        )}
                                     </TabsContent>
                                     <TabsContent value="packaging">
-                                        {(row.embalagens && row.embalagens.length > 0) || row.custoEmbalagem > 0 ? (
-                                            <div className="p-2 rounded-md bg-background space-y-4">
-                                                <div>
-                                                    <h4 className="font-semibold text-sm mb-2 flex items-center gap-2"><Package size={16}/> Embalagens Aplicadas</h4>
-                                                    <Table>
-                                                        <TableHeader>
-                                                            <TableRow>
-                                                                <TableHead>Embalagem</TableHead>
-                                                                <TableHead className="text-center">Qtd.</TableHead>
-                                                                <TableHead className="text-right">Custo Total</TableHead>
-                                                            </TableRow>
-                                                        </TableHeader>
-                                                        <TableBody>
-                                                            {row.embalagens && row.embalagens.map((embalagem: any, index: number) => (
-                                                                <TableRow key={index}>
-                                                                    <TableCell>{embalagem.nome}</TableCell>
-                                                                    <TableCell className="text-center">{embalagem.quantity}</TableCell>
-                                                                    <TableCell className="text-right">{renderDetailCell(embalagem, 'calculatedCost')}</TableCell>
-                                                                </TableRow>
-                                                            ))}
-                                                            <TableRow className="font-bold bg-muted/50">
-                                                                <TableCell colSpan={2}>Custo Total Embalagens</TableCell>
-                                                                <TableCell className="text-right">{renderDetailCell({ custo: row.custoEmbalagem }, 'custo')}</TableCell>
-                                                            </TableRow>
-                                                        </TableBody>
-                                                    </Table>
-                                                </div>
-                                            </div>
-                                        ) : (
-                                            <div className="p-4 text-center text-sm text-muted-foreground">
-                                                Nenhuma embalagem aplicada a este pedido.
-                                            </div>
-                                        )}
+                                        {renderEmbalagemTab(row)}
                                     </TabsContent>
                                 </Tabs>
                             </TableCell>
@@ -1066,6 +1068,7 @@ export default function DetailedSalesHistoryTable({
     </>
   );
 }
+
 
 
 

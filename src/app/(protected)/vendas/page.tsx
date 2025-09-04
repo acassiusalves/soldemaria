@@ -131,6 +131,14 @@ export const normalizeHeader = (s: string) =>
     .replace(/\s+/g, " ")
     .trim();
 
+const normalizeText = (s: unknown) =>
+  String(s ?? "")
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+
+
 /* ========== labels para colunas dinâmicas ========== */
 const columnLabels: Record<string, string> = {
   data: 'Data',
@@ -155,6 +163,7 @@ const columnLabels: Record<string, string> = {
   entregador: 'Entregador',
   valor: 'Valor',
   origemCliente: 'Origem Cliente',
+  custoEmbalagem: 'Custo Embalagem',
 };
 const getLabel = (key: string, customCalculations: CustomCalculation[] = []) => {
     if (key.startsWith('custom_')) {
@@ -464,53 +473,16 @@ export default function VendasPage() {
         const logistica = logisticaMap.get(code);
         const custos = custosByCode.get(code);
 
-        // Aplicar custos de embalagem com regras de negócio
-        const saleLogistica = String(venda.logistica || logistica?.logistica || 'Não especificado').trim();
-        const saleModalidade = (saleLogistica === 'X_Loja' || saleLogistica === 'Loja') ? 'Loja' : 'Delivery';
-
-        const quantidadeItens = (venda.subRows && venda.subRows.length > 0)
-            ? venda.subRows.reduce((acc, item) => acc + (Number(item.quantidade) || 0), 0)
-            : (Number(venda.quantidade) || 0);
-
-        let packagingCost = 0;
-        let appliedPackaging: (Embalagem & { calculatedCost: number, quantity: number })[] = [];
-
-        if (saleModalidade === 'Delivery') {
-            const sacolaPlastico = custosEmbalagem.find(e => e.nome.toLowerCase() === 'sacola de plastico');
-            const sacolaTnt = custosEmbalagem.find(e => e.nome.toLowerCase() === 'sacola de tnt');
-
-            if (sacolaPlastico) {
-                const cost = sacolaPlastico.custo;
-                packagingCost += cost;
-                appliedPackaging.push({ ...sacolaPlastico, calculatedCost: cost, quantity: 1 });
-            }
-            if (sacolaTnt && quantidadeItens > 0) {
-                const cost = sacolaTnt.custo * quantidadeItens;
-                packagingCost += cost;
-                appliedPackaging.push({ ...sacolaTnt, calculatedCost: cost, quantity: quantidadeItens });
-            }
-        } else if (saleModalidade === 'Loja' && quantidadeItens > 0) {
-            const embalagemLoja = custosEmbalagem.find(e => e.modalidades.includes('Loja') || e.modalidades.includes('Todos'));
-            if (embalagemLoja) {
-                const qtdEmbalagens = Math.ceil(quantidadeItens / 2);
-                const cost = embalagemLoja.custo * qtdEmbalagens;
-                packagingCost += cost;
-                appliedPackaging.push({ ...embalagemLoja, calculatedCost: cost, quantity: qtdEmbalagens });
-            }
-        }
-
         return {
             ...venda,
             ...(logistica && { logistica: logistica.logistica, entregador: logistica.entregador, valor: logistica.valor }),
             costs: custos || [],
-            embalagens: appliedPackaging,
-            custoEmbalagem: packagingCost,
         };
     });
 
     const map = new Map(merged.map(s => [s.id, s]));
     return Array.from(map.values());
-  }, [vendasData, logisticaData, custosData, stagedData, custosEmbalagem]);
+  }, [vendasData, logisticaData, custosData, stagedData]);
 
 
   React.useEffect(() => {
@@ -909,11 +881,66 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
         g.header.subRows.sort((a: any, b: any) =>
             (toDate(a.data)?.getTime() ?? 0) - (toDate(b.data)?.getTime() ?? 0)
         );
+
+        // === APLICAÇÃO DAS REGRAS DE EMBALAGEM (AGORA, POR PEDIDO) ===
+        const qTotal = Number(g.header.quantidadeTotal) || 0;
+        if (qTotal > 0 && Array.isArray(custosEmbalagem) && custosEmbalagem.length > 0) {
+            const logStr = String(g.header.logistica ?? 'Não especificado');
+            const modalidade = /loja/i.test(logStr) ? 'Loja' : 'Delivery';
+
+            let packagingCost = 0;
+            let appliedPackaging: Array<Embalagem & { calculatedCost: number; quantity: number }> = [];
+
+            if (modalidade === 'Delivery') {
+                // Regra: 1 Sacola de Plástico + 1 Sacola de TNT POR PRODUTO
+                const plastico = custosEmbalagem.find(e => normalizeText(e.nome) === 'sacola de plastico');
+                const tnt      = custosEmbalagem.find(e => normalizeText(e.nome) === 'sacola de tnt');
+
+                if (plastico) {
+                    const qty = 1; // 1 por pedido
+                    const cost = Number(plastico.custo || 0) * qty;
+                    packagingCost += cost;
+                    appliedPackaging.push({ ...plastico, calculatedCost: cost, quantity: qty });
+                }
+                if (tnt) {
+                    const qty = qTotal; // 1 por produto
+                    const cost = Number(tnt.custo || 0) * qty;
+                    packagingCost += cost;
+                    appliedPackaging.push({ ...tnt, calculatedCost: cost, quantity: qty });
+                }
+            } else {
+                // Regra: Loja => 1 embalagem a cada 2 produtos (arredonda pra cima)
+                const qtdEmbalagens = Math.ceil(qTotal / 2);
+
+                // Pega todos itens marcados para 'Loja' ou 'Todos' (com segurança)
+                const lojaItems = custosEmbalagem.filter(e =>
+                    Array.isArray(e.modalidades) &&
+                    e.modalidades.some((m: any) => /loja|todos/i.test(String(m)))
+                );
+
+                // Se não houver flag por modalidade, tente um "fallback" por nome:
+                const itensFallback = lojaItems.length ? lojaItems : custosEmbalagem.filter(e =>
+                    /embalagem|sacola|saco/i.test(String(e.nome))
+                );
+
+                (lojaItems.length ? lojaItems : itensFallback).forEach(item => {
+                    const cost = Number(item.custo || 0) * qtdEmbalagens;
+                    packagingCost += cost;
+                    appliedPackaging.push({ ...item, calculatedCost: cost, quantity: qtdEmbalagens });
+                });
+            }
+
+            g.header.embalagens = appliedPackaging;
+            g.header.custoEmbalagem = packagingCost;
+        } else {
+            g.header.embalagens = [];
+            g.header.custoEmbalagem = 0;
+        }
     }
 
     const headers = Array.from(groups.values()).map(g => g.header);
     return applyCustomCalculations(headers);
-}, [filteredData, applyCustomCalculations]);
+  }, [filteredData, applyCustomCalculations, custosEmbalagem]);
 
   const summaryData = React.useMemo(() => {
     return groupedForView.reduce(
