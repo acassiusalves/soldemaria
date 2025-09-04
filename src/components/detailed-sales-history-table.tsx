@@ -981,7 +981,7 @@ export default function DetailedSalesHistoryTable({
                                        )}
                                     </TabsContent>
                                     <TabsContent value="packaging">
-                                        {row.embalagens && row.embalagens.length > 0 ? (
+                                        {(row.embalagens && row.embalagens.length > 0) || row.custoEmbalagem > 0 ? (
                                             <div className="p-2 rounded-md bg-background space-y-4">
                                                 <div>
                                                     <h4 className="font-semibold text-sm mb-2 flex items-center gap-2"><Package size={16}/> Embalagens Aplicadas</h4>
@@ -994,7 +994,7 @@ export default function DetailedSalesHistoryTable({
                                                             </TableRow>
                                                         </TableHeader>
                                                         <TableBody>
-                                                            {row.embalagens.map((embalagem: any, index: number) => (
+                                                            {row.embalagens && row.embalagens.map((embalagem: any, index: number) => (
                                                                 <TableRow key={index}>
                                                                     <TableCell>{embalagem.nome}</TableCell>
                                                                     <TableCell className="text-center">{embalagem.quantity}</TableCell>
@@ -1066,6 +1066,7 @@ export default function DetailedSalesHistoryTable({
     </>
   );
 }
+
 
 
 
