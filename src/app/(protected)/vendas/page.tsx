@@ -1161,7 +1161,7 @@ React.useEffect(() => {
     const systemColumnsToHide = [
         "id", "sourceFile", "uploadTimestamp", "subRows", "parcelas", 
         "total_valor_parcelas", "mov_estoque", "valor_da_parcela", "tipo_de_pagamento",
-        "quantidade_movimentada", "costs", "customData"
+        "quantidade_movimentada", "costs", "customData", "embalagens"
     ];
     
     // Add custoEmbalagem explicitly as it's calculated later
