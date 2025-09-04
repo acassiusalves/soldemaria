@@ -447,8 +447,8 @@ export default function VendasPage() {
     await auth.signOut();
     router.push('/login');
   };
-
-  const allData = React.useMemo(() => {
+  
+    const allData = React.useMemo(() => {
     const allRows = [...vendasData, ...stagedData];
     const logisticaMap = new Map(logisticaData.map(l => [normCode(l.codigo), l]));
     const custosByCode = new Map<string, any[]>();
@@ -466,11 +466,11 @@ export default function VendasPage() {
 
         // Aplicar custos de embalagem com regras de negócio
         const saleLogistica = String(venda.logistica || logistica?.logistica || 'Não especificado').trim();
-        const saleModalidade = (saleLogistica === 'X_Loja' || saleLogistica === 'Loja') ? 'Loja' : 'Delivery'; // Simplifica para as duas modalidades principais
-        
+        const saleModalidade = (saleLogistica === 'X_Loja' || saleLogistica === 'Loja') ? 'Loja' : 'Delivery';
+
         const quantidadeItens = (venda.subRows && venda.subRows.length > 0)
             ? venda.subRows.reduce((acc, item) => acc + (Number(item.quantidade) || 0), 0)
-            : (Number(venda.quantidade) || 1);
+            : (Number(venda.quantidade) || 0);
 
         let packagingCost = 0;
         let appliedPackaging: (Embalagem & { calculatedCost: number, quantity: number })[] = [];
@@ -484,22 +484,18 @@ export default function VendasPage() {
                 packagingCost += cost;
                 appliedPackaging.push({ ...sacolaPlastico, calculatedCost: cost, quantity: 1 });
             }
-            if (sacolaTnt) {
+            if (sacolaTnt && quantidadeItens > 0) {
                 const cost = sacolaTnt.custo * quantidadeItens;
                 packagingCost += cost;
                 appliedPackaging.push({ ...sacolaTnt, calculatedCost: cost, quantity: quantidadeItens });
             }
-        } else if (saleModalidade === 'Loja') {
-            // Regra: 1 embalagem a cada 2 produtos
-            const embalagensLoja = custosEmbalagem.filter(e => e.modalidades.includes('Loja') || e.modalidades.includes('Todos'));
-            const qtdEmbalagens = Math.ceil(quantidadeItens / 2);
-
-            if (embalagensLoja.length > 0) {
-                // Assume a primeira embalagem encontrada para loja (pode ser refinado se necessário)
-                const embalagemPrincipal = embalagensLoja[0]; 
-                const cost = embalagemPrincipal.custo * qtdEmbalagens;
+        } else if (saleModalidade === 'Loja' && quantidadeItens > 0) {
+            const embalagemLoja = custosEmbalagem.find(e => e.modalidades.includes('Loja') || e.modalidades.includes('Todos'));
+            if (embalagemLoja) {
+                const qtdEmbalagens = Math.ceil(quantidadeItens / 2);
+                const cost = embalagemLoja.custo * qtdEmbalagens;
                 packagingCost += cost;
-                appliedPackaging.push({ ...embalagemPrincipal, calculatedCost: cost, quantity: qtdEmbalagens });
+                appliedPackaging.push({ ...embalagemLoja, calculatedCost: cost, quantity: qtdEmbalagens });
             }
         }
 
@@ -1399,4 +1395,3 @@ React.useEffect(() => {
     </>
   );
 }
-
