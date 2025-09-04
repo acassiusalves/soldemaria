@@ -709,13 +709,13 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
         };
     };
 
-    const getNumericField = (row: any, customData: any, keyOrLabel: string): number => {
-        let val = customData?.[keyOrLabel] ?? row[keyOrLabel];
+    const getNumericField = (row: any, keyOrLabel: string): number => {
+        let val = row.customData?.[keyOrLabel] ?? row[keyOrLabel];
         
         if (val === undefined || val === null) {
             const column = mergedColumns.find(c => c.label === keyOrLabel || c.id === keyOrLabel);
             if (column) {
-                val = customData?.[column.id] ?? row[column.id];
+                val = row.customData?.[column.id] ?? row[column.id];
             }
         }
         
@@ -727,13 +727,12 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
         }
         return 0;
     };
-
+  
     return data.map(row => {
         const newRow = { ...row, customData: { ...(row.customData || {}) } };
-        const newCustomData = newRow.customData;
-
+  
         customCalculations.forEach(calc => {
-            const flatRowForCalcs = { ...row, ...newCustomData };
+            const flatRowForCalcs = { ...row, ...newRow.customData };
             
             try {
                 let formulaString = '';
@@ -742,63 +741,58 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
                     const item = calc.formula[i];
                     
                     if (item.type === 'column') {
-                        const value = getNumericField(row, newCustomData, item.value);
-                        const safe = Number.isFinite(value) ? String(value) : '0';
-                        formulaString += safe;
+                        const value = getNumericField(flatRowForCalcs, item.value);
+                        formulaString += value.toString();
                     } else if (item.type === 'number') {
-                        const parsed = sanitizeNumberLiteral(String(item.value));
-                        let numValue = parsed.value;
-                        if (parsed.hadPercent) numValue = numValue / 100;
-                        formulaString += String(numValue);
+                        const numValue = parseFloat(String(item.value).replace(',', '.')) || 0;
+                        formulaString += numValue.toString();
                     } else if (item.type === 'op') {
-                        const op = sanitizeOp(String(item.value));
-                        if (!/^[\+\-\*\/\(\)]$/.test(op)) {
-                            continue;
-                        }
-                        formulaString += ` ${op} `;
+                        formulaString += ` ${item.value} `;
                     }
                 }
                 
-                formulaString = formulaString.replace(/\s+/g, ' ').trim();
-                formulaString = formulaString.replace(/[\+\-\*\/]\s*$/, '');
-
-                if (!/^[\d\.\s\+\-\*\/\(\)]+$/.test(formulaString)) {
-                    console.warn(`Fórmula com chars fora do permitido, sanitizada:`, formulaString);
-                }
+                formulaString = formulaString.trim();
                 
                 if (!formulaString) {
                     throw new Error("Fórmula vazia");
+                }
+  
+                if (!/^[\d\s\.\+\-\*\/\(\)]+$/.test(formulaString)) {
+                    throw new Error(`Caracteres inválidos na fórmula: ${formulaString}`);
+                }
+                
+                if (/\d\s+\d/.test(formulaString)) {
+                    throw new Error(`Números consecutivos sem operador: ${formulaString}`);
                 }
                 
                 const result = new Function(`return ${formulaString}`)();
                 let numResult = typeof result === 'number' && Number.isFinite(result) ? result : 0;
                 
                 if (calc.isPercentage) {
-                    numResult = numResult * 100;
+                    numResult = numResult / 100;
                 }
   
-                newCustomData[calc.id] = numResult;
-                
+                newRow.customData[calc.id] = numResult;
+  
                 if (calc.interaction?.targetColumn) {
-                    const baseValue = getNumericField(row, newCustomData, calc.interaction.targetColumn);
+                    const baseValue = getNumericField({...flatRowForCalcs, ...newRow.customData}, calc.interaction.targetColumn);
                     const newValue = calc.interaction.operator === '-' 
                         ? baseValue - numResult 
                         : baseValue + numResult;
                     
-                    newCustomData[calc.interaction.targetColumn] = newValue;
+                    newRow.customData[calc.interaction.targetColumn] = newValue;
                 }
-
             } catch (e: any) {
                 console.error(`\n❌ ERRO DETALHADO no cálculo ${calc.name}:`);
                 console.error('Mensagem:', e.message);
                 console.error('Fórmula que causou erro:', calc.formula);
                 console.error('Row data:', flatRowForCalcs);
                 console.error('Stack trace:', e.stack);
-                newCustomData[calc.id] = 0;
+                newRow.customData[calc.id] = 0;
             }
         });
-        
-        return { ...newRow, customData: newCustomData };
+  
+        return newRow;
     });
 }, [customCalculations, mergedColumns]);
 
@@ -820,7 +814,7 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
         const custos = custosByCode.get(code);
 
         // Aplicar custos de embalagem
-        const saleLogistica = (logistica?.logistica || venda.logistica || 'Não especificado').trim();
+        const saleLogistica = String(logistica?.logistica || venda.logistica || 'Não especificado').trim();
         const saleModalidade = (saleLogistica === 'X_Loja' || saleLogistica === 'Loja') ? 'Loja' : saleLogistica;
 
         const appliedPackaging = custosEmbalagem.filter(e => 
