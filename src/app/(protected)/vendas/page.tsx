@@ -736,33 +736,44 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
             
             try {
                 let formulaString = '';
-                
+
                 for (let i = 0; i < calc.formula.length; i++) {
-                    const item = calc.formula[i];
-                    
-                    if (item.type === 'column') {
-                        const value = getNumericField(flatRowForCalcs, item.value);
-                        formulaString += value.toString();
-                    } else if (item.type === 'number') {
-                        const numValue = parseFloat(String(item.value).replace(',', '.')) || 0;
-                        formulaString += numValue.toString();
-                    } else if (item.type === 'op') {
-                        formulaString += ` ${item.value} `;
+                  const item = calc.formula[i];
+                
+                  if (item.type === 'column') {
+                    const value = getNumericField(flatRowForCalcs, item.value);
+                    const safe = Number.isFinite(value) ? String(value) : '0';
+                    formulaString += safe;
+                    continue;
+                  }
+                
+                  if (item.type === 'number') {
+                    const parsed = sanitizeNumberLiteral(String(item.value));
+                    let numValue = parsed.value;
+                    if (parsed.hadPercent) numValue = numValue / 100;
+                    formulaString += String(numValue);
+                    continue;
+                  }
+                
+                  if (item.type === 'op') {
+                    const op = sanitizeOp(String(item.value));
+                    if (!/^[\+\-\*\/\(\)]$/.test(op)) {
+                      continue;
                     }
+                    formulaString += ` ${op} `;
+                    continue;
+                  }
                 }
                 
-                formulaString = formulaString.trim();
+                formulaString = formulaString.replace(/\s+/g, ' ').trim();
+                formulaString = formulaString.replace(/[\+\-\*\/]\s*$/, '');
+                
+                if (!/^[\d\.\s\+\-\*\/\(\)]+$/.test(formulaString)) {
+                  console.warn(`Fórmula com chars fora do permitido, sanitizada:`, formulaString);
+                }
                 
                 if (!formulaString) {
                     throw new Error("Fórmula vazia");
-                }
-  
-                if (!/^[\d\s\.\+\-\*\/\(\)]+$/.test(formulaString)) {
-                    throw new Error(`Caracteres inválidos na fórmula: ${formulaString}`);
-                }
-                
-                if (/\d\s+\d/.test(formulaString)) {
-                    throw new Error(`Números consecutivos sem operador: ${formulaString}`);
                 }
                 
                 const result = new Function(`return ${formulaString}`)();
@@ -814,19 +825,23 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
         const custos = custosByCode.get(code);
 
         // Aplicar custos de embalagem
-        const saleLogistica = String(logistica?.logistica || venda.logistica || 'Não especificado').trim();
+        const saleLogistica = String(venda.logistica || logistica?.logistica || 'Não especificado').trim();
         const saleModalidade = (saleLogistica === 'X_Loja' || saleLogistica === 'Loja') ? 'Loja' : saleLogistica;
+        
+        const quantidadeItens = (venda.subRows && venda.subRows.length > 0)
+            ? venda.subRows.reduce((acc, item) => acc + (item.quantidade || 0), 0)
+            : (venda.quantidade || 1);
 
         const appliedPackaging = custosEmbalagem.filter(e => 
             e.modalidades.includes('Todos') || e.modalidades.includes(saleModalidade)
         );
-        const packagingCost = appliedPackaging.reduce((acc, curr) => acc + curr.custo, 0);
+        const packagingCost = appliedPackaging.reduce((acc, curr) => acc + (curr.custo * quantidadeItens), 0);
 
         return {
             ...venda,
             ...(logistica && { logistica: logistica.logistica, entregador: logistica.entregador, valor: logistica.valor }),
             costs: custos || [],
-            embalagens: appliedPackaging,
+            embalagens: appliedPackaging.map(e => ({ ...e, custo: e.custo * quantidadeItens })),
             custoEmbalagem: packagingCost,
         };
     });
