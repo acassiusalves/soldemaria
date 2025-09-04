@@ -56,7 +56,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Logo } from "@/components/ui/icons";
+import { Logo } from "@/components/icons";
 import { useToast } from "@/hooks/use-toast";
 import {
   AlertDialog,
@@ -438,5 +438,3 @@ export default function CustosEmbalagemPage() {
     </div>
   );
 }
-
-    
