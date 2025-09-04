@@ -4,48 +4,30 @@
 import * as React from "react";
 import Link from "next/link";
 import {
-  AlertTriangle,
   Box,
   LayoutDashboard,
   LogOut,
+  MoreHorizontal,
+  Package,
+  PlusCircle,
   Save,
-  Settings,
   ShoppingBag,
   Trash2,
-  Loader2,
-  Percent,
-  Wand2,
-  Plug,
+  X,
   ChevronDown,
 } from "lucide-react";
 import {
   collection,
   doc,
   onSnapshot,
-  writeBatch,
-  Timestamp,
+  addDoc,
+  deleteDoc,
   updateDoc,
-  setDoc,
-  arrayRemove,
-  query,
-  getDocsFromServer,
 } from "firebase/firestore";
-import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { auth, db } from "@/lib/firebase";
 
 
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
@@ -63,119 +45,63 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import DetailedSalesHistoryTable, { ColumnDef } from "@/components/detailed-sales-history-table";
-import type { VendaDetalhada } from "@/lib/data";
-import { SupportDataDialog } from "@/components/support-data-dialog";
-import { useToast } from "@/hooks/use-toast";
-import { Progress } from "@/components/ui/progress";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Logo } from "@/components/icons";
-import { organizeCosts } from "@/ai/flows/organize-costs"; // Reutilizando a organização por enquanto
+import { useToast } from "@/hooks/use-toast";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
 
-/* ========== helpers de normalização ========== */
-export const normalizeHeader = (s: string) =>
-  String(s)
-    .toLowerCase()
-    .replace(/\u00A0/g, " ")
-    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^\w\s]/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
 
-/* ========== limpadores ========= */
-const isDateLike = (s: string) =>
-  /^\d{4}[-\/]\d{2}[-\/]\d{2}$/.test(s) ||
-  /^\d{2}[-\/]\d{2}[-\/]\d{4}$/.test(s);
-
-const cleanNumericValue = (value: any): number | string => {
-  if (typeof value === "number") return value;
-  if (typeof value !== "string") return value;
-
-  let s = value.replace(/\u00A0/g, " ").trim();
-  if (!s) return s;
-
-  if (isDateLike(s)) return s;
-
-  s = s.replace(/\s/g, "").replace(/R\$/i, "");
-
-  const hasComma = s.includes(",");
-  const hasDot   = s.includes(".");
-
-  if (hasComma && hasDot) {
-    const lastDot = s.lastIndexOf('.');
-    const lastComma = s.lastIndexOf(',');
-    if (lastComma > lastDot) {
-      s = s.replace(/\./g, "").replace(",", ".");
-    } else { 
-      s = s.replace(/,/g, "");
-    }
-  } else if (hasComma) {
-    s = s.replace(",", ".");
-  }
-  
-  const num = Number(s);
-  return Number.isFinite(num) && /[0-9]/.test(s) ? num : value;
+type Embalagem = {
+  id: string;
+  nome: string;
+  custo: number;
+  modalidade: string;
 };
 
-
-export const resolveSystemKey = (normalized: string): string => {
-  return headerMappingNormalized[normalized] || normalized.replace(/\s/g, '_');
-};
-
-/* ========== normalizador de código (chave) ========== */
-const normCode = (v: any) => {
-  let s = String(v ?? "").replace(/\u00A0/g, " ").trim();
-  if (/^\d+(?:\.0+)?$/.test(s)) s = s.replace(/\.0+$/, "");
-  s = s.replace(/[^\d]/g, "");
-  s = s.replace(/^0+/, "");
-  return s;
-};
-
-/* ========== mapear linha bruta -> chaves do sistema ========== */
-const mapRowToSystem = (row: Record<string, any>) => {
-  const out: Record<string, any> = {};
-  for (const rawHeader in row) {
-    const normalized = normalizeHeader(rawHeader);
-    const sysKey = resolveSystemKey(normalized);
-    const val = cleanNumericValue(row[rawHeader]);
-    if (sysKey) out[sysKey] = val;
-    else out[normalized.replace(/\s+/g, "_")] = val;
-  }
-  if (out.codigo != null) out.codigo = normCode(out.codigo);
-  return out;
-};
-
-
-type IncomingDataset = { rows: any[]; fileName: string; assocKey?: string };
-const API_KEY_STORAGE_KEY = "gemini_api_key";
-
-// Colunas fixas para a tela de Custos de Embalagem
-const fixedColumns: ColumnDef[] = [
-    { id: "codigo", label: "Código", isSortable: true },
-    { id: "descricao", label: "Descrição", isSortable: true },
-    { id: "fornecedor", label: "Fornecedor", isSortable: true },
-    { id: "valor", label: "Valor", isSortable: true, className: "text-right" },
-];
-
-/* ========== mapeamento por cabeçalho conhecido ========== */
-const headerMappingNormalized: Record<string, string> = {
-  "codigo": "codigo",
-  "descricao": "descricao",
-  "fornecedor": "fornecedor",
-  "valor": "valor",
+const initialNovaEmbalagemState = {
+    nome: "",
+    custo: "",
+    modalidade: "Todos",
 };
 
 export default function CustosEmbalagemPage() {
-  const [custosData, setCustosData] = React.useState<VendaDetalhada[]>([]);
-  const [stagedData, setStagedData] = React.useState<VendaDetalhada[]>([]);
-  const [stagedFileNames, setStagedFileNames] = React.useState<string[]>([]);
-  const [uploadedFileNames, setUploadedFileNames] = React.useState<string[]>([]);
+  const [embalagens, setEmbalagens] = React.useState<Embalagem[]>([]);
+  const [novaEmbalagem, setNovaEmbalagem] = React.useState(initialNovaEmbalagemState);
+  const [editingId, setEditingId] = React.useState<string | null>(null);
   const { toast } = useToast();
-
-  const [isSaving, setIsSaving] = React.useState(false);
-  const [isOrganizing, setIsOrganizing] = React.useState(false);
-  const [saveProgress, setSaveProgress] = React.useState(0);
   const router = useRouter();
 
+
+  React.useEffect(() => {
+    const unsub = onSnapshot(collection(db, "custos-embalagem"), (snapshot) => {
+      const data = snapshot.docs.map(
+        (doc) => ({ id: doc.id, ...doc.data() } as Embalagem)
+      );
+      setEmbalagens(data);
+    });
+    return () => unsub();
+  }, []);
 
     const handleLogout = async () => {
     await auth.signOut();
@@ -183,192 +109,75 @@ export default function CustosEmbalagemPage() {
   };
 
 
-  /* ======= Realtime listeners ======= */
-  React.useEffect(() => {
-    const qy = query(collection(db, "custos-embalagem"));
-    const unsub = onSnapshot(qy, (snapshot) => {
-      if (snapshot.metadata.hasPendingWrites) return;
-      let newData: VendaDetalhada[] = [];
-      let modifiedData: VendaDetalhada[] = [];
-      snapshot.docChanges().forEach((change) => {
-        if (change.type === "added")
-          newData.push({ ...change.doc.data(), id: change.doc.id } as VendaDetalhada);
-        if (change.type === "modified")
-          modifiedData.push({ ...change.doc.data(), id: change.doc.id } as VendaDetalhada);
-      });
-      if (newData.length || modifiedData.length) {
-        setCustosData((curr) => {
-          const map = new Map(curr.map((s) => [s.id, s]));
-          newData.forEach((s) => map.set(s.id, s));
-          modifiedData.forEach((s) => map.set(s.id, s));
-          return Array.from(map.values());
-        });
-      }
-      snapshot.docChanges().forEach((change) => {
-        if (change.type === "removed") {
-          setCustosData((curr) => curr.filter((s) => s.id !== change.doc.id));
-        }
-      });
-    });
-
-    const metaUnsub = onSnapshot(doc(db, "metadata", "custos-embalagem"), (docSnap) => {
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        setUploadedFileNames(data.uploadedFileNames || []);
-      }
-    });
-
-    return () => { unsub(); metaUnsub(); };
-  }, []);
-
-  /* ======= Mescla banco + staged (staged tem prioridade) ======= */
-  const allData = React.useMemo(() => {
-    const map = new Map(custosData.map(s => [s.id, s]));
-    stagedData.forEach(s => {
-        const existing = map.get(s.id) || {};
-        map.set(s.id, { ...existing, ...s });
-    });
-    return Array.from(map.values());
-  }, [custosData, stagedData]);
-
-
-  /* ======= UPLOAD / PROCESSAMENTO ======= */
-  const handleDataUpload = async (datasets: IncomingDataset[]) => {
-    if (!datasets || datasets.length === 0) return;
-
-    const uploadTimestamp = Date.now();
-    const stagedInserts: any[] = [];
-    let processedCount = 0;
-
-    for (const ds of datasets) {
-      const { rows, fileName } = ds;
-      if (!rows?.length) continue;
-
-      const mapped = rows.map(mapRowToSystem);
-
-      for (let i = 0; i < mapped.length; i++) {
-        const mappedRow = mapped[i];
-        const docId = `staged-${uploadTimestamp}-${processedCount}`;
-        stagedInserts.push({ ...mappedRow, id: docId, sourceFile: fileName, uploadTimestamp: new Date(uploadTimestamp) });
-        processedCount++;
-      }
-    }
-
-    setStagedData(prev => [...prev, ...stagedInserts]);
-    setStagedFileNames(prev => [...new Set([...prev, ...datasets.map(d => d.fileName)])]);
-
-    toast({
-      title: "Arquivos Prontos para Revisão",
-      description: `${processedCount} registro(s) adicionados à fila.`,
-    });
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setNovaEmbalagem((prev) => ({ ...prev, [name]: value }));
+  };
+  
+  const handleSelectChange = (value: string) => {
+    setNovaEmbalagem(prev => ({ ...prev, modalidade: value }));
   };
 
-  /* ======= Salvar no Firestore ======= */
-  const handleSaveChangesToDb = async () => {
-    if (stagedData.length === 0) {
-      toast({ title: "Nenhum dado novo para salvar", variant: "default" });
+  const handleSave = async () => {
+    if (!novaEmbalagem.nome || !novaEmbalagem.custo) {
+      toast({
+        title: "Erro",
+        description: "O nome e o custo da embalagem são obrigatórios.",
+        variant: "destructive",
+      });
       return;
     }
 
-    setIsSaving(true);
-    setSaveProgress(0);
-
+    const payload = {
+      nome: novaEmbalagem.nome,
+      custo: parseFloat(String(novaEmbalagem.custo).replace(',', '.')) || 0,
+      modalidade: novaEmbalagem.modalidade,
+    };
+    
     try {
-      const chunks = [];
-      const dataToSave = [...stagedData];
-      for (let i = 0; i < dataToSave.length; i += 450) {
-        chunks.push(dataToSave.slice(i, i + 450));
+      if (editingId) {
+        const docRef = doc(db, "custos-embalagem", editingId);
+        await updateDoc(docRef, payload);
+        toast({ title: "Sucesso!", description: "Custo de embalagem atualizado." });
+      } else {
+        await addDoc(collection(db, "custos-embalagem"), payload);
+        toast({ title: "Sucesso!", description: "Novo custo de embalagem salvo." });
       }
-
-      for (let i = 0; i < chunks.length; i++) {
-        const chunk = chunks[i];
-        const batch = writeBatch(db);
-
-        chunk.forEach((item) => {
-          const docId = doc(collection(db, "custos-embalagem")).id;
-          const custoRef = doc(db, "custos-embalagem", docId);
-          const { id, ...payload } = item;
-          
-          payload.id = docId;
-
-          if (payload.data instanceof Date) payload.data = Timestamp.fromDate(payload.data);
-          if (payload.uploadTimestamp instanceof Date) payload.uploadTimestamp = Timestamp.fromDate(payload.uploadTimestamp);
-
-          batch.set(custoRef, payload);
-        });
-
-        await batch.commit();
-        setSaveProgress(((i + 1) / chunks.length) * 100);
-      }
-
-      setCustosData(prev => [...prev, ...dataToSave]);
-
-      const newUploadedFileNames = [...new Set([...uploadedFileNames, ...stagedFileNames])];
-      const metaRef = doc(db, "metadata", "custos-embalagem");
-      await setDoc(metaRef, { columns: fixedColumns, uploadedFileNames: newUploadedFileNames }, { merge: true });
-
-      setStagedData([]);
-      setStagedFileNames([]);
-
-      toast({ title: "Sucesso!", description: "Os dados foram salvos no banco de dados." });
+      setNovaEmbalagem(initialNovaEmbalagemState);
+      setEditingId(null);
     } catch (error) {
-      console.error("Error saving data to Firestore:", error);
-      toast({ title: "Erro ao Salvar", description: "Houve um problema ao salvar os dados. Tente novamente.", variant: "destructive" });
-    } finally {
-      setIsSaving(false);
-      setTimeout(() => setSaveProgress(0), 1000);
+      console.error("Erro ao salvar custo de embalagem:", error);
+      toast({
+        title: "Erro ao Salvar",
+        description: "Não foi possível salvar o custo da embalagem.",
+        variant: "destructive",
+      });
     }
   };
+  
+  const handleEdit = (embalagem: Embalagem) => {
+    setEditingId(embalagem.id);
+    setNovaEmbalagem({
+        nome: embalagem.nome,
+        custo: String(embalagem.custo),
+        modalidade: embalagem.modalidade,
+    });
+  }
 
-  const { toast: _t } = useToast();
-
-  const handleRemoveUploadedFileName = async (fileName: string) => {
-    if (stagedFileNames.includes(fileName)) {
-      setStagedData(prev => prev.filter(s => s.sourceFile?.split(', ').includes(fileName)));
-      setStagedFileNames(prev => prev.filter(f => f !== fileName));
-      _t({ title: "Removido da Fila", description: `Dados do arquivo ${fileName} não serão salvos.` });
-      return;
-    }
+  const handleDelete = async (id: string) => {
     try {
-      const metaRef = doc(db, "metadata", "custos-embalagem");
-      await updateDoc(metaRef, { uploadedFileNames: arrayRemove(fileName) });
-      _t({ title: "Removido do Histórico", description: `O arquivo ${fileName} foi removido da lista.` });
-    } catch (e) {
-      console.error("Erro ao remover do histórico:", e);
-      _t({ title: "Erro", description: "Não foi possível remover o arquivo da lista.", variant: "destructive" });
+        await deleteDoc(doc(db, "custos-embalagem", id));
+        toast({ title: "Removido", description: "Custo de embalagem removido com sucesso." });
+    } catch(error) {
+        console.error("Erro ao remover custo:", error);
+        toast({ title: "Erro", description: "Não foi possível remover o custo.", variant: "destructive" });
     }
-  };
-
-  const handleClearStagedData = () => {
-    setStagedData([]);
-    setStagedFileNames([]);
-    _t({ title: "Dados em revisão removidos" });
-  };
-
-  const handleClearAllData = async () => {
-    try {
-      const custosQuery = query(collection(db, "custos-embalagem"));
-      const custosSnapshot = await getDocsFromServer(custosQuery);
-      if (custosSnapshot.empty) { _t({ title: "Banco já está limpo" }); return; }
-
-      const docsToDelete = custosSnapshot.docs;
-      for (let i = 0; i < docsToDelete.length; i += 450) {
-        const chunk = docsToDelete.slice(i, i + 450);
-        const batch = writeBatch(db);
-        chunk.forEach((d: any) => batch.delete(d.ref));
-        await batch.commit();
-      }
-
-      const metaRef = doc(db, "metadata", "custos-embalagem");
-      await setDoc(metaRef, { uploadedFileNames: [], columns: [] }, { merge: true });
-
-      setCustosData([]);
-      _t({ title: "Limpeza Concluída!", description: "Todos os dados de custos de embalagem foram apagados." });
-    } catch (error) {
-      console.error("Error clearing all data:", error);
-      _t({ title: "Erro na Limpeza", description: "Não foi possível apagar todos os dados. Verifique o console.", variant: "destructive" });
-    }
-  };
+  }
+  
+  const handleCancelEdit = () => {
+    setEditingId(null);
+    setNovaEmbalagem(initialNovaEmbalagemState);
+  }
 
   return (
     <div className="flex min-h-screen w-full flex-col">
@@ -379,7 +188,9 @@ export default function CustosEmbalagemPage() {
             className="flex items-center gap-2 text-lg font-semibold md:text-base"
           >
             <Logo className="size-8 text-primary" />
-            <span className="text-xl font-semibold font-headline">Visão de Vendas</span>
+            <span className="text-xl font-semibold font-headline">
+              Visão de Vendas
+            </span>
           </Link>
           <Link
             href="/"
@@ -401,7 +212,7 @@ export default function CustosEmbalagemPage() {
           </Link>
            <DropdownMenu>
             <DropdownMenuTrigger asChild>
-               <Button variant="ghost" className="flex items-center gap-1 text-foreground transition-colors hover:text-foreground data-[state=open]:bg-accent px-3">
+              <Button variant="ghost" className="flex items-center gap-1 text-foreground transition-colors hover:text-foreground data-[state=open]:bg-accent px-3">
                 Taxas
                 <ChevronDown className="h-4 w-4" />
               </Button>
@@ -418,7 +229,7 @@ export default function CustosEmbalagemPage() {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-           <Link
+          <Link
             href="/conexoes"
             className="text-muted-foreground transition-colors hover:text-foreground"
           >
@@ -426,19 +237,23 @@ export default function CustosEmbalagemPage() {
           </Link>
         </nav>
         <div className="flex w-full items-center gap-4 md:ml-auto md:gap-2 lg:gap-4">
-            <div className="ml-auto flex-1 sm:flex-initial">
-              {/* This space is intentionally left blank for now */}
-            </div>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="secondary" size="icon" className="rounded-full">
-                  <Avatar className="h-9 w-9">
-                    <AvatarImage src="https://picsum.photos/100/100" data-ai-hint="person" alt="@usuario" />
-                    <AvatarFallback>UV</AvatarFallback>
-                  </Avatar>
-                  <span className="sr-only">Toggle user menu</span>
-                </Button>
-              </DropdownMenuTrigger>
+          <div className="ml-auto flex-1 sm:flex-initial">
+            {/* This space is intentionally left blank for now */}
+          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="secondary" size="icon" className="rounded-full">
+                <Avatar className="h-9 w-9">
+                  <AvatarImage
+                    src="https://picsum.photos/100/100"
+                    data-ai-hint="person"
+                    alt="@usuario"
+                  />
+                  <AvatarFallback>UV</AvatarFallback>
+                </Avatar>
+                <span className="sr-only">Toggle user menu</span>
+              </Button>
+            </DropdownMenuTrigger>
              <DropdownMenuContent align="end">
                 <DropdownMenuLabel>Minha Conta</DropdownMenuLabel>
                 <DropdownMenuSeparator />
@@ -449,93 +264,128 @@ export default function CustosEmbalagemPage() {
                   Sair
                 </DropdownMenuItem>
               </DropdownMenuContent>
-            </DropdownMenu>
+          </DropdownMenu>
         </div>
       </header>
-
-      <main className="flex-1 space-y-6 p-4 md:p-8">
-        <Card>
-          <CardHeader>
-            <div className="flex justify-between items-start">
-                <div>
-                  <CardTitle className="font-headline text-h3">Custos de Embalagem</CardTitle>
-                  <CardDescription>Carregue e organize suas planilhas de custos com embalagens.</CardDescription>
+      <main className="flex flex-1 flex-col gap-4 p-4 md:gap-8 md:p-8">
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-5">
+            <Card className="lg:col-span-2">
+            <CardHeader>
+                <CardTitle className="font-headline text-h3 flex items-center gap-2">
+                <Package className="size-6"/>
+                {editingId ? "Editar Custo" : "Cadastrar Custo de Embalagem"}
+                </CardTitle>
+                <CardDescription>
+                Adicione ou edite os custos associados a cada tipo de embalagem.
+                </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                        <Label htmlFor="nome">Nome da Embalagem</Label>
+                        <Input id="nome" name="nome" placeholder="Ex: Caixa P, Sacola M" value={novaEmbalagem.nome} onChange={handleInputChange} />
+                    </div>
+                    <div className="space-y-2">
+                        <Label htmlFor="custo">Custo Unitário (R$)</Label>
+                        <Input id="custo" name="custo" type="text" placeholder="Ex: 1,50" value={novaEmbalagem.custo} onChange={handleInputChange} />
+                    </div>
                 </div>
-                 <div className="flex items-center gap-2">
-                    <SupportDataDialog
-                      onProcessData={handleDataUpload}
-                      uploadedFileNames={uploadedFileNames}
-                      onRemoveUploadedFile={handleRemoveUploadedFileName}
-                      stagedFileNames={stagedFileNames}
-                    >
-                       <Button variant="outline">
-                        <Settings className="mr-2 h-4 w-4" />
-                        Dados de Apoio
-                      </Button>
-                    </SupportDataDialog>
-                     {stagedData.length > 0 && (
-                      <Button
-                        onClick={handleClearStagedData}
-                        variant="destructive"
-                        disabled={isSaving || isOrganizing}
-                      >
-                        <Trash2 className="mr-2 h-4 w-4" />
-                        Limpar Revisão
-                      </Button>
-                    )}
-                    <Button
-                      onClick={handleSaveChangesToDb}
-                      disabled={stagedData.length === 0 || isSaving || isOrganizing}
-                      variant={stagedData.length === 0 ? "outline" : "default"}
-                      title={stagedData.length === 0 ? "Carregue planilhas para habilitar" : "Salvar dados no Firestore"}
-                    >
-                      {isSaving ? (
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      ) : (
-                          <Save className="mr-2 h-4 w-4" />
-                      )}
-                      {isSaving ? "Salvando..." : `Salvar no Banco ${stagedData.length > 0 ? `(${stagedData.length})` : ""}`}
+                 <div className="space-y-2">
+                    <Label htmlFor="modalidade">Modalidade de Venda Aplicável</Label>
+                     <Select value={novaEmbalagem.modalidade} onValueChange={handleSelectChange}>
+                        <SelectTrigger id="modalidade">
+                            <SelectValue placeholder="Selecione a modalidade" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="Todos">Todas as Modalidades</SelectItem>
+                            <SelectItem value="Delivery">Delivery</SelectItem>
+                            <SelectItem value="Loja">Loja</SelectItem>
+                            <SelectItem value="Correios">Correios</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
+                 <div className="flex gap-2 pt-4">
+                    <Button onClick={handleSave}>
+                        <Save className="mr-2 h-4 w-4" />
+                        {editingId ? "Salvar Alterações" : "Adicionar Custo"}
                     </Button>
-                     {custosData.length > 0 && uploadedFileNames.length === 0 && (
-                        <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                                <Button variant="destructive">
-                                    <AlertTriangle className="mr-2 h-4 w-4" />
-                                    Apagar Tudo
-                                </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                                <AlertDialogHeader>
-                                    <AlertDialogTitle>Você tem certeza absoluta?</AlertDialogTitle>
-                                    <AlertDialogDescription>
-                                        Esta ação não pode ser desfeita. Isso irá apagar permanentemente
-                                        TODOS os dados de custos de embalagem do seu banco de dados.
-                                    </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                    <AlertDialogAction onClick={handleClearAllData}>
-                                        Sim, apagar tudo
-                                    </AlertDialogAction>
-                                </AlertDialogFooter>
-                            </AlertDialogContent>
-                        </AlertDialog>
-                     )}
+                    {editingId && (
+                        <Button variant="outline" onClick={handleCancelEdit}>Cancelar</Button>
+                    )}
                  </div>
-              </div>
-          </CardHeader>
-          {isSaving && (
-            <CardContent className="pb-4">
-              <Progress value={saveProgress} className="w-full" />
-              <p className="text-sm text-muted-foreground mt-2 text-center">
-                Salvando {stagedData.length} registros. Isso pode levar um momento...
-              </p>
             </CardContent>
-          )}
-        </Card>
+            </Card>
 
-        <DetailedSalesHistoryTable data={allData} columns={fixedColumns} tableTitle="Relatório de Custos de Embalagem" />
+            <Card className="lg:col-span-3">
+                 <CardHeader>
+                    <CardTitle className="font-headline text-h3">Custos de Embalagem Cadastrados</CardTitle>
+                    <CardDescription>
+                    Lista de todos os custos de embalagem salvos no sistema.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>Nome</TableHead>
+                                <TableHead>Modalidade</TableHead>
+                                <TableHead className="text-right">Custo</TableHead>
+                                <TableHead className="w-[80px]"></TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {embalagens.length > 0 ? embalagens.map(item => (
+                                <TableRow key={item.id}>
+                                    <TableCell className="font-medium">{item.nome}</TableCell>
+                                    <TableCell>
+                                        <Badge variant="secondary">{item.modalidade}</Badge>
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                        {item.custo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                    </TableCell>
+                                    <TableCell>
+                                        <DropdownMenu>
+                                            <DropdownMenuTrigger asChild>
+                                                <Button variant="ghost" size="icon" className="h-8 w-8">
+                                                    <MoreHorizontal className="h-4 w-4" />
+                                                </Button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuContent align="end">
+                                                <DropdownMenuItem onClick={() => handleEdit(item)}>Editar</DropdownMenuItem>
+                                                <AlertDialog>
+                                                    <AlertDialogTrigger asChild>
+                                                        <DropdownMenuItem onSelect={(e) => e.preventDefault()}>Excluir</DropdownMenuItem>
+                                                    </AlertDialogTrigger>
+                                                    <AlertDialogContent>
+                                                        <AlertDialogHeader>
+                                                        <AlertDialogTitle>Você tem certeza?</AlertDialogTitle>
+                                                        <AlertDialogDescription>
+                                                            Essa ação não pode ser desfeita. O custo será removido permanentemente.
+                                                        </AlertDialogDescription>
+                                                        </AlertDialogHeader>
+                                                        <AlertDialogFooter>
+                                                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                                        <AlertDialogAction onClick={() => handleDelete(item.id)}>Excluir</AlertDialogAction>
+                                                        </AlertDialogFooter>
+                                                    </AlertDialogContent>
+                                                </AlertDialog>
+                                            </DropdownMenuContent>
+                                        </DropdownMenu>
+                                    </TableCell>
+                                </TableRow>
+                            )) : (
+                                <TableRow>
+                                    <TableCell colSpan={4} className="text-center h-24">Nenhum custo de embalagem cadastrado.</TableCell>
+                                </TableRow>
+                            )}
+                        </TableBody>
+                    </Table>
+                </CardContent>
+            </Card>
+        </div>
       </main>
     </div>
   );
 }
+
+    
