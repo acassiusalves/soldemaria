@@ -4,7 +4,7 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { ArrowUpDown, Columns, ChevronRight, X, Eye, EyeOff, Save, Loader2, Settings2, GripVertical, Calculator, Search, Info } from "lucide-react";
+import { ArrowUpDown, Columns, ChevronRight, X, Eye, EyeOff, Save, Loader2, Settings2, GripVertical, Calculator, Search, Info, Package } from "lucide-react";
 import { VendaDetalhada, CustomCalculation, Operadora } from "@/lib/data";
 import {
   Table,
@@ -417,7 +417,7 @@ export default function DetailedSalesHistoryTable({
     const systemColumnsToHide = [
         "id", "sourceFile", "uploadTimestamp", "subRows", "parcelas", 
         "total_valor_parcelas", "mov_estoque", "valor_da_parcela", "tipo_de_pagamento",
-        "quantidade_movimentada", "costs", "customData"
+        "quantidade_movimentada", "costs", "customData", "embalagens", "custoEmbalagem"
     ];
     const base = (columns && columns.length > 0) ? columns : FIXED_COLUMNS;
 
@@ -630,7 +630,7 @@ export default function DetailedSalesHistoryTable({
       const isPercentage = customCalc?.isPercentage;
   
       if (isPercentage && typeof value === 'number') {
-        return `${(value * 100).toFixed(2)}%`;
+        return `${value.toFixed(2)}%`;
       }
   
       if (["final","custoFrete","imposto","embalagem","comissao","custoUnitario","valorUnitario","valorCredito","valorDescontos", "valor"]
@@ -897,7 +897,7 @@ export default function DetailedSalesHistoryTable({
                   <React.Fragment key={row.id}>
                     <TableRow>
                        <TableCell>
-                          {(row.subRows?.length > 0 || row.parcelas?.length > 0 || row.costs?.length > 0) && (
+                          {(row.subRows?.length > 0 || row.costs?.length > 0) && (
                             <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => toggleRowExpansion(row.id)}>
                                 <ChevronRight className={cn("h-4 w-4 transition-transform", expandedRows.has(row.id) && "rotate-90")} />
                             </Button>
@@ -939,39 +939,67 @@ export default function DetailedSalesHistoryTable({
                                     </TabsContent>
                                     <TabsContent value="payment">
                                        {row.costs && row.costs.length > 0 && (
-                                          <div className="p-2 rounded-md bg-background">
-                                           <Table>
-                                             <TableHeader>
-                                               <TableRow>
-                                                  {paymentDetailColumns.map(col => (
-                                                     <TableHead key={col.id}>
-                                                        <div className="flex items-center gap-1">
-                                                          {col.label}
-                                                          {col.id === 'taxaCalculada' && (
-                                                            <TooltipProvider>
-                                                              <Tooltip>
-                                                                <TooltipTrigger asChild>
-                                                                  <Info className="h-3 w-3 text-muted-foreground cursor-help" />
-                                                                </TooltipTrigger>
-                                                                <TooltipContent>
-                                                                  <p>Cálculo baseado nas taxas por operadora e<br/>parcela definidas na tela de Taxas.</p>
-                                                                </TooltipContent>
-                                                              </Tooltip>
-                                                            </TooltipProvider>
-                                                          )}
-                                                        </div>
-                                                     </TableHead>
-                                                  ))}
-                                               </TableRow>
-                                             </TableHeader>
-                                             <TableBody>
-                                                {calculatedCosts(row.costs).map((cost: any, index: number) => (
-                                                  <TableRow key={`${cost.id}-${index}`}>
-                                                      {paymentDetailColumns.map(col => <TableCell key={col.id}>{renderDetailCell(cost, col.id)}</TableCell>)}
-                                                  </TableRow>
-                                                ))}
-                                             </TableBody>
-                                           </Table>
+                                          <div className="p-2 rounded-md bg-background space-y-4">
+                                            <div>
+                                                <h4 className="font-semibold text-sm mb-2">Taxas e Custos</h4>
+                                                <Table>
+                                                <TableHeader>
+                                                    <TableRow>
+                                                    {paymentDetailColumns.map(col => (
+                                                        <TableHead key={col.id}>
+                                                            <div className="flex items-center gap-1">
+                                                            {col.label}
+                                                            {col.id === 'taxaCalculada' && (
+                                                                <TooltipProvider>
+                                                                <Tooltip>
+                                                                    <TooltipTrigger asChild>
+                                                                    <Info className="h-3 w-3 text-muted-foreground cursor-help" />
+                                                                    </TooltipTrigger>
+                                                                    <TooltipContent>
+                                                                    <p>Cálculo baseado nas taxas por operadora e<br/>parcela definidas na tela de Taxas.</p>
+                                                                    </TooltipContent>
+                                                                </Tooltip>
+                                                                </TooltipProvider>
+                                                            )}
+                                                            </div>
+                                                        </TableHead>
+                                                    ))}
+                                                    </TableRow>
+                                                </TableHeader>
+                                                <TableBody>
+                                                    {calculatedCosts(row.costs).map((cost: any, index: number) => (
+                                                    <TableRow key={`${cost.id}-${index}`}>
+                                                        {paymentDetailColumns.map(col => <TableCell key={col.id}>{renderDetailCell(cost, col.id)}</TableCell>)}
+                                                    </TableRow>
+                                                    ))}
+                                                </TableBody>
+                                                </Table>
+                                            </div>
+                                            {row.embalagens && row.embalagens.length > 0 && (
+                                                <div>
+                                                    <h4 className="font-semibold text-sm mb-2 flex items-center gap-2"><Package size={16}/> Embalagens Aplicadas</h4>
+                                                    <Table>
+                                                        <TableHeader>
+                                                            <TableRow>
+                                                                <TableHead>Embalagem</TableHead>
+                                                                <TableHead className="text-right">Custo</TableHead>
+                                                            </TableRow>
+                                                        </TableHeader>
+                                                        <TableBody>
+                                                            {row.embalagens.map((embalagem: any, index: number) => (
+                                                                <TableRow key={index}>
+                                                                    <TableCell>{embalagem.nome}</TableCell>
+                                                                    <TableCell className="text-right">{renderDetailCell(embalagem, 'custo')}</TableCell>
+                                                                </TableRow>
+                                                            ))}
+                                                            <TableRow className="font-bold bg-muted/50">
+                                                                <TableCell>Custo Total Embalagens</TableCell>
+                                                                <TableCell className="text-right">{renderDetailCell({ custo: row.custoEmbalagem }, 'custo')}</TableCell>
+                                                            </TableRow>
+                                                        </TableBody>
+                                                    </Table>
+                                                </div>
+                                            )}
                                           </div>
                                        )}
                                     </TabsContent>

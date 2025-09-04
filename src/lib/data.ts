@@ -23,6 +23,13 @@ export type Operadora = {
   taxasCredito: Parcela[];
 };
 
+export type Embalagem = {
+  id: string;
+  nome: string;
+  custo: number;
+  modalidades: string[];
+};
+
 export type VendaDetalhada = {
   id: string;
   data: any; // Allow different date types during upload
@@ -59,6 +66,8 @@ export type VendaDetalhada = {
   // Campos que podem ser adicionados por outras fontes de dados
   subRows?: VendaDetalhada[];
   costs?: any[];
+  embalagens?: Embalagem[];
+  custoEmbalagem?: number;
   customData?: Record<string, number>;
 };
 

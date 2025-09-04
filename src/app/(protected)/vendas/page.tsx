@@ -85,7 +85,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import DetailedSalesHistoryTable, { ColumnDef } from "@/components/detailed-sales-history-table";
-import type { VendaDetalhada, CustomCalculation, FormulaItem, Operadora } from "@/lib/data";
+import type { VendaDetalhada, CustomCalculation, FormulaItem, Operadora, Embalagem } from "@/lib/data";
 import { SupportDataDialog } from "@/components/support-data-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Progress } from "@/components/ui/progress";
@@ -421,6 +421,7 @@ export default function VendasPage() {
   const [vendasData, setVendasData] = React.useState<VendaDetalhada[]>([]);
   const [logisticaData, setLogisticaData] = React.useState<VendaDetalhada[]>([]);
   const [custosData, setCustosData] = React.useState<VendaDetalhada[]>([]);
+  const [custosEmbalagem, setCustosEmbalagem] = React.useState<Embalagem[]>([]);
   const [stagedData, setStagedData] = React.useState<VendaDetalhada[]>([]);
   const [stagedFileNames, setStagedFileNames] = React.useState<string[]>([]);
   const [columns, setColumns] = React.useState<ColumnDef[]>([]);
@@ -453,13 +454,14 @@ export default function VendasPage() {
         { name: "vendas", setter: setVendasData },
         { name: "logistica", setter: setLogisticaData },
         { name: "custos", setter: setCustosData },
+        { name: "custos-embalagem", setter: setCustosEmbalagem },
     ];
 
     const unsubs = collectionsToWatch.map(({ name, setter }) => {
         const q = query(collection(db, name));
         return onSnapshot(q, (snapshot) => {
             if (snapshot.metadata.hasPendingWrites) return;
-            const data = snapshot.docs.map(d => ({ ...d.data(), id: d.id })) as VendaDetalhada[];
+            const data = snapshot.docs.map(d => ({ ...d.data(), id: d.id })) as any[];
             setter(data);
         });
     });
@@ -626,7 +628,7 @@ const syncExistingCustomColumns = React.useCallback(async () => {
     
     if (needsOrderUpdate) {
         setColumnOrder(currentOrder);
-        await saveUserPreference(user.uid, 'vendas_columns_order', currentOrder);
+        await saveUserPreference(user.uid, 'vendas_columns_order', finalOrder);
     }
     
 }, [customCalculations, columnVisibility, columnOrder]);
@@ -707,16 +709,16 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
         };
     };
 
-    const getNumericField = (row: any, keyOrLabel: string): number => {
-        let val = row.customData?.[keyOrLabel] ?? row[keyOrLabel];
-
+    const getNumericField = (row: any, customData: any, keyOrLabel: string): number => {
+        let val = customData?.[keyOrLabel] ?? row[keyOrLabel];
+        
         if (val === undefined || val === null) {
             const column = mergedColumns.find(c => c.label === keyOrLabel || c.id === keyOrLabel);
             if (column) {
-                val = row.customData?.[column.id] ?? row[column.id];
+                val = customData?.[column.id] ?? row[column.id];
             }
         }
-
+        
         if (typeof val === 'number') return val;
         if (typeof val === 'string') {
             const cleaned = val.replace(/[^\d,.-]/g, '').replace(',', '.');
@@ -728,24 +730,26 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
 
     return data.map(row => {
         const newRow = { ...row, customData: { ...(row.customData || {}) } };
+        const newCustomData = newRow.customData;
 
         customCalculations.forEach(calc => {
-            const flatRowForCalcs = { ...row, ...newRow.customData };
-
+            const flatRowForCalcs = { ...row, ...newCustomData };
+            
             try {
                 let formulaString = '';
+                
                 for (let i = 0; i < calc.formula.length; i++) {
                     const item = calc.formula[i];
-
+                    
                     if (item.type === 'column') {
-                        const value = getNumericField(flatRowForCalcs, item.value);
+                        const value = getNumericField(row, newCustomData, item.value);
                         const safe = Number.isFinite(value) ? String(value) : '0';
-                        formulaString += ` ${safe} `;
+                        formulaString += safe;
                     } else if (item.type === 'number') {
                         const parsed = sanitizeNumberLiteral(String(item.value));
                         let numValue = parsed.value;
                         if (parsed.hadPercent) numValue = numValue / 100;
-                        formulaString += ` ${String(numValue)} `;
+                        formulaString += String(numValue);
                     } else if (item.type === 'op') {
                         const op = sanitizeOp(String(item.value));
                         if (!/^[\+\-\*\/\(\)]$/.test(op)) {
@@ -757,43 +761,44 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
                 
                 formulaString = formulaString.replace(/\s+/g, ' ').trim();
                 formulaString = formulaString.replace(/[\+\-\*\/]\s*$/, '');
-                
+
                 if (!/^[\d\.\s\+\-\*\/\(\)]+$/.test(formulaString)) {
                     console.warn(`Fórmula com chars fora do permitido, sanitizada:`, formulaString);
                 }
-
+                
                 if (!formulaString) {
                     throw new Error("Fórmula vazia");
                 }
-
+                
                 const result = new Function(`return ${formulaString}`)();
                 let numResult = typeof result === 'number' && Number.isFinite(result) ? result : 0;
                 
                 if (calc.isPercentage) {
-                    numResult = numResult / 100;
+                    numResult = numResult * 100;
                 }
-
-                newRow.customData[calc.id] = numResult;
+  
+                newCustomData[calc.id] = numResult;
                 
                 if (calc.interaction?.targetColumn) {
-                    const baseValue = getNumericField({...flatRowForCalcs, ...newRow.customData}, calc.interaction.targetColumn);
-                    const newValue = calc.interaction.operator === '-'
-                        ? baseValue - numResult
+                    const baseValue = getNumericField(row, newCustomData, calc.interaction.targetColumn);
+                    const newValue = calc.interaction.operator === '-' 
+                        ? baseValue - numResult 
                         : baseValue + numResult;
-
-                    newRow.customData[calc.interaction.targetColumn] = newValue;
+                    
+                    newCustomData[calc.interaction.targetColumn] = newValue;
                 }
+
             } catch (e: any) {
                 console.error(`\n❌ ERRO DETALHADO no cálculo ${calc.name}:`);
                 console.error('Mensagem:', e.message);
                 console.error('Fórmula que causou erro:', calc.formula);
                 console.error('Row data:', flatRowForCalcs);
                 console.error('Stack trace:', e.stack);
-                newRow.customData[calc.id] = 0;
+                newCustomData[calc.id] = 0;
             }
         });
-
-        return newRow;
+        
+        return { ...newRow, customData: newCustomData };
     });
 }, [customCalculations, mergedColumns]);
 
@@ -814,16 +819,27 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
         const logistica = logisticaMap.get(code);
         const custos = custosByCode.get(code);
 
+        // Aplicar custos de embalagem
+        const saleLogistica = (logistica?.logistica || venda.logistica || 'Não especificado').trim();
+        const saleModalidade = (saleLogistica === 'X_Loja' || saleLogistica === 'Loja') ? 'Loja' : saleLogistica;
+
+        const appliedPackaging = custosEmbalagem.filter(e => 
+            e.modalidades.includes('Todos') || e.modalidades.includes(saleModalidade)
+        );
+        const packagingCost = appliedPackaging.reduce((acc, curr) => acc + curr.custo, 0);
+
         return {
             ...venda,
             ...(logistica && { logistica: logistica.logistica, entregador: logistica.entregador, valor: logistica.valor }),
             costs: custos || [],
+            embalagens: appliedPackaging,
+            custoEmbalagem: packagingCost,
         };
     });
 
     const map = new Map(merged.map(s => [s.id, s]));
     return Array.from(map.values());
-  }, [vendasData, logisticaData, custosData, stagedData]);
+  }, [vendasData, logisticaData, custosData, stagedData, custosEmbalagem]);
 
 
   /* ======= Filtro por período ======= */
@@ -892,13 +908,14 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
 
 
 React.useEffect(() => {
+    // Debug: Log das configurações carregadas
     console.log('=== DEBUG CÁLCULOS CUSTOMIZADOS ===');
     console.log('Custom calculations carregados:', customCalculations);
     console.log('Merged columns:', mergedColumns);
     console.log('All data sample:', allData.slice(0, 1));
     console.log('Grouped for view sample:', groupedForView.slice(0, 1));
     console.log('=====================================');
-}, [customCalculations, mergedColumns, allData, groupedForView]);
+}, [customCalculations, mergedColumns, groupedForView, allData]);
 
 React.useEffect(() => {
     if (customCalculations.length > 0) {
