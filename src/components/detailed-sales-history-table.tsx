@@ -666,7 +666,7 @@ export default function DetailedSalesHistoryTable({
       return null;
     };
 
-    if(typeof value === 'number' && ['final', 'custoUnitario', 'valorUnitario', 'valorCredito', 'valorDescontos', 'valor', 'taxaCalculada'].includes(columnId)) {
+    if(typeof value === 'number' && ['final', 'custoUnitario', 'valorUnitario', 'valorCredito', 'valorDescontos', 'valor', 'taxaCalculada', 'custo'].includes(columnId)) {
       return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
     }
 
