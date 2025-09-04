@@ -164,6 +164,7 @@ const columnLabels: Record<string, string> = {
   valor: 'Valor',
   origemCliente: 'Origem Cliente',
   custoEmbalagem: 'Custo Embalagem',
+  taxaTotalCartao: 'Taxa Total Cartão',
 };
 const getLabel = (key: string, customCalculations: CustomCalculation[] = []) => {
     if (key.startsWith('custom_')) {
@@ -948,11 +949,36 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
           g.header.embalagens = [];
           g.header.custoEmbalagem = 0;
         }
+        
+      // === APLICAÇÃO DAS TAXAS DE CARTÃO (POR PEDIDO) ===
+      let taxaTotalCartao = 0;
+      if (Array.isArray(g.header.costs) && taxasOperadoras.length > 0) {
+        g.header.costs.forEach((cost: any) => {
+          const valor = Number(cost.valor) || 0;
+          const modo = normalizeText(cost.modo_de_pagamento);
+          const tipo = normalizeText(cost.tipo_pagamento);
+          const instituicao = normalizeText(cost.instituicao_financeira);
+          const parcela = Number(cost.parcela) || 1;
+
+          const operadora = taxasOperadoras.find(op => normalizeText(op.nome) === instituicao);
+          if (operadora) {
+            let taxaPercentual = 0;
+            if (modo.includes('cartao') && tipo.includes('debito')) {
+              taxaPercentual = operadora.taxaDebito || 0;
+            } else if (modo.includes('cartao') && tipo.includes('credito')) {
+              const taxaCredito = operadora.taxasCredito.find(t => t.numero === parcela);
+              taxaPercentual = taxaCredito?.taxa || 0;
+            }
+            taxaTotalCartao += valor * (taxaPercentual / 100);
+          }
+        });
+      }
+      g.header.taxaTotalCartao = taxaTotalCartao;
     }
 
     const headers = Array.from(groups.values()).map(g => g.header);
     return applyCustomCalculations(headers);
-  }, [filteredData, applyCustomCalculations, custosEmbalagem]);
+  }, [filteredData, applyCustomCalculations, custosEmbalagem, taxasOperadoras]);
 
   const summaryData = React.useMemo(() => {
     return groupedForView.reduce(
@@ -1164,10 +1190,14 @@ React.useEffect(() => {
         "quantidade_movimentada", "costs", "customData", "embalagens"
     ];
     
-    // Add custoEmbalagem explicitly as it's calculated later
-    if (!allColumns.some(c => c.id === 'custoEmbalagem')) {
-        allColumns.push({ id: 'custoEmbalagem', label: getLabel('custoEmbalagem', customCalculations), isSortable: true });
-    }
+    // Add calculated fields explicitly as they might not be in `columns` yet
+    const calculatedFields = ['custoEmbalagem', 'taxaTotalCartao'];
+    calculatedFields.forEach(fieldId => {
+        if (!allColumns.some(c => c.id === fieldId)) {
+            allColumns.push({ id: fieldId, label: getLabel(fieldId, customCalculations), isSortable: true });
+        }
+    });
+
 
     if (groupedForView.length > 0) {
         const dataKeys = Object.keys(groupedForView[0]);
@@ -1182,7 +1212,7 @@ React.useEffect(() => {
     
     return uniqueCols
         .filter(c => !systemColumnsToHide.includes(c.id))
-        .map(c => ({ key: c.id, label: c.label || getLabel(c.id) }));
+        .map(c => ({ key: c.id, label: c.label || getLabel(c.id, customCalculations) }));
 
   }, [columns, customCalculations, groupedForView]);
 

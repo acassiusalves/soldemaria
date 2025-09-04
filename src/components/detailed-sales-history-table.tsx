@@ -110,6 +110,7 @@ const columnLabels: Record<string, string> = {
   instituicao_financeira: 'Instituição Financeira',
   custo: 'Custo',
   custoEmbalagem: 'Custo Embalagem',
+  taxaTotalCartao: 'Taxa Total Cartão',
 };
 
 const getLabel = (key: string, customCalculations: CustomCalculation[] = []) => {
@@ -420,7 +421,7 @@ export default function DetailedSalesHistoryTable({
     const systemColumnsToHide = [
         "id", "sourceFile", "uploadTimestamp", "subRows", "parcelas", 
         "total_valor_parcelas", "mov_estoque", "valor_da_parcela", "tipo_de_pagamento",
-        "quantidade_movimentada", "costs", "customData", "embalagens",
+        "quantidade_movimentada", "costs", "customData", "embalagens", "taxaTotalCartao"
     ];
     const base = (columns && columns.length > 0) ? columns : FIXED_COLUMNS;
 
@@ -456,6 +457,11 @@ export default function DetailedSalesHistoryTable({
     map.forEach((col, key) => {
         col.label = getLabel(key, customCalculations);
     });
+
+    // Manually add taxaTotalCartao to ensure it's available
+    if (!map.has('taxaTotalCartao')) {
+        map.set('taxaTotalCartao', { id: 'taxaTotalCartao', label: getLabel('taxaTotalCartao', customCalculations), isSortable: true });
+    }
 
     return Array.from(map.values()).filter(c => !systemColumnsToHide.includes(c.id));
 }, [columns, data, customCalculations]);
@@ -544,8 +550,12 @@ export default function DetailedSalesHistoryTable({
     if (!sortKey) return filteredData;
 
     return [...filteredData].sort((a, b) => {
-      const aValue = (a as any)[sortKey] ?? (a as any).customData?.[sortKey];
-      const bValue = (b as any)[sortKey] ?? (b as any).customData?.[sortKey];
+      let aValue = (a as any)[sortKey];
+      let bValue = (b as any)[sortKey];
+      
+      // Check customData if primary field is not present
+      if (aValue === undefined || aValue === null) aValue = a.customData?.[sortKey];
+      if (bValue === undefined || bValue === null) bValue = b.customData?.[sortKey];
 
       if (aValue === undefined || aValue === null) return 1;
       if (bValue === undefined || bValue === null) return -1;
@@ -603,6 +613,11 @@ export default function DetailedSalesHistoryTable({
       if (columnId.startsWith('custom_') || value === null || value === undefined) {
           value = row.customData?.[columnId] ?? value;
       }
+
+      // Handle specific calculated fields that might not be in customData
+      if(columnId === 'taxaTotalCartao' && value === undefined) {
+          value = row.taxaTotalCartao;
+      }
       
       if (columnId === 'tipo_pagamento' || columnId === 'tipo_de_pagamento') {
           return showBlank(row.tipo_de_pagamento ?? row.tipo_pagamento);
@@ -636,7 +651,7 @@ export default function DetailedSalesHistoryTable({
         return `${value.toFixed(2)}%`;
       }
   
-      if (["final","custoFrete","imposto","embalagem","comissao","custoUnitario","valorUnitario","valorCredito","valorDescontos", "valor", "custoEmbalagem"]
+      if (["final","custoFrete","imposto","embalagem","comissao","custoUnitario","valorUnitario","valorCredito","valorDescontos", "valor", "custoEmbalagem", "taxaTotalCartao"]
           .includes(columnId) || (typeof value === 'number' && columnId.startsWith('custom_') && !isPercentage)) {
           const n = toNumber(value);
           if (n !== null) {
@@ -685,6 +700,7 @@ export default function DetailedSalesHistoryTable({
   }
 
   const calculatedCosts = (costs: any[]) => {
+    if (!costs) return [];
     return costs.map(cost => {
       const valor = Number(cost.valor) || 0;
       const modo = (cost.modo_de_pagamento || '').toLowerCase();
@@ -1068,6 +1084,7 @@ const renderEmbalagemTab = (row: any) => {
     </>
   );
 }
+
 
 
 
