@@ -66,7 +66,7 @@ export type VendaDetalhada = {
   // Campos que podem ser adicionados por outras fontes de dados
   subRows?: VendaDetalhada[];
   costs?: any[];
-  embalagens?: Embalagem[];
+  embalagens?: (Embalagem & { calculatedCost: number, quantity: number })[];
   custoEmbalagem?: number;
   customData?: Record<string, number>;
 };

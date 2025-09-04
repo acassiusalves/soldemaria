@@ -448,6 +448,74 @@ export default function VendasPage() {
     router.push('/login');
   };
 
+  const allData = React.useMemo(() => {
+    const allRows = [...vendasData, ...stagedData];
+    const logisticaMap = new Map(logisticaData.map(l => [normCode(l.codigo), l]));
+    const custosByCode = new Map<string, any[]>();
+
+    custosData.forEach(c => {
+        const code = normCode(c.codigo);
+        if (!custosByCode.has(code)) custosByCode.set(code, []);
+        custosByCode.get(code)!.push(c);
+    });
+
+    const merged = allRows.map(venda => {
+        const code = normCode(venda.codigo);
+        const logistica = logisticaMap.get(code);
+        const custos = custosByCode.get(code);
+
+        // Aplicar custos de embalagem com regras de negócio
+        const saleLogistica = String(venda.logistica || logistica?.logistica || 'Não especificado').trim();
+        const saleModalidade = (saleLogistica === 'X_Loja' || saleLogistica === 'Loja') ? 'Loja' : 'Delivery'; // Simplifica para as duas modalidades principais
+        
+        const quantidadeItens = (venda.subRows && venda.subRows.length > 0)
+            ? venda.subRows.reduce((acc, item) => acc + (Number(item.quantidade) || 0), 0)
+            : (Number(venda.quantidade) || 1);
+
+        let packagingCost = 0;
+        let appliedPackaging: (Embalagem & { calculatedCost: number, quantity: number })[] = [];
+
+        if (saleModalidade === 'Delivery') {
+            const sacolaPlastico = custosEmbalagem.find(e => e.nome.toLowerCase() === 'sacola de plastico');
+            const sacolaTnt = custosEmbalagem.find(e => e.nome.toLowerCase() === 'sacola de tnt');
+
+            if (sacolaPlastico) {
+                const cost = sacolaPlastico.custo;
+                packagingCost += cost;
+                appliedPackaging.push({ ...sacolaPlastico, calculatedCost: cost, quantity: 1 });
+            }
+            if (sacolaTnt) {
+                const cost = sacolaTnt.custo * quantidadeItens;
+                packagingCost += cost;
+                appliedPackaging.push({ ...sacolaTnt, calculatedCost: cost, quantity: quantidadeItens });
+            }
+        } else if (saleModalidade === 'Loja') {
+            // Regra: 1 embalagem a cada 2 produtos
+            const embalagensLoja = custosEmbalagem.filter(e => e.modalidades.includes('Loja') || e.modalidades.includes('Todos'));
+            const qtdEmbalagens = Math.ceil(quantidadeItens / 2);
+
+            if (embalagensLoja.length > 0) {
+                // Assume a primeira embalagem encontrada para loja (pode ser refinado se necessário)
+                const embalagemPrincipal = embalagensLoja[0]; 
+                const cost = embalagemPrincipal.custo * qtdEmbalagens;
+                packagingCost += cost;
+                appliedPackaging.push({ ...embalagemPrincipal, calculatedCost: cost, quantity: qtdEmbalagens });
+            }
+        }
+
+        return {
+            ...venda,
+            ...(logistica && { logistica: logistica.logistica, entregador: logistica.entregador, valor: logistica.valor }),
+            costs: custos || [],
+            embalagens: appliedPackaging,
+            custoEmbalagem: packagingCost,
+        };
+    });
+
+    const map = new Map(merged.map(s => [s.id, s]));
+    return Array.from(map.values());
+  }, [vendasData, logisticaData, custosData, stagedData, custosEmbalagem]);
+
 
   React.useEffect(() => {
     const collectionsToWatch = [
@@ -710,12 +778,12 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
     };
 
     const getNumericField = (row: any, keyOrLabel: string): number => {
-        let val = row.customData?.[keyOrLabel] ?? row[keyOrLabel];
+        let val = row[keyOrLabel];
         
         if (val === undefined || val === null) {
             const column = mergedColumns.find(c => c.label === keyOrLabel || c.id === keyOrLabel);
             if (column) {
-                val = row.customData?.[column.id] ?? row[column.id];
+                val = row[column.id];
             }
         }
         
@@ -807,50 +875,6 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
     });
 }, [customCalculations, mergedColumns]);
 
-  /* ======= Mescla banco + staged (staged tem prioridade) ======= */
-  const allData = React.useMemo(() => {
-    const allRows = [...vendasData, ...stagedData];
-    const logisticaMap = new Map(logisticaData.map(l => [normCode(l.codigo), l]));
-    const custosByCode = new Map<string, any[]>();
-
-    custosData.forEach(c => {
-        const code = normCode(c.codigo);
-        if (!custosByCode.has(code)) custosByCode.set(code, []);
-        custosByCode.get(code)!.push(c);
-    });
-
-    const merged = allRows.map(venda => {
-        const code = normCode(venda.codigo);
-        const logistica = logisticaMap.get(code);
-        const custos = custosByCode.get(code);
-
-        // Aplicar custos de embalagem
-        const saleLogistica = String(venda.logistica || logistica?.logistica || 'Não especificado').trim();
-        const saleModalidade = (saleLogistica === 'X_Loja' || saleLogistica === 'Loja') ? 'Loja' : saleLogistica;
-        
-        const quantidadeItens = (venda.subRows && venda.subRows.length > 0)
-            ? venda.subRows.reduce((acc, item) => acc + (item.quantidade || 0), 0)
-            : (venda.quantidade || 1);
-
-        const appliedPackaging = custosEmbalagem.filter(e => 
-            e.modalidades.includes('Todos') || e.modalidades.includes(saleModalidade)
-        );
-        const packagingCost = appliedPackaging.reduce((acc, curr) => acc + (curr.custo * quantidadeItens), 0);
-
-        return {
-            ...venda,
-            ...(logistica && { logistica: logistica.logistica, entregador: logistica.entregador, valor: logistica.valor }),
-            costs: custos || [],
-            embalagens: appliedPackaging.map(e => ({ ...e, custo: e.custo * quantidadeItens })),
-            custoEmbalagem: packagingCost,
-        };
-    });
-
-    const map = new Map(merged.map(s => [s.id, s]));
-    return Array.from(map.values());
-  }, [vendasData, logisticaData, custosData, stagedData, custosEmbalagem]);
-
-
   /* ======= Filtro por período ======= */
   const filteredData = React.useMemo(() => {
     if (!date?.from) return allData;
@@ -917,14 +941,13 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
 
 
 React.useEffect(() => {
-    // Debug: Log das configurações carregadas
     console.log('=== DEBUG CÁLCULOS CUSTOMIZADOS ===');
     console.log('Custom calculations carregados:', customCalculations);
     console.log('Merged columns:', mergedColumns);
     console.log('All data sample:', allData.slice(0, 1));
     console.log('Grouped for view sample:', groupedForView.slice(0, 1));
     console.log('=====================================');
-}, [customCalculations, mergedColumns, groupedForView, allData]);
+}, [customCalculations, mergedColumns, allData, groupedForView]);
 
 React.useEffect(() => {
     if (customCalculations.length > 0) {
@@ -1376,3 +1399,4 @@ React.useEffect(() => {
     </>
   );
 }
+

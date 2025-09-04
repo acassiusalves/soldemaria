@@ -62,7 +62,7 @@ import { cn, showBlank } from "@/lib/utils";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { Badge } from "./ui/badge";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
+import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 
 
 const ITEMS_PER_PAGE = 10;
@@ -667,7 +667,7 @@ export default function DetailedSalesHistoryTable({
       return null;
     };
 
-    if(typeof value === 'number' && ['final', 'custoUnitario', 'valorUnitario', 'valorCredito', 'valorDescontos', 'valor', 'taxaCalculada', 'custo'].includes(columnId)) {
+    if(typeof value === 'number' && ['final', 'custoUnitario', 'valorUnitario', 'valorCredito', 'valorDescontos', 'valor', 'taxaCalculada', 'custo', 'calculatedCost'].includes(columnId)) {
       return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
     }
 
@@ -989,18 +989,20 @@ export default function DetailedSalesHistoryTable({
                                                         <TableHeader>
                                                             <TableRow>
                                                                 <TableHead>Embalagem</TableHead>
-                                                                <TableHead className="text-right">Custo</TableHead>
+                                                                <TableHead className="text-center">Qtd.</TableHead>
+                                                                <TableHead className="text-right">Custo Total</TableHead>
                                                             </TableRow>
                                                         </TableHeader>
                                                         <TableBody>
                                                             {row.embalagens.map((embalagem: any, index: number) => (
                                                                 <TableRow key={index}>
                                                                     <TableCell>{embalagem.nome}</TableCell>
-                                                                    <TableCell className="text-right">{renderDetailCell(embalagem, 'custo')}</TableCell>
+                                                                    <TableCell className="text-center">{embalagem.quantity}</TableCell>
+                                                                    <TableCell className="text-right">{renderDetailCell(embalagem, 'calculatedCost')}</TableCell>
                                                                 </TableRow>
                                                             ))}
                                                             <TableRow className="font-bold bg-muted/50">
-                                                                <TableCell>Custo Total Embalagens</TableCell>
+                                                                <TableCell colSpan={2}>Custo Total Embalagens</TableCell>
                                                                 <TableCell className="text-right">{renderDetailCell({ custo: row.custoEmbalagem }, 'custo')}</TableCell>
                                                             </TableRow>
                                                         </TableBody>
@@ -1060,4 +1062,5 @@ export default function DetailedSalesHistoryTable({
     </>
   );
 }
+
 
