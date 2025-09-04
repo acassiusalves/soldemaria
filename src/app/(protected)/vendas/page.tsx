@@ -1164,8 +1164,13 @@ React.useEffect(() => {
         "quantidade_movimentada", "costs", "customData"
     ];
     
-    if (allData.length > 0) {
-        const dataKeys = Object.keys(allData[0]);
+    // Add custoEmbalagem explicitly as it's calculated later
+    if (!allColumns.some(c => c.id === 'custoEmbalagem')) {
+        allColumns.push({ id: 'custoEmbalagem', label: getLabel('custoEmbalagem', customCalculations), isSortable: true });
+    }
+
+    if (groupedForView.length > 0) {
+        const dataKeys = Object.keys(groupedForView[0]);
         dataKeys.forEach(key => {
             if (!allColumns.some(c => c.id === key) && !systemColumnsToHide.includes(key)) {
                 allColumns.push({ id: key, label: getLabel(key, customCalculations), isSortable: true });
@@ -1179,7 +1184,7 @@ React.useEffect(() => {
         .filter(c => !systemColumnsToHide.includes(c.id))
         .map(c => ({ key: c.id, label: c.label || getLabel(c.id) }));
 
-  }, [columns, customCalculations, allData]);
+  }, [columns, customCalculations, groupedForView]);
 
   return (
     <>
