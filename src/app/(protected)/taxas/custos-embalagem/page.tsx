@@ -44,6 +44,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  DropdownMenuCheckboxItem,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -55,7 +56,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Logo } from "@/components/icons";
+import { Logo } from "@/components/ui/icons";
 import { useToast } from "@/hooks/use-toast";
 import {
   AlertDialog,
@@ -68,7 +69,6 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 
 
@@ -76,14 +76,16 @@ type Embalagem = {
   id: string;
   nome: string;
   custo: number;
-  modalidade: string;
+  modalidades: string[];
 };
 
 const initialNovaEmbalagemState = {
     nome: "",
     custo: "",
-    modalidade: "Todos",
+    modalidades: ["Todos"],
 };
+
+const allModalidades = ["Todos", "Delivery", "Loja", "Correios"];
 
 export default function CustosEmbalagemPage() {
   const [embalagens, setEmbalagens] = React.useState<Embalagem[]>([]);
@@ -114,9 +116,35 @@ export default function CustosEmbalagemPage() {
     setNovaEmbalagem((prev) => ({ ...prev, [name]: value }));
   };
   
-  const handleSelectChange = (value: string) => {
-    setNovaEmbalagem(prev => ({ ...prev, modalidade: value }));
-  };
+  const handleModalidadeChange = (modalidade: string) => {
+    setNovaEmbalagem(prev => {
+        let newModalidades: string[];
+        const currentModalidades = prev.modalidades || [];
+        
+        if (modalidade === "Todos") {
+            newModalidades = currentModalidades.includes("Todos") ? [] : ["Todos"];
+        } else {
+            if (currentModalidades.includes(modalidade)) {
+                newModalidades = currentModalidades.filter(m => m !== modalidade && m !== "Todos");
+            } else {
+                newModalidades = [...currentModalidades.filter(m => m !== "Todos"), modalidade];
+            }
+        }
+        
+        // If all other options are selected, automatically select "Todos"
+        if (newModalidades.length === allModalidades.length - 1 && !newModalidades.includes("Todos")) {
+            newModalidades = ["Todos"];
+        }
+        
+        // If empty, reset to "Todos" for simplicity, or handle as needed
+        if (newModalidades.length === 0) {
+            // Or leave it empty: newModalidades = [];
+        }
+        
+        return { ...prev, modalidades: newModalidades };
+    });
+};
+
 
   const handleSave = async () => {
     if (!novaEmbalagem.nome || !novaEmbalagem.custo) {
@@ -131,7 +159,7 @@ export default function CustosEmbalagemPage() {
     const payload = {
       nome: novaEmbalagem.nome,
       custo: parseFloat(String(novaEmbalagem.custo).replace(',', '.')) || 0,
-      modalidade: novaEmbalagem.modalidade,
+      modalidades: novaEmbalagem.modalidades.length > 0 ? novaEmbalagem.modalidades : ["Todos"],
     };
     
     try {
@@ -160,7 +188,7 @@ export default function CustosEmbalagemPage() {
     setNovaEmbalagem({
         nome: embalagem.nome,
         custo: String(embalagem.custo),
-        modalidade: embalagem.modalidade,
+        modalidades: embalagem.modalidades || ["Todos"],
     });
   }
 
@@ -178,6 +206,17 @@ export default function CustosEmbalagemPage() {
     setEditingId(null);
     setNovaEmbalagem(initialNovaEmbalagemState);
   }
+
+  const getSelectedModalidadesLabel = () => {
+    const { modalidades } = novaEmbalagem;
+    if (!modalidades || modalidades.length === 0 || modalidades.includes("Todos")) {
+        return "Todas as Modalidades";
+    }
+    if (modalidades.length === 1) {
+        return modalidades[0];
+    }
+    return `${modalidades.length} modalidades selecionadas`;
+  };
 
   return (
     <div className="flex min-h-screen w-full flex-col">
@@ -292,17 +331,25 @@ export default function CustosEmbalagemPage() {
                 </div>
                  <div className="space-y-2">
                     <Label htmlFor="modalidade">Modalidade de Venda Aplicável</Label>
-                     <Select value={novaEmbalagem.modalidade} onValueChange={handleSelectChange}>
-                        <SelectTrigger id="modalidade">
-                            <SelectValue placeholder="Selecione a modalidade" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="Todos">Todas as Modalidades</SelectItem>
-                            <SelectItem value="Delivery">Delivery</SelectItem>
-                            <SelectItem value="Loja">Loja</SelectItem>
-                            <SelectItem value="Correios">Correios</SelectItem>
-                        </SelectContent>
-                    </Select>
+                     <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button variant="outline" className="w-full justify-start">
+                                {getSelectedModalidadesLabel()}
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent className="w-[--radix-dropdown-menu-trigger-width]">
+                             {allModalidades.map((modalidade) => (
+                                <DropdownMenuCheckboxItem
+                                    key={modalidade}
+                                    checked={novaEmbalagem.modalidades.includes(modalidade)}
+                                    onCheckedChange={() => handleModalidadeChange(modalidade)}
+                                    onSelect={(e) => e.preventDefault()}
+                                >
+                                    {modalidade}
+                                </DropdownMenuCheckboxItem>
+                            ))}
+                        </DropdownMenuContent>
+                    </DropdownMenu>
                 </div>
                  <div className="flex gap-2 pt-4">
                     <Button onClick={handleSave}>
@@ -338,7 +385,11 @@ export default function CustosEmbalagemPage() {
                                 <TableRow key={item.id}>
                                     <TableCell className="font-medium">{item.nome}</TableCell>
                                     <TableCell>
-                                        <Badge variant="secondary">{item.modalidade}</Badge>
+                                       <div className="flex flex-wrap gap-1">
+                                          {(item.modalidades || ["Todos"]).map(m => (
+                                            <Badge key={m} variant="secondary">{m}</Badge>
+                                          ))}
+                                       </div>
                                     </TableCell>
                                     <TableCell className="text-right">
                                         {item.custo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
