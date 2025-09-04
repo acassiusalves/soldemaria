@@ -917,7 +917,7 @@ export default function DetailedSalesHistoryTable({
                                     <TabsList>
                                         <TabsTrigger value="items" disabled={!row.subRows || row.subRows.length === 0}>Itens do Pedido</TabsTrigger>
                                         <TabsTrigger value="payment" disabled={!row.costs || row.costs.length === 0}>Detalhes do Pagamento</TabsTrigger>
-                                        <TabsTrigger value="packaging" disabled={!row.embalagens || row.embalagens.length === 0}>Embalagens</TabsTrigger>
+                                        <TabsTrigger value="packaging">Embalagens</TabsTrigger>
                                     </TabsList>
                                     <TabsContent value="items">
                                       {row.subRows && row.subRows.length > 0 && (
@@ -981,7 +981,7 @@ export default function DetailedSalesHistoryTable({
                                        )}
                                     </TabsContent>
                                     <TabsContent value="packaging">
-                                        {row.embalagens && row.embalagens.length > 0 && (
+                                        {row.embalagens && row.embalagens.length > 0 ? (
                                             <div className="p-2 rounded-md bg-background space-y-4">
                                                 <div>
                                                     <h4 className="font-semibold text-sm mb-2 flex items-center gap-2"><Package size={16}/> Embalagens Aplicadas</h4>
@@ -1008,6 +1008,10 @@ export default function DetailedSalesHistoryTable({
                                                         </TableBody>
                                                     </Table>
                                                 </div>
+                                            </div>
+                                        ) : (
+                                            <div className="p-4 text-center text-sm text-muted-foreground">
+                                                Nenhuma embalagem aplicada a este pedido.
                                             </div>
                                         )}
                                     </TabsContent>
@@ -1062,5 +1066,6 @@ export default function DetailedSalesHistoryTable({
     </>
   );
 }
+
 
 
