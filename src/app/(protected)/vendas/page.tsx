@@ -892,21 +892,34 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
             let appliedPackaging: Array<Embalagem & { calculatedCost: number; quantity: number }> = [];
 
             if (modalidade === 'Delivery') {
-                // Regra: 1 Sacola de Plástico + 1 Sacola de TNT POR PRODUTO
-                const plastico = custosEmbalagem.find(e => normalizeText(e.nome) === 'sacola de plastico');
-                const tnt      = custosEmbalagem.find(e => normalizeText(e.nome) === 'sacola de tnt');
+                // helpers pra parsear custo e bater por nome com tolerância
+                const toNum = (x: any) => {
+                  if (typeof x === 'number') return x;
+                  if (typeof x === 'string') {
+                    const n = Number(x.replace(/\./g, '').replace(',', '.'));
+                    return Number.isFinite(n) ? n : 0;
+                  }
+                  return 0;
+                };
+                const findBy = (re: RegExp) =>
+                  custosEmbalagem.find(e => re.test(normalizeText(e.nome)));
+
+                // aceita "Sacola Plástica", "Saco Plastico", etc.
+                const plastico = findBy(/(sacola|saco).*(plastico|plastica)/);
+                // aceita "Sacola TNT", "TNT", etc.
+                const tnt = findBy(/((sacola|saco).*)?tnt\b/);
 
                 if (plastico) {
-                    const qty = 1; // 1 por pedido
-                    const cost = Number(plastico.custo || 0) * qty;
-                    packagingCost += cost;
-                    appliedPackaging.push({ ...plastico, calculatedCost: cost, quantity: qty });
+                  const qty = qTotal; // ✅ 1 por produto
+                  const cost = toNum(plastico.custo) * qty;
+                  packagingCost += cost;
+                  appliedPackaging.push({ ...plastico, calculatedCost: cost, quantity: qty });
                 }
                 if (tnt) {
-                    const qty = qTotal; // 1 por produto
-                    const cost = Number(tnt.custo || 0) * qty;
-                    packagingCost += cost;
-                    appliedPackaging.push({ ...tnt, calculatedCost: cost, quantity: qty });
+                  const qty = qTotal; // ✅ 1 por produto
+                  const cost = toNum(tnt.custo) * qty;
+                  packagingCost += cost;
+                  appliedPackaging.push({ ...tnt, calculatedCost: cost, quantity: qty });
                 }
             } else {
                 // Regra: Loja => 1 embalagem a cada 2 produtos (arredonda pra cima)
