@@ -102,7 +102,7 @@ const columnLabels: Record<string, string> = {
   valorCredito: 'Valor Crédito',
   valorDescontos: 'Valor Descontos',
   entregador: 'Entregador',
-  valor: 'Valor',
+  valor: 'Valor Logística',
   origemCliente: 'Origem Cliente',
   modo_de_pagamento: 'Modo Pagamento',
   tipo_pagamento: 'Tipo Pagamento',
@@ -1099,3 +1099,6 @@ const renderEmbalagemTab = (row: any) => {
 
 
 
+
+
+    
