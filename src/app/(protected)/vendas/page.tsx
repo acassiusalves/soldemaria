@@ -924,6 +924,12 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
           headerRow = mergeForHeader(headerRow, row);
         }
         
+        // Sum `custoFrete` from all rows belonging to the group
+        headerRow.custoFrete = rows.reduce((acc, row) => {
+            const frete = Number(row.custoFrete) || 0;
+            return acc + frete;
+        }, 0);
+
         headerRow.subRows = subRows.sort((a, b) =>
             (toDate(a.data)?.getTime() ?? 0) - (toDate(b.data)?.getTime() ?? 0)
         );
