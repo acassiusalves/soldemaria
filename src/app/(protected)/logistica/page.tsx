@@ -327,8 +327,14 @@ export default function LogisticaPage() {
     const metaUnsub = onSnapshot(doc(db, "metadata", "logistica"), (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
-        // Remove 'custoTotal' from columns if it exists
-        const filteredColumns = (data.columns || []).filter((col: ColumnDef) => col.id !== 'custoTotal');
+        const filteredColumns = (data.columns || [])
+          .filter((col: ColumnDef) => col.id !== 'custoTotal')                         // 🚫 some Custo Total
+          .map((col: ColumnDef) => {
+            // força label correto; se faltar label, cai no getLabel por id
+            const label = col.id === 'valor' ? getLabel('valor') : (col.label || getLabel(col.id));
+            return { ...col, label };
+          });
+
         setColumns(filteredColumns);
         setUploadedFileNames(data.uploadedFileNames || []);
       }
@@ -504,8 +510,15 @@ export default function LogisticaPage() {
       allKeys.forEach(key => { if (!current.has(key)) current.set(key, { id: key, label: getLabel(key), isSortable: true }); });
       
       let newColumns = Array.from(current.values());
-      // Ensure 'custoTotal' is not in the columns
-      newColumns = newColumns.filter(col => col.id !== 'custoTotal');
+      
+      // 🔤 normaliza labels e força "Valor Logística"
+      newColumns = newColumns.map((c) => ({
+        ...c,
+        label: c.id === 'valor' ? getLabel('valor') : (c.label || getLabel(c.id)),
+      }));
+
+      // 🚫 remove custoTotal só nesta tela
+      newColumns = newColumns.filter((col) => col.id !== 'custoTotal');
 
 
       const newUploadedFileNames = [...new Set([...uploadedFileNames, ...stagedFileNames])];
