@@ -165,6 +165,7 @@ const columnLabels: Record<string, string> = {
   origemCliente: 'Origem Cliente',
   custoEmbalagem: 'Custo Embalagem',
   custoTotal: 'Custo Total',
+  taxaTotalCartao: 'Taxa Cartão',
 };
 const getLabel = (key: string, customCalculations: CustomCalculation[] = []) => {
     if (key.startsWith('custom_')) {
@@ -309,12 +310,13 @@ const mapRowToSystem = (row: Record<string, any>) => {
 
 /* ========== agrega valores para compor o cabeçalho do pedido ========== */
 const mergeForHeader = (base: any, row: any) => {
-  const out = { ...base };
+  let out = { ...base };
 
   // preenche primeiro valor não-vazio para campos do header
   const headerFields = [
     "data","codigo","tipo","nomeCliente","vendedor","cidade",
-    "origem","logistica","final","custoFrete","mov_estoque"
+    "origem","logistica","final","custoFrete","mov_estoque",
+    "valor"
   ];
   for (const k of headerFields) {
     if (isEmptyCell(out[k]) && !isEmptyCell(row[k])) out[k] = row[k];
@@ -330,6 +332,11 @@ const mergeForHeader = (base: any, row: any) => {
       bandeira: row.bandeira1 ?? row.bandeira2,
       instituicao: row.instituicao_financeira,
     });
+  }
+  
+  if (Array.isArray(row.subRows) && row.subRows.length > 0) {
+      if (!out.subRows) out.subRows = [];
+      out.subRows = out.subRows.concat(row.subRows);
   }
 
   return out;
@@ -903,7 +910,7 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
 
     const aggregatedData: VendaDetalhada[] = [];
     for (const [code, rows] of groups.entries()) {
-        const headerRow: VendaDetalhada = {
+        let headerRow: VendaDetalhada = {
           id: `header-${code}`, 
           codigo: code as any,
           subRows: [],
@@ -913,16 +920,8 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
         const subRows = rows.filter(isDetailRow);
         
         // Populate header fields
-        const headerFields = [
-          "data", "codigo", "tipo", "nomeCliente", "vendedor", "cidade",
-          "origem", "logistica", "custoFrete", "mov_estoque", "origemCliente", "fidelizacao"
-        ];
         for (const row of rows) {
-          for (const k of headerFields) {
-              if (isEmptyCell((headerRow as any)[k]) && !isEmptyCell(row[k])) {
-                  (headerRow as any)[k] = row[k];
-              }
-          }
+          headerRow = mergeForHeader(headerRow, row);
         }
         
         headerRow.subRows = subRows.sort((a, b) =>
@@ -1023,14 +1022,33 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
           headerRow.custoEmbalagem = 0;
         }
               
-      // custo total do pedido a partir das sub-rows
-      const custoTotalPedido = (headerRow.subRows || []).reduce((sum: number, item: any) => {
-        const custo = Number(item.custoUnitario) || 0;
-        const qtd   = Number(item.quantidade)   || 0;
-        return sum + (custo * qtd);
-      }, 0);
+        // custo total do pedido a partir das sub-rows
+        const custoTotalPedido = (headerRow.subRows || []).reduce((sum: number, item: any) => {
+            const custo = Number(item.custoUnitario) || 0;
+            const qtd   = Number(item.quantidade)   || 0;
+            return sum + (custo * qtd);
+        }, 0);
+        headerRow.custoTotal = custoTotalPedido;
 
-      headerRow.custoTotal = custoTotalPedido;
+        // Custo total da taxa de cartão
+        headerRow.taxaTotalCartao = (headerRow.costs || []).reduce((sum, cost) => {
+            const valor = Number(cost.valor) || 0;
+            const modo = (cost.modo_de_pagamento || '').toLowerCase();
+            const tipo = (cost.tipo_pagamento || '').toLowerCase();
+            const instituicao = (cost.instituicao_financeira || '').toLowerCase();
+            const parcela = Number(cost.parcela) || 1;
+            let taxaPercentual = 0;
+            const operadora = taxasOperadoras.find(op => op.nome.toLowerCase() === instituicao);
+            if (operadora) {
+                if (modo.includes('cartão') && tipo.includes('débito')) {
+                    taxaPercentual = operadora.taxaDebito || 0;
+                } else if (modo.includes('cartão') && tipo.includes('crédito')) {
+                    const taxaCredito = operadora.taxasCredito.find(t => t.numero === parcela);
+                    taxaPercentual = taxaCredito?.taxa || 0;
+                }
+            }
+            return sum + (valor * (taxaPercentual / 100));
+        }, 0);
       
       aggregatedData.push(headerRow);
     }
@@ -1161,6 +1179,7 @@ React.useEffect(() => {
       vendasData.forEach(row => Object.keys(row).forEach(k => allKeys.add(k)));
       if (!allKeys.has("data") && dataToSave.some(r => (r as any).data)) allKeys.add("data");
       allKeys.add('quantidadeTotal');
+      allKeys.delete('valor_final'); // Garante que a coluna indesejada não seja salva
 
       const current = new Map(columns.map(c => [c.id, c]));
       allKeys.forEach(key => { if (!current.has(key)) current.set(key, { id: key, label: getLabel(key, customCalculations), isSortable: true }); });
@@ -1242,7 +1261,7 @@ React.useEffect(() => {
     ];
     
     // Add calculated fields explicitly as they might not be in `columns` yet
-    const calculatedFields = ['custoEmbalagem', 'custoTotal'];
+    const calculatedFields = ['custoEmbalagem', 'custoTotal', 'taxaTotalCartao'];
     calculatedFields.forEach(fieldId => {
         if (!allColumns.some(c => c.id === fieldId)) {
             allColumns.push({ id: fieldId, label: getLabel(fieldId, customCalculations), isSortable: true });
@@ -1526,3 +1545,4 @@ React.useEffect(() => {
 
 
     
+

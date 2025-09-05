@@ -111,6 +111,7 @@ const columnLabels: Record<string, string> = {
   custo: 'Custo',
   custoEmbalagem: 'Custo Embalagem',
   custoTotal: 'Custo Total',
+  taxaTotalCartao: 'Taxa Cartão',
 };
 
 const getLabel = (key: string, customCalculations: CustomCalculation[] = []) => {
@@ -461,6 +462,9 @@ export default function DetailedSalesHistoryTable({
     if (!map.has('custoTotal')) {
         map.set('custoTotal', { id: 'custoTotal', label: getLabel('custoTotal', customCalculations), isSortable: true });
     }
+    if (!map.has('taxaTotalCartao')) {
+        map.set('taxaTotalCartao', { id: 'taxaTotalCartao', label: getLabel('taxaTotalCartao', customCalculations), isSortable: true });
+    }
 
     return Array.from(map.values()).filter(c => !systemColumnsToHide.includes(c.id));
 }, [columns, data, customCalculations]);
@@ -617,6 +621,10 @@ export default function DetailedSalesHistoryTable({
           value = row.custoTotal;
       }
       
+      if(columnId === 'taxaTotalCartao' && value === undefined) {
+          value = row.taxaTotalCartao;
+      }
+      
       if (columnId === 'tipo_pagamento' || columnId === 'tipo_de_pagamento') {
           return showBlank(row.tipo_de_pagamento ?? row.tipo_pagamento);
       }
@@ -649,7 +657,7 @@ export default function DetailedSalesHistoryTable({
         return `${value.toFixed(2)}%`;
       }
   
-      if (["final","custoFrete","imposto","embalagem","comissao","custoUnitario","valorUnitario","valorCredito","valorDescontos", "valor", "custoEmbalagem", "custoTotal"]
+      if (["final","custoFrete","imposto","embalagem","comissao","custoUnitario","valorUnitario","valorCredito","valorDescontos", "valor", "custoEmbalagem", "custoTotal", "taxaTotalCartao"]
           .includes(columnId) || (typeof value === 'number' && columnId.startsWith('custom_') && !isPercentage)) {
           const n = toNumber(value);
           if (n !== null) {
@@ -1082,6 +1090,7 @@ const renderEmbalagemTab = (row: any) => {
     </>
   );
 }
+
 
 
 

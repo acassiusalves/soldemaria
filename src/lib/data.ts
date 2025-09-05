@@ -64,6 +64,7 @@ export type VendaDetalhada = {
   valorUnitario?: number;
   valorCredito?: number;
   valorDescontos?: number;
+  taxaTotalCartao?: number;
   // Campos que podem ser adicionados por outras fontes de dados
   subRows?: VendaDetalhada[];
   costs?: any[];
