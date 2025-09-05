@@ -642,11 +642,26 @@ const handleSaveCustomCalculation = async (calc: Omit<CustomCalculation, 'id'> &
     console.log('========================');
 };
 
-  const handleDeleteCustomCalculation = async (calcId: string) => {
-      const newCalculations = customCalculations.filter(c => c.id !== calcId);
-      await saveGlobalCalculations(newCalculations);
-      toast({ title: "Cálculo Removido!"});
-  };
+const handleDeleteCustomCalculation = async (calcId: string) => {
+    // 1. Remove from global calculations
+    const newCalculations = customCalculations.filter(c => c.id !== calcId);
+    await saveGlobalCalculations(newCalculations);
+
+    // 2. Remove from local user preferences
+    const user = auth.currentUser;
+    if (user) {
+        const newVisibility = { ...columnVisibility };
+        delete newVisibility[calcId];
+        setColumnVisibility(newVisibility);
+        await saveUserPreference(user.uid, 'vendas_columns_visibility', newVisibility);
+        
+        const newOrder = columnOrder.filter(id => id !== calcId);
+        setColumnOrder(newOrder);
+        await saveUserPreference(user.uid, 'vendas_columns_order', newOrder);
+    }
+
+    toast({ title: "Cálculo Removido!" });
+};
 
 const syncExistingCustomColumns = React.useCallback(async () => {
     const user = auth.currentUser;
