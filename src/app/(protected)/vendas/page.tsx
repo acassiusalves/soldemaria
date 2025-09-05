@@ -1185,9 +1185,9 @@ React.useEffect(() => {
     const availableFormulaColumns = React.useMemo(() => {
     const allColumns = [...columns, ...customCalculations.map(c => ({ id: c.id, label: c.name, isSortable: true }))];
     const systemColumnsToHide = [
-        "id", "sourceFile", "uploadTimestamp", "subRows", "parcelas", 
+        "id", "sourceFile", "uploadTimestamp", "subRows", "parcelas", "embalagens",
         "total_valor_parcelas", "mov_estoque", "valor_da_parcela", "tipo_de_pagamento",
-        "quantidade_movimentada", "costs", "customData", "embalagens"
+        "quantidade_movimentada", "costs", "customData"
     ];
     
     // Add calculated fields explicitly as they might not be in `columns` yet
