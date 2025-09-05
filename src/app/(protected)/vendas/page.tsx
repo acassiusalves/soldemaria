@@ -165,6 +165,7 @@ const columnLabels: Record<string, string> = {
   origemCliente: 'Origem Cliente',
   custoEmbalagem: 'Custo Embalagem',
   taxaTotalCartao: 'Taxa Total Cartão',
+  custoTotal: 'Custo Total',
 };
 const getLabel = (key: string, customCalculations: CustomCalculation[] = []) => {
     if (key.startsWith('custom_')) {
@@ -784,23 +785,28 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
         };
     };
 
-    const getNumericField = (row: any, keyOrLabel: string): number => {
-        let val = row[keyOrLabel];
-        
-        if (val === undefined || val === null) {
-            const column = mergedColumns.find(c => c.label === keyOrLabel || c.id === keyOrLabel);
-            if (column) {
-                val = row[column.id];
-            }
-        }
-        
-        if (typeof val === 'number') return val;
-        if (typeof val === 'string') {
-            const cleaned = val.replace(/[^\d,.-]/g, '').replace(',', '.');
-            const num = parseFloat(cleaned);
-            return Number.isFinite(num) ? num : 0;
-        }
-        return 0;
+    const getNumericField = (row: any, keyOrLabel: string, currentCalcId?: string): number => {
+      let val = row[keyOrLabel];
+
+      // 1) tenta id exato (preferir colunas do sistema)
+      if (val === undefined || val === null) {
+        const byId = mergedColumns.find(c => c.id === keyOrLabel && c.id !== currentCalcId);
+        if (byId) val = row[byId.id];
+      }
+
+      // 2) tenta por label, evitando a própria coluna
+      if (val === undefined || val === null) {
+        const byLabel = mergedColumns.find(c => c.label === keyOrLabel && c.id !== currentCalcId);
+        if (byLabel) val = row[byLabel.id];
+      }
+
+      if (typeof val === 'number') return val;
+      if (typeof val === 'string') {
+        const cleaned = val.replace(/[^\d,.-]/g, '').replace(',', '.');
+        const num = parseFloat(cleaned);
+        return Number.isFinite(num) ? num : 0;
+      }
+      return 0;
     };
   
     return data.map(row => {
@@ -816,7 +822,7 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
                   const item = calc.formula[i];
                 
                   if (item.type === 'column') {
-                    const value = getNumericField(flatRowForCalcs, item.value);
+                    const value = getNumericField(flatRowForCalcs, item.value, calc.id);
                     const safe = Number.isFinite(value) ? String(value) : '0';
                     formulaString += safe;
                     continue;
@@ -861,7 +867,7 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
                 newRow.customData[calc.id] = numResult;
   
                 if (calc.interaction?.targetColumn) {
-                    const baseValue = getNumericField({...flatRowForCalcs, ...newRow.customData}, calc.interaction.targetColumn);
+                    const baseValue = getNumericField({...flatRowForCalcs, ...newRow.customData}, calc.interaction.targetColumn, calc.id);
                     const newValue = calc.interaction.operator === '-' 
                         ? baseValue - numResult 
                         : baseValue + numResult;
@@ -1012,6 +1018,15 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
       }
       headerRow.taxaTotalCartao = taxaTotalCartao;
       
+      // custo total do pedido a partir das sub-rows
+      const custoTotalPedido = (headerRow.subRows || []).reduce((sum: number, item: any) => {
+        const custo = Number(item.custoUnitario) || 0;
+        const qtd   = Number(item.quantidade)   || 0;
+        return sum + (custo * qtd);
+      }, 0);
+
+      headerRow.custoTotal = custoTotalPedido;
+      
       aggregatedData.push(headerRow);
     }
     
@@ -1023,14 +1038,7 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
         (acc, row) => {
             acc.faturamento += Number(row.final) || 0;
             acc.frete += Number(row.custoFrete) || 0;
-            
-            const custoTotalPedido = (row.subRows || []).reduce((subAcc: number, item: any) => {
-                const custo = Number(item.custoUnitario) || 0;
-                const qtd = Number(item.quantidade) || 0;
-                return subAcc + (custo * qtd);
-            }, 0);
-            
-            acc.custoTotal += custoTotalPedido;
+            acc.custoTotal += Number(row.custoTotal) || 0;
             
             return acc;
         },
@@ -1229,7 +1237,7 @@ React.useEffect(() => {
     ];
     
     // Add calculated fields explicitly as they might not be in `columns` yet
-    const calculatedFields = ['custoEmbalagem', 'taxaTotalCartao'];
+    const calculatedFields = ['custoEmbalagem', 'taxaTotalCartao', 'custoTotal'];
     calculatedFields.forEach(fieldId => {
         if (!allColumns.some(c => c.id === fieldId)) {
             allColumns.push({ id: fieldId, label: getLabel(fieldId, customCalculations), isSortable: true });
@@ -1507,3 +1515,4 @@ React.useEffect(() => {
     </>
   );
 }
+
