@@ -161,7 +161,7 @@ const columnLabels: Record<string, string> = {
   valorCredito: 'Valor Crédito',
   valorDescontos: 'Valor Descontos',
   entregador: 'Entregador',
-  valor: 'Valor',
+  valor: 'Valor Logística',
   origemCliente: 'Origem Cliente',
   custoEmbalagem: 'Custo Embalagem',
   custoTotal: 'Custo Total',
@@ -1498,5 +1498,6 @@ React.useEffect(() => {
     </>
   );
 }
+
 
 
