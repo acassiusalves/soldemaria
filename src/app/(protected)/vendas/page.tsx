@@ -390,7 +390,9 @@ async function saveGlobalCalculations(calculations: CustomCalculation[]) {
     const docRef = doc(db, GLOBAL_SETTINGS_COLLECTION, "globalCalculations");
     
     const cleanCalcs = stripUndefinedDeep(
-        calculations.map(c => {
+        calculations
+        .filter(c => !c.id.startsWith('custom_') || (c.name && !c.name.startsWith('custom_')))
+        .map(c => {
             const cleanCalc: any = {
                 id: c.id,
                 name: c.name ?? 'Sem nome',
