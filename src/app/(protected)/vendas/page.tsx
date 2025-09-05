@@ -314,7 +314,7 @@ const mergeForHeader = (base: any, rows: any[]) => {
     // Preenche primeiro valor não-vazio para campos do header
     const headerFields = [
         "data", "codigo", "tipo", "nomeCliente", "vendedor", "cidade",
-        "origem", "logistica", "custoFrete", "mov_estoque"
+        "origem", "logistica", "custoFrete", "mov_estoque", "origemCliente", "fidelizacao"
     ];
     for (const row of rows) {
         for (const k of headerFields) {
