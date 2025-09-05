@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useCallback } from "react";
@@ -12,20 +13,22 @@ import {
   DialogClose,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { UploadCloud, File as FileIcon, PlusCircle, Trash2 } from "lucide-react";
+import { UploadCloud, File as FileIcon, PlusCircle, Trash2, Columns } from "lucide-react";
 import { useDropzone } from "react-dropzone";
 import * as XLSX from "xlsx";
 import { useToast } from "@/hooks/use-toast";
 import { ScrollArea } from "./ui/scroll-area";
+import { Badge } from "./ui/badge";
 
 type UploadPayload = {
   rows: any[];
   fileName: string;
 };
 
-type FileWithData = {
+type FileWithDataAndColumns = {
     file: File;
     data: any[];
+    columns: string[];
 }
 
 interface SupportDataDialogProps {
@@ -37,11 +40,11 @@ interface SupportDataDialogProps {
 }
 
 export function SupportDataDialog({ children, onProcessData, uploadedFileNames, stagedFileNames, onRemoveUploadedFile }: SupportDataDialogProps) {
-  const [filesToProcess, setFilesToProcess] = useState<FileWithData[]>([]);
+  const [filesToProcess, setFilesToProcess] = useState<FileWithDataAndColumns[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const { toast } = useToast();
 
-  const handleFileParse = (file: File): Promise<any[]> => {
+  const handleFileParse = (file: File): Promise<{ data: any[], columns: string[] }> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = (e) => {
@@ -52,9 +55,18 @@ export function SupportDataDialog({ children, onProcessData, uploadedFileNames, 
           const workbook = XLSX.read(data, { type: "array" });
           const sheetName = workbook.SheetNames[0];
           const worksheet = workbook.Sheets[sheetName];
-          const json = XLSX.utils.sheet_to_json(worksheet, { defval: "", raw: false, dateNF: "yyyy-mm-dd" });
+          // Use header: 1 to get an array of arrays, so we can reliably get headers
+          const sheetData: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" });
           
-          resolve(json);
+          if (sheetData.length === 0) {
+            resolve({ data: [], columns: [] });
+            return;
+          }
+
+          const headers: string[] = sheetData[0].map(h => String(h).trim()).filter(h => h);
+          const jsonData = XLSX.utils.sheet_to_json(worksheet, { defval: "", raw: false, dateNF: "yyyy-mm-dd" });
+
+          resolve({ data: jsonData, columns: headers });
         } catch (error) {
           console.error("Erro ao processar o arquivo:", error);
           reject(error);
@@ -73,8 +85,8 @@ export function SupportDataDialog({ children, onProcessData, uploadedFileNames, 
         }
 
         try {
-            const data = await handleFileParse(file);
-            setFilesToProcess(prev => [...prev, { file, data }]);
+            const { data, columns } = await handleFileParse(file);
+            setFilesToProcess(prev => [...prev, { file, data, columns }]);
         } catch(e) {
             toast({ title: "Erro ao ler arquivo", description: `Não foi possível processar ${file.name}.`, variant: "destructive" });
         }
@@ -94,6 +106,23 @@ export function SupportDataDialog({ children, onProcessData, uploadedFileNames, 
   
   const removeFile = (fileName: string) => {
     setFilesToProcess(prev => prev.filter(f => f.file.name !== fileName));
+  }
+  
+  const handleRemoveColumn = (fileName: string, columnToRemove: string) => {
+      setFilesToProcess(prevFiles => prevFiles.map(f => {
+          if (f.file.name === fileName) {
+              // Remove a coluna da lista de colunas
+              const newColumns = f.columns.filter(c => c !== columnToRemove);
+              // Remove a coluna dos dados
+              const newData = f.data.map(row => {
+                  const newRow = { ...row };
+                  delete newRow[columnToRemove];
+                  return newRow;
+              });
+              return { ...f, columns: newColumns, data: newData };
+          }
+          return f;
+      }));
   }
 
   const handleProcessAllFiles = () => {
@@ -123,74 +152,98 @@ export function SupportDataDialog({ children, onProcessData, uploadedFileNames, 
         setIsOpen(open);
     }}>
       <DialogTrigger asChild>{children}</DialogTrigger>
-      <DialogContent className="max-w-xl">
+      <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>Importar Dados de Apoio</DialogTitle>
           <DialogDescription>
-            Arraste ou selecione planilhas. O sistema irá assumir que as colunas da sua planilha seguem o modelo padrão.
+            Arraste ou selecione planilhas. Você poderá visualizar e remover colunas antes de adicioná-las para revisão.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex flex-col gap-4 py-4">
-            {/* Dropzone Area */}
-             <div {...getRootProps({ className: `flex flex-col gap-4 py-4 border-2 border-dashed rounded-md transition-colors min-h-[150px] justify-center items-center cursor-pointer ${isDragActive ? "border-primary bg-primary/10" : "border-input"}` })} onClick={openFileDialog}>
-                <input {...getInputProps()} />
-                <UploadCloud className="w-12 h-12 text-muted-foreground" />
-                {isDragActive ? (
-                    <p className="text-primary">Solte os arquivos aqui...</p>
-                ) : (
-                    <p className="text-center text-muted-foreground">
-                    Arraste e solte ou clique para selecionar arquivos.
-                    </p>
+        <div className="grid grid-cols-2 gap-6 py-4">
+            {/* Left side */}
+            <div className="flex flex-col gap-4">
+                 <div {...getRootProps({ className: `flex flex-col gap-4 py-4 border-2 border-dashed rounded-md transition-colors min-h-[150px] justify-center items-center cursor-pointer ${isDragActive ? "border-primary bg-primary/10" : "border-input"}` })} onClick={openFileDialog}>
+                    <input {...getInputProps()} />
+                    <UploadCloud className="w-12 h-12 text-muted-foreground" />
+                    {isDragActive ? (
+                        <p className="text-primary">Solte os arquivos aqui...</p>
+                    ) : (
+                        <p className="text-center text-muted-foreground">
+                        Arraste ou selecione arquivos
+                        </p>
+                    )}
+                </div>
+
+                {(uploadedFileNames.length > 0 || stagedFileNames.length > 0) && (
+                    <div className="space-y-2">
+                        <h4 className="font-semibold text-sm text-muted-foreground">Histórico de Arquivos</h4>
+                        <ScrollArea className="h-40 pr-3">
+                             <div className="space-y-2">
+                                {stagedFileNames.map(name => (
+                                    <div key={name} className="flex items-center justify-between p-2 rounded-md bg-yellow-100/50 text-sm">
+                                        <div className="flex items-center gap-2 overflow-hidden">
+                                            <FileIcon className="w-5 h-5 text-yellow-600 flex-shrink-0" />
+                                            <span className="truncate text-yellow-700" title={name}>{name} (Em Revisão)</span>
+                                        </div>
+                                    </div>
+                                ))}
+                                {uploadedFileNames.map(name => (
+                                    <div key={name} className="flex items-center justify-between p-2 rounded-md bg-muted/50 text-sm">
+                                        <div className="flex items-center gap-2 overflow-hidden">
+                                            <FileIcon className="w-5 h-5 text-muted-foreground flex-shrink-0" />
+                                            <span className="truncate text-muted-foreground" title={name}>{name} (Salvo)</span>
+                                        </div>
+                                        <Button variant="ghost" size="icon" className="h-6 w-6 flex-shrink-0" onClick={() => onRemoveUploadedFile(name)}>
+                                            <Trash2 className="h-4 w-4" />
+                                        </Button>
+                                    </div>
+                                ))}
+                            </div>
+                        </ScrollArea>
+                    </div>
                 )}
             </div>
 
-            {/* Files Area */}
-            <ScrollArea className="h-[300px] pr-4">
-              <div className="space-y-4">
-                 {(filesToProcess.length > 0 || uploadedFileNames.length > 0 || stagedFileNames.length > 0) && (
-                    <div className="space-y-2 pt-4">
-                        <h4 className="font-semibold text-sm text-muted-foreground">Histórico e Fila de Upload</h4>
-                        
-                        {/* Staged Files */}
-                        {stagedFileNames.map(name => (
-                             <div key={name} className="flex items-center justify-between p-2 rounded-md bg-yellow-100/50 text-sm">
-                                <div className="flex items-center gap-2 overflow-hidden">
-                                    <FileIcon className="w-5 h-5 text-yellow-600 flex-shrink-0" />
-                                    <span className="truncate text-yellow-700" title={name}>{name} (Em Revisão)</span>
+            {/* Right side */}
+            <div className="flex flex-col gap-2">
+                 <h4 className="font-semibold text-sm text-muted-foreground">Arquivos e Colunas para Upload</h4>
+                 <ScrollArea className="h-[350px] border rounded-lg p-2">
+                    {filesToProcess.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground">
+                            <Columns className="w-10 h-10 mb-2"/>
+                            <p>As colunas dos arquivos que você carregar aparecerão aqui para sua revisão.</p>
+                        </div>
+                    ) : (
+                        <div className="space-y-4">
+                            {filesToProcess.map(f => (
+                                <div key={f.file.name} className="p-3 rounded-md bg-muted/50">
+                                    <div className="flex items-center justify-between mb-2">
+                                        <div className="flex items-center gap-2 overflow-hidden">
+                                            <FileIcon className="w-5 h-5 text-blue-600 flex-shrink-0" />
+                                            <p className="font-medium text-sm truncate text-blue-700">{f.file.name}</p>
+                                        </div>
+                                        <Button variant="ghost" size="icon" className="h-6 w-6 flex-shrink-0" onClick={() => removeFile(f.file.name)}>
+                                            <Trash2 className="h-4 w-4" />
+                                        </Button>
+                                    </div>
+                                    <div className="flex flex-wrap gap-1">
+                                        {f.columns.map(col => (
+                                            <Badge key={col} variant="secondary" className="flex items-center gap-1.5 pr-1">
+                                                <span>{col}</span>
+                                                <button onClick={() => handleRemoveColumn(f.file.name, col)} className="rounded-full hover:bg-destructive/20 p-0.5">
+                                                  <X className="h-3 w-3 text-destructive" />
+                                                </button>
+                                            </Badge>
+                                        ))}
+                                        {f.columns.length === 0 && <p className="text-xs text-muted-foreground">Nenhuma coluna encontrada neste arquivo.</p>}
+                                    </div>
                                 </div>
-                             </div>
-                        ))}
-
-                        {/* New files to process */}
-                        {filesToProcess.map(f => (
-                             <div key={f.file.name} className="flex items-center justify-between p-2 rounded-md bg-blue-100/50 text-sm">
-                                <div className="flex items-center gap-2 overflow-hidden">
-                                    <FileIcon className="w-5 h-5 text-blue-600 flex-shrink-0" />
-                                    <span className="truncate text-blue-700" title={f.file.name}>{f.file.name} (Pronto para adicionar)</span>
-                                </div>
-                                <Button variant="ghost" size="icon" className="h-6 w-6 flex-shrink-0" onClick={() => removeFile(f.file.name)}>
-                                    <Trash2 className="h-4 w-4" />
-                                </Button>
-                             </div>
-                        ))}
-                        
-                        {/* Already uploaded files */}
-                        {uploadedFileNames.map(name => (
-                             <div key={name} className="flex items-center justify-between p-2 rounded-md bg-muted/50 text-sm">
-                                <div className="flex items-center gap-2 overflow-hidden">
-                                    <FileIcon className="w-5 h-5 text-muted-foreground flex-shrink-0" />
-                                    <span className="truncate text-muted-foreground" title={name}>{name} (Salvo no banco)</span>
-                                </div>
-                                <Button variant="ghost" size="icon" className="h-6 w-6 flex-shrink-0" onClick={() => onRemoveUploadedFile(name)}>
-                                    <Trash2 className="h-4 w-4" />
-                                </Button>
-                             </div>
-                        ))}
-                    </div>
-                )}
-              </div>
-            </ScrollArea>
+                            ))}
+                        </div>
+                    )}
+                </ScrollArea>
+            </div>
         </div>
         
         <DialogFooter>
