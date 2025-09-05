@@ -147,6 +147,7 @@ interface DetailedSalesHistoryTableProps {
     isSavingPreferences?: boolean;
     customCalculations?: CustomCalculation[];
     taxasOperadoras?: Operadora[];
+    isLogisticsPage?: boolean;
 }
 
 const MultiSelectFilter = ({
@@ -380,6 +381,7 @@ export default function DetailedSalesHistoryTable({
     isSavingPreferences = false,
     customCalculations = [],
     taxasOperadoras = [],
+    isLogisticsPage = false,
 }: DetailedSalesHistoryTableProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const [sortKey, setSortKey] = useState<SortKey>("data");
@@ -424,6 +426,11 @@ export default function DetailedSalesHistoryTable({
         "total_valor_parcelas", "mov_estoque", "valor_da_parcela", "tipo_de_pagamento",
         "quantidade_movimentada", "costs", "customData"
     ];
+
+    if (isLogisticsPage) {
+        systemColumnsToHide.push("custoTotal", "taxaTotalCartao");
+    }
+
     const base = (columns && columns.length > 0) ? columns : FIXED_COLUMNS;
 
     const map = new Map<string, ColumnDef>();
@@ -459,15 +466,17 @@ export default function DetailedSalesHistoryTable({
         col.label = getLabel(key, customCalculations);
     });
 
-    if (!map.has('custoTotal')) {
-        map.set('custoTotal', { id: 'custoTotal', label: getLabel('custoTotal', customCalculations), isSortable: true });
-    }
-    if (!map.has('taxaTotalCartao')) {
-        map.set('taxaTotalCartao', { id: 'taxaTotalCartao', label: getLabel('taxaTotalCartao', customCalculations), isSortable: true });
+    if (!isLogisticsPage) {
+        if (!map.has('custoTotal')) {
+            map.set('custoTotal', { id: 'custoTotal', label: getLabel('custoTotal', customCalculations), isSortable: true });
+        }
+        if (!map.has('taxaTotalCartao')) {
+            map.set('taxaTotalCartao', { id: 'taxaTotalCartao', label: getLabel('taxaTotalCartao', customCalculations), isSortable: true });
+        }
     }
 
     return Array.from(map.values()).filter(c => !systemColumnsToHide.includes(c.id));
-}, [columns, data, customCalculations]);
+}, [columns, data, customCalculations, isLogisticsPage]);
 
   const detailColumns = useMemo(() => {
     const detailKeys = ['item', 'descricao', 'quantidade', 'valorUnitario', 'custoUnitario', 'valorCredito', 'valorDescontos'];

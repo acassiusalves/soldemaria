@@ -328,10 +328,6 @@ export default function LogisticaPage() {
       if (docSnap.exists()) {
         const data = docSnap.data();
         const filteredColumns = (data.columns || [])
-          .filter((col: ColumnDef) => 
-            col.id !== 'custoTotal' &&
-            col.id !== 'taxaTotalCartao'
-          )
           .map((col: ColumnDef) => {
             // força label correto; se faltar label, cai no getLabel por id
             const label = col.id === 'valor' ? getLabel('valor') : (col.label || getLabel(col.id));
@@ -803,7 +799,7 @@ export default function LogisticaPage() {
           )}
         </Card>
 
-        <DetailedSalesHistoryTable data={groupedForView} columns={columns} />
+        <DetailedSalesHistoryTable data={groupedForView} columns={columns} isLogisticsPage={true} />
       </main>
     </div>
   );
