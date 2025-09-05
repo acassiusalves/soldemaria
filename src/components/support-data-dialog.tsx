@@ -13,7 +13,7 @@ import {
   DialogClose,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { UploadCloud, File as FileIcon, PlusCircle, Trash2, Columns } from "lucide-react";
+import { UploadCloud, File as FileIcon, PlusCircle, Trash2, Columns, X } from "lucide-react";
 import { useDropzone } from "react-dropzone";
 import * as XLSX from "xlsx";
 import { useToast } from "@/hooks/use-toast";
