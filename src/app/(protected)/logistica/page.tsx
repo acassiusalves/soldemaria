@@ -125,7 +125,7 @@ const columnLabels: Record<string, string> = {
   codigo: 'Código',
   logistica: 'Logística',
   entregador: 'Entregador',
-  valor: 'Valor',
+  valor: 'Valor Logística',
 };
 const getLabel = (key: string) => columnLabels[key] || key;
 
@@ -327,7 +327,9 @@ export default function LogisticaPage() {
     const metaUnsub = onSnapshot(doc(db, "metadata", "logistica"), (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
-        setColumns(data.columns || []);
+        // Remove 'custoTotal' from columns if it exists
+        const filteredColumns = (data.columns || []).filter((col: ColumnDef) => col.id !== 'custoTotal');
+        setColumns(filteredColumns);
         setUploadedFileNames(data.uploadedFileNames || []);
       }
     });
@@ -349,10 +351,10 @@ export default function LogisticaPage() {
   const filteredData = React.useMemo(() => {
     if (!date?.from) return allData;
     const fromDate = date.from;
-    const toDate = date.to ? endOfDay(date.to) : endOfDay(fromDate);
+    const toDateVal = date.to ? endOfDay(date.to) : endOfDay(fromDate);
     return allData.filter((item) => {
       const itemDate = toDate(item.data);
-      return itemDate && itemDate >= fromDate && itemDate <= toDate;
+      return itemDate && itemDate >= fromDate && itemDate <= toDateVal;
     });
   }, [date, allData]);
 
@@ -500,7 +502,11 @@ export default function LogisticaPage() {
 
       const current = new Map(columns.map(c => [c.id, c]));
       allKeys.forEach(key => { if (!current.has(key)) current.set(key, { id: key, label: getLabel(key), isSortable: true }); });
-      const newColumns = Array.from(current.values());
+      
+      let newColumns = Array.from(current.values());
+      // Ensure 'custoTotal' is not in the columns
+      newColumns = newColumns.filter(col => col.id !== 'custoTotal');
+
 
       const newUploadedFileNames = [...new Set([...uploadedFileNames, ...stagedFileNames])];
       const metaRef = doc(db, "metadata", "logistica");
