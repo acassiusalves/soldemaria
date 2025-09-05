@@ -293,6 +293,7 @@ const mapRowToSystem = (row: Record<string, any>) => {
   const out: Record<string, any> = {};
   for (const rawHeader in row) {
     const normalized = normalizeHeader(rawHeader);
+    if (normalized === 'valor_final') continue; // Ignora a coluna `valor_final` da planilha
     const sysKey = resolveSystemKey(normalized);
     const val = cleanNumericValue(row[rawHeader]);
     if (sysKey) out[sysKey] = val;
