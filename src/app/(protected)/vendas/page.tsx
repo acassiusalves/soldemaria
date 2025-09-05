@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import * as React from "react";
@@ -306,38 +307,31 @@ const mapRowToSystem = (row: Record<string, any>) => {
 };
 
 /* ========== agrega valores para compor o cabeçalho do pedido ========== */
-const mergeForHeader = (base: any, rows: any[]) => {
-    const out = { ...base };
+const mergeForHeader = (base: any, row: any) => {
+  const out = { ...base };
 
-    // Preenche primeiro valor não-vazio para campos do header
-    const headerFields = [
-        "data", "codigo", "tipo", "nomeCliente", "vendedor", "cidade",
-        "origem", "logistica", "custoFrete", "mov_estoque", "origemCliente", "fidelizacao"
-    ];
-    for (const row of rows) {
-        for (const k of headerFields) {
-            if (isEmptyCell(out[k]) && !isEmptyCell(row[k])) {
-                out[k] = row[k];
-            }
-        }
-    }
-    
-    // Soma o valor final de todos os itens do pedido
-    out.final = rows.reduce((acc, row) => {
-        const itemFinal = Number(row.final) || 0;
-        const itemQuantidade = Number(row.quantidade) || 0;
-        const itemValorUnitario = Number(row.valorUnitario) || 0;
-        
-        if(itemFinal > 0) return acc + itemFinal;
-        if(itemQuantidade > 0 && itemValorUnitario > 0) return acc + (itemQuantidade * itemValorUnitario);
-        
-        return acc;
-    }, 0);
-    
-    out.costs = rows.flatMap(r => r.costs || []);
-    out.valor = rows.find(r => r.valor)?.valor;
+  // preenche primeiro valor não-vazio para campos do header
+  const headerFields = [
+    "data","codigo","tipo","nomeCliente","vendedor","cidade",
+    "origem","logistica","final","custoFrete","mov_estoque"
+  ];
+  for (const k of headerFields) {
+    if (isEmptyCell(out[k]) && !isEmptyCell(row[k])) out[k] = row[k];
+  }
 
-    return out;
+  // totaliza parcelas e guarda lista (para o painel no expandido)
+  if (!isEmptyCell(row.valor_da_parcela)) {
+    const v = Number(row.valor_da_parcela) || 0;
+    out.total_valor_parcelas = (out.total_valor_parcelas || 0) + v;
+    (out.parcelas = out.parcelas || []).push({
+      valor: v,
+      modo: row.modo_de_pagamento ?? row.modoPagamento2,
+      bandeira: row.bandeira1 ?? row.bandeira2,
+      instituicao: row.instituicao_financeira,
+    });
+  }
+
+  return out;
 };
 
 
@@ -908,8 +902,27 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
 
     const aggregatedData: VendaDetalhada[] = [];
     for (const [code, rows] of groups.entries()) {
+        const headerRow: VendaDetalhada = {
+          id: `header-${code}`, 
+          codigo: code as any,
+          subRows: [],
+          final: 0,
+        };
+
         const subRows = rows.filter(isDetailRow);
-        const headerRow: VendaDetalhada = mergeForHeader({ id: `header-${code}`, codigo: code }, rows);
+        
+        // Populate header fields
+        const headerFields = [
+          "data", "codigo", "tipo", "nomeCliente", "vendedor", "cidade",
+          "origem", "logistica", "custoFrete", "mov_estoque", "origemCliente", "fidelizacao"
+        ];
+        for (const row of rows) {
+          for (const k of headerFields) {
+              if (isEmptyCell((headerRow as any)[k]) && !isEmptyCell(row[k])) {
+                  (headerRow as any)[k] = row[k];
+              }
+          }
+        }
         
         headerRow.subRows = subRows.sort((a, b) =>
             (toDate(a.data)?.getTime() ?? 0) - (toDate(b.data)?.getTime() ?? 0)
@@ -919,6 +932,28 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
         if (headerRow.quantidadeTotal === 0 && rows.length > 0) {
             headerRow.quantidadeTotal = Number(rows[0].quantidade) || 0;
         }
+
+        // Sum 'final' from all rows belonging to the group
+        headerRow.final = rows.reduce((acc, row) => {
+            const itemFinal = Number(row.final) || 0;
+            const itemQuantidade = Number(row.quantidade) || 0;
+            const itemValorUnitario = Number(row.valorUnitario) || 0;
+            
+            if (isDetailRow(row)) { // Only sum detail rows to avoid double counting
+                if(itemFinal > 0) return acc + itemFinal;
+                if(itemQuantidade > 0 && itemValorUnitario > 0) return acc + (itemQuantidade * itemValorUnitario);
+            }
+            
+            return acc;
+        }, 0);
+        
+        if (headerRow.final === 0) { // Fallback for single-line orders
+            headerRow.final = Number(rows[0].final) || 0;
+        }
+
+        headerRow.costs = rows.flatMap(r => r.costs || []);
+        headerRow.valor = rows.find(r => !isEmptyCell(r.valor))?.valor;
+
 
         // === APLICAÇÃO DAS REGRAS DE EMBALAGEM (POR PEDIDO) ===
         const qTotal = Number(headerRow.quantidadeTotal) || 0;
