@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import * as React from "react";
@@ -335,21 +334,8 @@ const mergeForHeader = (base: any, rows: any[]) => {
         return acc;
     }, 0);
     
-    // Totaliza parcelas de todas as linhas de custo associadas
-    const allParcels: any[] = [];
-    rows.forEach(row => {
-        if (!isEmptyCell(row.valor_da_parcela)) {
-            allParcels.push({
-                valor: Number(row.valor_da_parcela) || 0,
-                modo: row.modo_de_pagamento ?? row.modoPagamento2,
-                bandeira: row.bandeira1 ?? row.bandeira2,
-                instituicao: row.instituicao_financeira,
-            });
-        }
-    });
-
-    out.total_valor_parcelas = allParcels.reduce((acc, p) => acc + p.valor, 0);
-    out.parcelas = allParcels;
+    out.costs = rows.flatMap(r => r.costs || []);
+    out.valor = rows.find(r => r.valor)?.valor;
 
     return out;
 };
@@ -923,7 +909,7 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
     const aggregatedData: VendaDetalhada[] = [];
     for (const [code, rows] of groups.entries()) {
         const subRows = rows.filter(isDetailRow);
-        const headerRow: VendaDetalhada = mergeForHeader({ id: `header-${code}`, codigo: code, costs: rows[0]?.costs }, rows);
+        const headerRow: VendaDetalhada = mergeForHeader({ id: `header-${code}`, codigo: code }, rows);
         
         headerRow.subRows = subRows.sort((a, b) =>
             (toDate(a.data)?.getTime() ?? 0) - (toDate(b.data)?.getTime() ?? 0)
@@ -1501,3 +1487,6 @@ React.useEffect(() => {
 
 
 
+
+
+    
