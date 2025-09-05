@@ -670,7 +670,12 @@ export default function CustosVendasPage() {
           )}
         </Card>
 
-        <DetailedSalesHistoryTable data={groupedForView} columns={fixedColumns} tableTitle="Relatório de Custos" />
+        <DetailedSalesHistoryTable 
+            data={groupedForView} 
+            columns={fixedColumns} 
+            tableTitle="Relatório de Custos"
+            isCostsPage={true}
+        />
       </main>
     </div>
   );

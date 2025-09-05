@@ -130,7 +130,7 @@ const FIXED_COLUMNS: ColumnDef[] = [
   { id: "codigo",       label: "Código",        isSortable: true },
   { id: "logistica",    label: "Logística",     isSortable: true },
   { id: "entregador",   label: "Entregador",    isSortable: true },
-  { id: "valor",        label: "Valor",         isSortable: true, className: "text-right" },
+  { id: "valor",        label: "Valor Logística",         isSortable: true, className: "text-right" },
 ];
 
 interface DetailedSalesHistoryTableProps {
@@ -148,6 +148,7 @@ interface DetailedSalesHistoryTableProps {
     customCalculations?: CustomCalculation[];
     taxasOperadoras?: Operadora[];
     isLogisticsPage?: boolean;
+    isCostsPage?: boolean;
 }
 
 const MultiSelectFilter = ({
@@ -382,6 +383,7 @@ export default function DetailedSalesHistoryTable({
     customCalculations = [],
     taxasOperadoras = [],
     isLogisticsPage = false,
+    isCostsPage = false,
 }: DetailedSalesHistoryTableProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const [sortKey, setSortKey] = useState<SortKey>("data");
@@ -427,7 +429,7 @@ export default function DetailedSalesHistoryTable({
         "quantidade_movimentada", "costs", "customData"
     ];
 
-    if (isLogisticsPage) {
+    if (isLogisticsPage || isCostsPage) {
         systemColumnsToHide.push("custoTotal", "taxaTotalCartao");
     }
 
@@ -466,7 +468,7 @@ export default function DetailedSalesHistoryTable({
         col.label = getLabel(key, customCalculations);
     });
 
-    if (!isLogisticsPage) {
+    if (!isLogisticsPage && !isCostsPage) {
         if (!map.has('custoTotal')) {
             map.set('custoTotal', { id: 'custoTotal', label: getLabel('custoTotal', customCalculations), isSortable: true });
         }
@@ -476,7 +478,7 @@ export default function DetailedSalesHistoryTable({
     }
 
     return Array.from(map.values()).filter(c => !systemColumnsToHide.includes(c.id));
-}, [columns, data, customCalculations, isLogisticsPage]);
+}, [columns, data, customCalculations, isLogisticsPage, isCostsPage]);
 
   const detailColumns = useMemo(() => {
     const detailKeys = ['item', 'descricao', 'quantidade', 'valorUnitario', 'custoUnitario', 'valorCredito', 'valorDescontos'];
