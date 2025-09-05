@@ -425,19 +425,25 @@ async function saveGlobalCalculations(calculations: CustomCalculation[]) {
 async function persistCalcColumns(calcs: CustomCalculation[]) {
   const metaRef = doc(db, "metadata", "vendas");
   const snap = await getDoc(metaRef);
-  const current = (snap.exists() ? snap.data() : {});
-  const existing = Array.isArray(current.columns) ? current.columns : [];
-  const map = new Map(existing.map((c: any) => [c.id, c]));
-  
+  const current = snap.exists() ? (snap.data() as any) : {};
+  const existing: ColumnDef[] = Array.isArray(current.columns) ? current.columns : [];
+
+  const calcIds = new Set(calcs.map(c => c.id));
+  const isCustomId = (id: string) => /^custom[_-]/i.test(id);
+
+  // mantém do metadata apenas:
+  // - colunas não custom, ou
+  // - colunas custom que ainda existem
+  const kept = existing.filter(c => !isCustomId(c.id) || calcIds.has(c.id));
+
+  // adiciona/atualiza as colunas dos cálculos atuais
   calcs.forEach(c => {
-      map.set(c.id, { 
-          id: c.id, 
-          label: c.name,
-          isSortable: true 
-      });
+    const i = kept.findIndex(k => k.id === c.id);
+    const def: ColumnDef = { id: c.id, label: c.name || c.id, isSortable: true };
+    if (i >= 0) kept[i] = def; else kept.push(def);
   });
-  
-  await setDoc(metaRef, { columns: Array.from(map.values()) }, { merge: true });
+
+  await setDoc(metaRef, { columns: kept }, { merge: true });
 }
 
 
@@ -643,24 +649,27 @@ const handleSaveCustomCalculation = async (calc: Omit<CustomCalculation, 'id'> &
 };
 
 const handleDeleteCustomCalculation = async (calcId: string) => {
-    // 1. Remove from global calculations
-    const newCalculations = customCalculations.filter(c => c.id !== calcId);
-    await saveGlobalCalculations(newCalculations);
+  // 1) Remove da lista
+  const newCalculations = customCalculations.filter(c => c.id !== calcId);
+  await saveGlobalCalculations(newCalculations);
 
-    // 2. Remove from local user preferences
-    const user = auth.currentUser;
-    if (user) {
-        const newVisibility = { ...columnVisibility };
-        delete newVisibility[calcId];
-        setColumnVisibility(newVisibility);
-        await saveUserPreference(user.uid, 'vendas_columns_visibility', newVisibility);
-        
-        const newOrder = columnOrder.filter(id => id !== calcId);
-        setColumnOrder(newOrder);
-        await saveUserPreference(user.uid, 'vendas_columns_order', newOrder);
-    }
+  // 2) Atualiza metadata para remover a coluna órfã
+  await persistCalcColumns(newCalculations);
 
-    toast({ title: "Cálculo Removido!" });
+  // 3) Limpa prefs do usuário
+  const user = auth.currentUser;
+  if (user) {
+    const newVisibility = { ...columnVisibility };
+    delete newVisibility[calcId];
+    setColumnVisibility(newVisibility);
+    await saveUserPreference(user.uid, 'vendas_columns_visibility', newVisibility);
+
+    const newOrder = columnOrder.filter(id => id !== calcId);
+    setColumnOrder(newOrder);
+    await saveUserPreference(user.uid, 'vendas_columns_order', newOrder);
+  }
+
+  toast({ title: "Cálculo Removido!" });
 };
 
 const syncExistingCustomColumns = React.useCallback(async () => {
@@ -705,23 +714,23 @@ React.useEffect(() => {
     }
 }, [isLoadingPreferences, customCalculations, syncExistingCustomColumns]);
 
+const isCustomId = (id: string) => /^custom[_-]/i.test(id);
+
 const mergedColumns = React.useMemo(() => {
-    const map = new Map<string, ColumnDef>();
-    
-    columns.forEach(c => map.set(c.id, c));
-    
-    customCalculations.forEach(c => {
-        const columnDef = { 
-            id: c.id, 
-            label: c.name,
-            isSortable: true 
-        };
-        map.set(c.id, columnDef);
-    });
-    
-    const resultado = Array.from(map.values());
-    
-    return resultado;
+  const calcIds = new Set(customCalculations.map(c => c.id));
+
+  // mantém do metadata apenas:
+  // - colunas não custom, ou
+  // - colunas custom que ainda existem na lista de cálculos
+  const baseCols = (columns || []).filter(c => !isCustomId(c.id) || calcIds.has(c.id));
+
+  const map = new Map<string, ColumnDef>();
+  baseCols.forEach(c => map.set(c.id, c));
+  customCalculations.forEach(c => {
+    map.set(c.id, { id: c.id, label: c.name, isSortable: true });
+  });
+
+  return Array.from(map.values());
 }, [columns, customCalculations]);
 
 React.useEffect(() => {
