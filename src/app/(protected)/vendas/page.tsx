@@ -307,32 +307,44 @@ const mapRowToSystem = (row: Record<string, any>) => {
 };
 
 /* ========== agrega valores para compor o cabeçalho do pedido ========== */
-const mergeForHeader = (base: any, row: any) => {
-  const out = { ...base };
+const mergeForHeader = (base: any, rows: any[]) => {
+    const out = { ...base };
 
-  // preenche primeiro valor não-vazio para campos do header
-  const headerFields = [
-    "data","codigo","tipo","nomeCliente","vendedor","cidade",
-    "origem","logistica","final","custoFrete","mov_estoque"
-  ];
-  for (const k of headerFields) {
-    if (isEmptyCell(out[k]) && !isEmptyCell(row[k])) out[k] = row[k];
-  }
-
-  // totaliza parcelas e guarda lista (para o painel no expandido)
-  if (!isEmptyCell(row.valor_da_parcela)) {
-    const v = Number(row.valor_da_parcela) || 0;
-    out.total_valor_parcelas = (out.total_valor_parcelas || 0) + v;
-    (out.parcelas = out.parcelas || []).push({
-      valor: v,
-      modo: row.modo_de_pagamento ?? row.modoPagamento2,
-      bandeira: row.bandeira1 ?? row.bandeira2,
-      instituicao: row.instituicao_financeira,
+    // Preenche primeiro valor não-vazio para campos do header
+    const headerFields = [
+        "data", "codigo", "tipo", "nomeCliente", "vendedor", "cidade",
+        "origem", "logistica", "custoFrete", "mov_estoque"
+    ];
+    for (const row of rows) {
+        for (const k of headerFields) {
+            if (isEmptyCell(out[k]) && !isEmptyCell(row[k])) {
+                out[k] = row[k];
+            }
+        }
+    }
+    
+    // Soma o valor final de todos os itens do pedido
+    out.final = rows.reduce((acc, row) => acc + (Number(row.final) || 0), 0);
+    
+    // Totaliza parcelas de todas as linhas de custo associadas
+    const allParcels: any[] = [];
+    rows.forEach(row => {
+        if (!isEmptyCell(row.valor_da_parcela)) {
+            allParcels.push({
+                valor: Number(row.valor_da_parcela) || 0,
+                modo: row.modo_de_pagamento ?? row.modoPagamento2,
+                bandeira: row.bandeira1 ?? row.bandeira2,
+                instituicao: row.instituicao_financeira,
+            });
+        }
     });
-  }
 
-  return out;
+    out.total_valor_parcelas = allParcels.reduce((acc, p) => acc + p.valor, 0);
+    out.parcelas = allParcels;
+
+    return out;
 };
+
 
 const MotionCard = motion(Card);
 
@@ -857,36 +869,35 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
 
   /* ======= AGRUPAMENTO por código + subRows e Aplicação de Cálculos ======= */
   const groupedForView = React.useMemo(() => {
-    const groups = new Map<string, any>();
+    const groups = new Map<string, any[]>();
     for (const row of filteredData) {
         const code = normCode((row as any).codigo);
         if (!code) continue;
 
         if (!groups.has(code)) {
-            groups.set(code, { header: { ...row, subRows: [] as any[], quantidadeTotal: 0 } });
+            groups.set(code, []);
         }
-        const g = groups.get(code);
-
-        if (isDetailRow(row)) {
-            g.header.subRows.push(row);
-            g.header.quantidadeTotal += Number(row.quantidade) || 0;
-        }
-        
-        g.header = mergeForHeader(g.header, row);
+        groups.get(code)!.push(row);
     }
-    
-    for (const g of groups.values()) {
-        if (g.header.subRows.length === 0 && g.header.quantidade) {
-            g.header.quantidadeTotal = Number(g.header.quantidade) || 0;
-        }
-        g.header.subRows.sort((a: any, b: any) =>
+
+    const aggregatedData: VendaDetalhada[] = [];
+    for (const [code, rows] of groups.entries()) {
+        const subRows = rows.filter(isDetailRow);
+        const headerRow = mergeForHeader({ id: `header-${code}`, codigo: code }, rows);
+        
+        headerRow.subRows = subRows.sort((a, b) =>
             (toDate(a.data)?.getTime() ?? 0) - (toDate(b.data)?.getTime() ?? 0)
         );
 
+        headerRow.quantidadeTotal = subRows.reduce((acc, item) => acc + (Number(item.quantidade) || 0), 0);
+        if (headerRow.quantidadeTotal === 0 && rows.length > 0) {
+            headerRow.quantidadeTotal = Number(rows[0].quantidade) || 0;
+        }
+
         // === APLICAÇÃO DAS REGRAS DE EMBALAGEM (POR PEDIDO) ===
-        const qTotal = Number(g.header.quantidadeTotal) || 0;
+        const qTotal = Number(headerRow.quantidadeTotal) || 0;
         if (qTotal > 0 && Array.isArray(custosEmbalagem) && custosEmbalagem.length > 0) {
-          const logStr = String(g.header.logistica ?? 'Não especificado');
+          const logStr = String(headerRow.logistica ?? 'Não especificado');
           const modalidade = /loja/i.test(logStr) ? 'Loja' : 'Delivery';
 
           let packagingCost = 0;
@@ -943,17 +954,17 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
             }
           }
 
-          g.header.embalagens = appliedPackaging;
-          g.header.custoEmbalagem = packagingCost;
+          headerRow.embalagens = appliedPackaging;
+          headerRow.custoEmbalagem = packagingCost;
         } else {
-          g.header.embalagens = [];
-          g.header.custoEmbalagem = 0;
+          headerRow.embalagens = [];
+          headerRow.custoEmbalagem = 0;
         }
         
       // === APLICAÇÃO DAS TAXAS DE CARTÃO (POR PEDIDO) ===
       let taxaTotalCartao = 0;
-      if (Array.isArray(g.header.costs) && taxasOperadoras.length > 0) {
-        g.header.costs.forEach((cost: any) => {
+      if (Array.isArray(headerRow.costs) && taxasOperadoras.length > 0) {
+        headerRow.costs.forEach((cost: any) => {
           const valor = Number(cost.valor) || 0;
           const modo = normalizeText(cost.modo_de_pagamento);
           const tipo = normalizeText(cost.tipo_pagamento);
@@ -973,11 +984,12 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
           }
         });
       }
-      g.header.taxaTotalCartao = taxaTotalCartao;
+      headerRow.taxaTotalCartao = taxaTotalCartao;
+      
+      aggregatedData.push(headerRow);
     }
-
-    const headers = Array.from(groups.values()).map(g => g.header);
-    return applyCustomCalculations(headers);
+    
+    return applyCustomCalculations(aggregatedData);
   }, [filteredData, applyCustomCalculations, custosEmbalagem, taxasOperadoras]);
 
   const summaryData = React.useMemo(() => {
