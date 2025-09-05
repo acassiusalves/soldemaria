@@ -110,7 +110,6 @@ const columnLabels: Record<string, string> = {
   instituicao_financeira: 'Instituição Financeira',
   custo: 'Custo',
   custoEmbalagem: 'Custo Embalagem',
-  taxaTotalCartao: 'Taxa Total Cartão',
   custoTotal: 'Custo Total',
 };
 
@@ -459,10 +458,6 @@ export default function DetailedSalesHistoryTable({
         col.label = getLabel(key, customCalculations);
     });
 
-    // Manually add taxaTotalCartao to ensure it's available
-    if (!map.has('taxaTotalCartao')) {
-        map.set('taxaTotalCartao', { id: 'taxaTotalCartao', label: getLabel('taxaTotalCartao', customCalculations), isSortable: true });
-    }
     if (!map.has('custoTotal')) {
         map.set('custoTotal', { id: 'custoTotal', label: getLabel('custoTotal', customCalculations), isSortable: true });
     }
@@ -617,11 +612,7 @@ export default function DetailedSalesHistoryTable({
       if (columnId.startsWith('custom_') || value === null || value === undefined) {
           value = row.customData?.[columnId] ?? value;
       }
-
-      // Handle specific calculated fields that might not be in customData
-      if(columnId === 'taxaTotalCartao' && value === undefined) {
-          value = row.taxaTotalCartao;
-      }
+      
       if(columnId === 'custoTotal' && value === undefined) {
           value = row.custoTotal;
       }
@@ -658,7 +649,7 @@ export default function DetailedSalesHistoryTable({
         return `${value.toFixed(2)}%`;
       }
   
-      if (["final","custoFrete","imposto","embalagem","comissao","custoUnitario","valorUnitario","valorCredito","valorDescontos", "valor", "custoEmbalagem", "taxaTotalCartao", "custoTotal"]
+      if (["final","custoFrete","imposto","embalagem","comissao","custoUnitario","valorUnitario","valorCredito","valorDescontos", "valor", "custoEmbalagem", "custoTotal"]
           .includes(columnId) || (typeof value === 'number' && columnId.startsWith('custom_') && !isPercentage)) {
           const n = toNumber(value);
           if (n !== null) {
@@ -1091,6 +1082,7 @@ const renderEmbalagemTab = (row: any) => {
     </>
   );
 }
+
 
 
 

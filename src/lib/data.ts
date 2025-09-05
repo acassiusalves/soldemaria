@@ -59,6 +59,7 @@ export type VendaDetalhada = {
   item?: string;
   descricao?: string;
   quantidade?: number;
+  quantidadeTotal?: number;
   custoUnitario?: number;
   valorUnitario?: number;
   valorCredito?: number;
@@ -68,6 +69,7 @@ export type VendaDetalhada = {
   costs?: any[];
   embalagens?: (Embalagem & { calculatedCost: number, quantity: number })[];
   custoEmbalagem?: number;
+  custoTotal?: number;
   customData?: Record<string, number>;
 };
 

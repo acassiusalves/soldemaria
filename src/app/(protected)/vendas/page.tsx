@@ -164,7 +164,6 @@ const columnLabels: Record<string, string> = {
   valor: 'Valor',
   origemCliente: 'Origem Cliente',
   custoEmbalagem: 'Custo Embalagem',
-  taxaTotalCartao: 'Taxa Total Cartão',
   custoTotal: 'Custo Total',
 };
 const getLabel = (key: string, customCalculations: CustomCalculation[] = []) => {
@@ -325,7 +324,16 @@ const mergeForHeader = (base: any, rows: any[]) => {
     }
     
     // Soma o valor final de todos os itens do pedido
-    out.final = rows.reduce((acc, row) => acc + (Number(row.final) || 0), 0);
+    out.final = rows.reduce((acc, row) => {
+        const itemFinal = Number(row.final) || 0;
+        const itemQuantidade = Number(row.quantidade) || 0;
+        const itemValorUnitario = Number(row.valorUnitario) || 0;
+        
+        if(itemFinal > 0) return acc + itemFinal;
+        if(itemQuantidade > 0 && itemValorUnitario > 0) return acc + (itemQuantidade * itemValorUnitario);
+        
+        return acc;
+    }, 0);
     
     // Totaliza parcelas de todas as linhas de custo associadas
     const allParcels: any[] = [];
@@ -915,7 +923,7 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
     const aggregatedData: VendaDetalhada[] = [];
     for (const [code, rows] of groups.entries()) {
         const subRows = rows.filter(isDetailRow);
-        const headerRow = mergeForHeader({ id: `header-${code}`, codigo: code }, rows);
+        const headerRow: VendaDetalhada = mergeForHeader({ id: `header-${code}`, codigo: code, costs: rows[0]?.costs }, rows);
         
         headerRow.subRows = subRows.sort((a, b) =>
             (toDate(a.data)?.getTime() ?? 0) - (toDate(b.data)?.getTime() ?? 0)
@@ -992,32 +1000,7 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
           headerRow.embalagens = [];
           headerRow.custoEmbalagem = 0;
         }
-        
-      // === APLICAÇÃO DAS TAXAS DE CARTÃO (POR PEDIDO) ===
-      let taxaTotalCartao = 0;
-      if (Array.isArray(headerRow.costs) && taxasOperadoras.length > 0) {
-        headerRow.costs.forEach((cost: any) => {
-          const valor = Number(cost.valor) || 0;
-          const modo = normalizeText(cost.modo_de_pagamento);
-          const tipo = normalizeText(cost.tipo_pagamento);
-          const instituicao = normalizeText(cost.instituicao_financeira);
-          const parcela = Number(cost.parcela) || 1;
-
-          const operadora = taxasOperadoras.find(op => normalizeText(op.nome) === instituicao);
-          if (operadora) {
-            let taxaPercentual = 0;
-            if (modo.includes('cartao') && tipo.includes('debito')) {
-              taxaPercentual = operadora.taxaDebito || 0;
-            } else if (modo.includes('cartao') && tipo.includes('credito')) {
-              const taxaCredito = operadora.taxasCredito.find(t => t.numero === parcela);
-              taxaPercentual = taxaCredito?.taxa || 0;
-            }
-            taxaTotalCartao += valor * (taxaPercentual / 100);
-          }
-        });
-      }
-      headerRow.taxaTotalCartao = taxaTotalCartao;
-      
+              
       // custo total do pedido a partir das sub-rows
       const custoTotalPedido = (headerRow.subRows || []).reduce((sum: number, item: any) => {
         const custo = Number(item.custoUnitario) || 0;
@@ -1237,7 +1220,7 @@ React.useEffect(() => {
     ];
     
     // Add calculated fields explicitly as they might not be in `columns` yet
-    const calculatedFields = ['custoEmbalagem', 'taxaTotalCartao', 'custoTotal'];
+    const calculatedFields = ['custoEmbalagem', 'custoTotal'];
     calculatedFields.forEach(fieldId => {
         if (!allColumns.some(c => c.id === fieldId)) {
             allColumns.push({ id: fieldId, label: getLabel(fieldId, customCalculations), isSortable: true });
@@ -1515,4 +1498,5 @@ React.useEffect(() => {
     </>
   );
 }
+
 
