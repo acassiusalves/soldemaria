@@ -74,7 +74,8 @@ const mergeForHeader = (base: any, row: any) => {
     "origem", "origemCliente", "fidelizacao", "logistica", "final", "custoFrete",
   ];
   for (const k of headerFields) {
-    if (isEmptyCell(out[k]) && !isEmptyCell(row[k])) {
+    // CORREÇÃO: Garante que o valor seja preenchido se a linha atual tiver um valor e o base não.
+    if (!isEmptyCell(row[k]) && isEmptyCell(out[k])) {
       out[k] = row[k];
     }
   }
