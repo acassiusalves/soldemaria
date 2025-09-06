@@ -1027,7 +1027,10 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
   const summaryData = React.useMemo(() => {
     return groupedForView.reduce(
         (acc, row) => {
-            acc.faturamento += Number(row.final) || 0;
+            const valorFinal = Number(row.final) || 0;
+            const valorDescontos = Number(row.valorDescontos) || 0;
+
+            acc.faturamento += valorFinal - valorDescontos;
             acc.frete += Number(row.custoFrete) || 0;
             acc.custoTotal += Number(row.custoTotal) || 0;
             
