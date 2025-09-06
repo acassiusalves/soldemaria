@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import * as React from "react";
@@ -120,6 +119,19 @@ export default function TaxasCartaoPage() {
         if(unsub) unsub();
     };
   }, []);
+
+  React.useEffect(() => {
+    (async () => {
+        const auth = await getAuthClient();
+        if(!auth) return;
+        const unsub = auth.onAuthStateChanged((user) => {
+            if (!user) {
+                router.push('/login');
+            }
+        });
+        return () => unsub();
+    })();
+  }, [router]);
 
     const handleLogout = async () => {
     const auth = await getAuthClient();

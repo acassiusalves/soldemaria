@@ -14,7 +14,7 @@ import {
   ChevronDown
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { User, onAuthStateChanged } from "firebase/auth";
+import { User } from "firebase/auth";
 
 import { getAuthClient } from "@/lib/firebase";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -72,7 +72,7 @@ function DashboardPage() {
     (async () => {
       const auth = await getAuthClient();
       if (!auth) return;
-      const unsub = onAuthStateChanged(auth, (user) => {
+      const unsub = auth.onAuthStateChanged((user) => {
         if (user) {
           setUser(user);
         } else {

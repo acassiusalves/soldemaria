@@ -4,7 +4,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { signInWithEmailAndPassword, onAuthStateChanged } from "firebase/auth";
+import { signInWithEmailAndPassword } from "firebase/auth";
 import { getAuthClient } from "@/lib/firebase"; 
 import { Button } from "@/components/ui/button";
 import {
@@ -37,7 +37,7 @@ export default function LoginPage() {
             return;
         };
 
-        const unsubscribe = onAuthStateChanged(auth, (user) => {
+        const unsubscribe = auth.onAuthStateChanged((user) => {
         if (user) {
             router.replace("/");
         } else {

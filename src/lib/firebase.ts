@@ -16,11 +16,11 @@ const firebaseConfig = {
 // Initialize Firebase
 const app: FirebaseApp = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 
-export const getAuthClient = async () => {
+export async function getAuthClient() {
   if (typeof window === 'undefined') return null;
   const { getAuth } = await import('firebase/auth');
   return getAuth(app);
-};
+}
 
 export const getDbClient = async () => {
     if (typeof window === 'undefined') return null;
