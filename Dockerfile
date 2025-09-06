@@ -1,16 +1,18 @@
 # ---------- deps ----------
 FROM node:20-alpine AS deps
 WORKDIR /app
-# Copia apenas arquivos de lock e package para cache mais eficiente
+# Copia lockfiles + npmrc ANTES da instalação para aproveitar cache
 COPY package.json ./
 COPY package-lock.json* ./
 COPY pnpm-lock.yaml* ./
 COPY yarn.lock* ./
+COPY .npmrc* ./
+# Instala respeitando o gerenciador que você usa
 RUN \
   if [ -f pnpm-lock.yaml ]; then npm i -g pnpm && pnpm i --frozen-lockfile; \
   elif [ -f yarn.lock ]; then yarn --frozen-lockfile; \
-  elif [ -f package-lock.json ]; then npm ci; \
-  else npm i; fi
+  elif [ -f package-lock.json ]; then npm ci --legacy-peer-deps; \
+  else npm i --legacy-peer-deps; fi
 
 # ---------- build ----------
 FROM node:20-alpine AS builder
