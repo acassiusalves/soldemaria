@@ -77,10 +77,15 @@ const calculateFinancialMetrics = (data: VendaDetalhada[]) => {
 
     for (const [code, sales] of salesGroups.entries()) {
         const headerRow = sales.reduce((acc, row) => ({...acc, ...row}), {} as VendaDetalhada);
+        
+        const isMultiLineOrder = sales.some(s => s.item || s.descricao);
 
-        const revenue = Number(headerRow.final) || 0;
-        const discounts = Number(headerRow.valorDescontos) || 0;
-        const cmv = Number(headerRow.custoTotal) || 0;
+        const revenue = isMultiLineOrder 
+            ? sales.reduce((sum, item) => sum + (Number(item.final) || (Number(item.valorUnitario) * Number(item.quantidade)) || 0), 0)
+            : Number(headerRow.final) || 0;
+
+        const discounts = sales.reduce((sum, item) => sum + (Number(item.valorDescontos) || 0), 0);
+        const cmv = sales.reduce((sum, item) => sum + (Number(item.custoUnitario) * Number(item.quantidade) || 0), 0);
         const shipping = Number(headerRow.custoFrete) || 0;
         const grossMargin = revenue - discounts - cmv - shipping;
 
