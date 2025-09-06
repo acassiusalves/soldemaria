@@ -93,11 +93,12 @@ export default function RevenueCostsChart({ title, data, dataKey, comparisonData
                     cursor={false}
                     content={<ChartTooltipContent
                         formatter={(value, name) => {
-                            const label = chartConfig[name as keyof typeof chartConfig].label;
+                            const configKey = name === 'value' ? 'value' : 'previousValue';
+                            const label = chartConfig[configKey].label;
                             const formattedValue = typeof value === 'number' ? value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : value
                             return (
                                 <div className="flex items-center gap-2">
-                                    <div className="w-2 h-2 rounded-full" style={{backgroundColor: chartConfig[name as keyof typeof chartConfig].color}}/>
+                                    <div className="w-2 h-2 rounded-full" style={{backgroundColor: chartConfig[configKey].color}}/>
                                     <span>{label}: {formattedValue}</span>
                                 </div>
                             )
@@ -112,7 +113,6 @@ export default function RevenueCostsChart({ title, data, dataKey, comparisonData
                     fill="var(--color-value)"
                     fillOpacity={0.4}
                     stroke="var(--color-value)"
-                    stackId="a"
                   />
                   {hasComparison && (
                     <Area
@@ -121,7 +121,6 @@ export default function RevenueCostsChart({ title, data, dataKey, comparisonData
                         fill="var(--color-previousValue)"
                         fillOpacity={0.2}
                         stroke="var(--color-previousValue)"
-                        stackId="b"
                     />
                   )}
                 </AreaChart>
