@@ -29,6 +29,7 @@ import {
   DollarSign,
   Truck,
   Archive,
+  Tag,
 } from "lucide-react";
 import {
   collection,
@@ -887,6 +888,12 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
             const frete = Number(row.custoFrete) || 0;
             return acc + frete;
         }, 0);
+        
+        // Sum `valorDescontos` from all rows
+        headerRow.valorDescontos = rows.reduce((acc, row) => {
+            const desconto = Number(row.valorDescontos) || 0;
+            return acc + desconto;
+        }, 0);
 
         headerRow.subRows = subRows.sort((a, b) =>
             (toDate(a.data)?.getTime() ?? 0) - (toDate(b.data)?.getTime() ?? 0)
@@ -1031,12 +1038,13 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
             const valorDescontos = Number(row.valorDescontos) || 0;
 
             acc.faturamento += valorFinal - valorDescontos;
+            acc.descontos += valorDescontos;
             acc.frete += Number(row.custoFrete) || 0;
             acc.custoTotal += Number(row.custoTotal) || 0;
             
             return acc;
         },
-        { faturamento: 0, frete: 0, custoTotal: 0 }
+        { faturamento: 0, descontos: 0, custoTotal: 0, frete: 0 }
     );
   }, [groupedForView]);
 
@@ -1467,11 +1475,16 @@ React.useEffect(() => {
           )}
         </Card>
         
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-4">
           <SummaryCard 
             title="Faturamento" 
             value={summaryData.faturamento} 
             icon={<DollarSign className="text-primary" />}
+          />
+          <SummaryCard 
+            title="Descontos" 
+            value={summaryData.descontos} 
+            icon={<Tag className="text-primary" />}
           />
           <SummaryCard 
             title="Custo Total" 
@@ -1519,3 +1532,4 @@ React.useEffect(() => {
     </>
   );
 }
+

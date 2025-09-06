@@ -18,6 +18,9 @@ import {
   Calendar as CalendarIcon,
   Users,
   DollarSign,
+  Tag,
+  Truck,
+  Archive,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { User } from "firebase/auth";
@@ -55,6 +58,7 @@ import OriginChart from "@/components/origin-chart";
 import TopProductsChart from "@/components/top-products-chart";
 import type { Venda, VendaDetalhada } from "@/lib/data";
 import { Logo } from "@/components/icons";
+import SummaryCard from "@/components/summary-card";
 
 
 const toDate = (value: unknown): Date | null => {
@@ -130,12 +134,20 @@ export default function DashboardPage() {
     });
   }, [date, allSales]);
 
-  const { kpis, logisticsChartData, originChartData, topProductsChartData, salesChartData } = React.useMemo(() => {
+  const { kpis, summaryData, logisticsChartData, originChartData, topProductsChartData, salesChartData } = React.useMemo(() => {
     const kpisResult = {
         totalRevenue: 0,
         totalSales: 0,
         newCustomers: 0,
     };
+    
+    const summary = {
+      faturamento: 0,
+      descontos: 0,
+      custoTotal: 0,
+      frete: 0,
+    }
+
     const logistics: Record<string, number> = {};
     const origins: Record<string, number> = {};
     const products: Record<string, number> = {};
@@ -145,24 +157,35 @@ export default function DashboardPage() {
     const salesGroups = new Map<string, VendaDetalhada[]>();
 
     for (const sale of filteredData) {
-        if (!salesGroups.has(sale.codigo as any)) {
-            salesGroups.set(sale.codigo as any, []);
+        const code = String(sale.codigo);
+        if (!salesGroups.has(code)) {
+            salesGroups.set(code, []);
         }
-        salesGroups.get(sale.codigo as any)!.push(sale);
+        salesGroups.get(code)!.push(sale);
     }
     
     kpisResult.totalSales = salesGroups.size;
 
     for(const [code, sales] of salesGroups.entries()) {
-        const mainSale = sales[0];
-        const saleValue = sales.reduce((acc, s) => acc + (Number(s.final) || 0), 0);
-        kpisResult.totalRevenue += saleValue;
+        const mainSale = sales[0]; // Header data is mostly the same
+        const totalFinal = sales.reduce((acc, s) => acc + (Number(s.final) || 0), 0);
+        const totalDescontos = sales.reduce((acc, s) => acc + (Number(s.valorDescontos) || 0), 0);
+        const custoTotal = sales.reduce((acc, s) => acc + (Number(s.custoTotal) || 0), 0);
+        const custoFrete = sales.reduce((acc, s) => acc + (Number(s.custoFrete) || 0), 0);
+        
+        summary.faturamento += totalFinal - totalDescontos;
+        summary.descontos += totalDescontos;
+        summary.custoTotal += custoTotal;
+        summary.frete += custoFrete;
+        
+        kpisResult.totalRevenue += totalFinal;
+
 
         if (mainSale.logistica) {
-            logistics[mainSale.logistica] = (logistics[mainSale.logistica] || 0) + saleValue;
+            logistics[mainSale.logistica] = (logistics[mainSale.logistica] || 0) + totalFinal;
         }
         if (mainSale.origem) {
-            origins[mainSale.origem] = (origins[mainSale.origem] || 0) + saleValue;
+            origins[mainSale.origem] = (origins[mainSale.origem] || 0) + totalFinal;
         }
         if (mainSale.nomeCliente && !customerSet.has(mainSale.nomeCliente)) {
             customerSet.add(mainSale.nomeCliente);
@@ -172,7 +195,7 @@ export default function DashboardPage() {
         const saleDate = toDate(mainSale.data);
         if (saleDate) {
             const dateKey = format(saleDate, "yyyy-MM-dd");
-            salesByDate[dateKey] = (salesByDate[dateKey] || 0) + saleValue;
+            salesByDate[dateKey] = (salesByDate[dateKey] || 0) + totalFinal;
         }
 
         sales.forEach(item => {
@@ -193,13 +216,12 @@ export default function DashboardPage() {
       id: date,
       data: date,
       receita: revenue,
-      // Fill other fields with default values as they are not used in the chart
       categoria: "Casual", 
       produto: "",
       unidadesVendidas: 0,
     }));
 
-    return { kpis: kpisResult, logisticsChartData, originChartData, topProductsChartData, salesChartData };
+    return { kpis: kpisResult, summaryData: summary, logisticsChartData, originChartData, topProductsChartData, salesChartData };
   }, [filteredData]);
 
 
@@ -326,29 +348,25 @@ export default function DashboardPage() {
         </header>
         <main className="flex flex-1 flex-col gap-4 p-4 md:gap-8 md:p-8">
           <div className="grid gap-4 md:grid-cols-2 md:gap-8 lg:grid-cols-4">
-            <KpiCard
-              title="Receita Total"
-              value={kpis.totalRevenue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-              change=""
-              icon={<DollarSign className="h-4 w-4 text-muted-foreground" />}
+            <SummaryCard 
+                title="Faturamento" 
+                value={summaryData.faturamento} 
+                icon={<DollarSign className="text-primary" />}
             />
-            <KpiCard
-              title="Vendas"
-              value={kpis.totalSales.toString()}
-              change=""
-              icon={<ShoppingBag className="h-4 w-4 text-muted-foreground" />}
+            <SummaryCard 
+                title="Descontos" 
+                value={summaryData.descontos} 
+                icon={<Tag className="text-primary" />}
             />
-            <KpiCard
-              title="Novos Clientes"
-              value={kpis.newCustomers.toString()}
-              change=""
-              icon={<Users className="h-4 w-4 text-muted-foreground" />}
+            <SummaryCard 
+                title="Custo Total" 
+                value={summaryData.custoTotal}
+                icon={<Archive className="text-primary" />}
             />
-             <KpiCard
-              title="Taxa de Conversão"
-              value="N/A"
-              change=""
-              icon={<Percent className="h-4 w-4 text-muted-foreground" />}
+            <SummaryCard 
+                title="Frete" 
+                value={summaryData.frete}
+                icon={<Truck className="text-primary" />}
             />
           </div>
           <div className="grid gap-4 md:gap-8 lg:grid-cols-2 xl:grid-cols-3">
