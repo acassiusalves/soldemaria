@@ -162,9 +162,9 @@ export default function VisaoGeralPage() {
       if (headerRow.logistica) {
           logistics[headerRow.logistica] = (logistics[headerRow.logistica] || 0) + orderRevenue;
       }
-      if (headerRow.origemCliente) {
-          origins[headerRow.origemCliente] = (origins[headerRow.origemCliente] || 0) + orderRevenue;
-      }
+      
+      const originKey = headerRow.origemCliente || 'Não Identificado';
+      origins[originKey] = (origins[originKey] || 0) + orderRevenue;
     }
     
     const kpisResult = {
