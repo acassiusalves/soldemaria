@@ -53,6 +53,24 @@ const normCode = (v: any) => {
   return s;
 };
 
+const isDetailRow = (row: Record<string, any>) =>
+  row.item || row.descricao;
+
+const mergeForHeader = (base: any, row: any) => {
+  let out = { ...base };
+  const headerFields = [
+    "data", "codigo", "tipo", "nomeCliente", "vendedor", "cidade",
+    "origem", "origemCliente", "fidelizacao", "logistica", "final", "custoFrete",
+  ];
+  for (const k of headerFields) {
+    if ((out[k] === null || out[k] === undefined || out[k] === '') && row[k]) {
+      out[k] = row[k];
+    }
+  }
+  return out;
+};
+
+
 export default function VisaoGeralPage() {
   const [allSales, setAllSales] = React.useState<VendaDetalhada[]>([]);
   const [logisticaData, setLogisticaData] = React.useState<VendaDetalhada[]>([]);
@@ -129,25 +147,23 @@ export default function VisaoGeralPage() {
     const origins: Record<string, number> = {};
     
     for (const [code, sales] of salesGroups.entries()) {
-      const isDetailRow = (row: any) => row.descricao || row.item;
-
-      const orderRevenue = sales.reduce((acc, s) => {
-        const final = isDetailRow(s) ? (Number(s.valorUnitario) || 0) * (Number(s.quantidade) || 0) : (Number(s.final) || 0);
-        const discount = Number(s.valorDescontos) || 0;
-        return acc + final - discount;
-      }, 0);
+      let headerRow: any = {};
+      let subRows = sales.filter(isDetailRow);
+      if(subRows.length === 0 && sales.length > 0) subRows = sales;
       
-      const orderItems = sales.reduce((acc, s) => acc + (Number(s.quantidade) || 0), 0);
-      const mainSale = sales[0];
+      sales.forEach(row => headerRow = mergeForHeader(headerRow, row));
+      
+      const orderRevenue = subRows.reduce((acc, s) => acc + ((Number(s.final) || ((Number(s.valorUnitario) || 0) * (Number(s.quantidade) || 0))) - (Number(s.valorDescontos) || 0)), 0);
+      const orderItems = subRows.reduce((acc, s) => acc + (Number(s.quantidade) || 0), 0);
 
       totalRevenue += orderRevenue;
       totalItems += orderItems;
       
-      if (mainSale.logistica) {
-          logistics[mainSale.logistica] = (logistics[mainSale.logistica] || 0) + orderRevenue;
+      if (headerRow.logistica) {
+          logistics[headerRow.logistica] = (logistics[headerRow.logistica] || 0) + orderRevenue;
       }
-      if (mainSale.origem) {
-          origins[mainSale.origem] = (origins[mainSale.origem] || 0) + orderRevenue;
+      if (headerRow.origemCliente) {
+          origins[headerRow.origemCliente] = (origins[headerRow.origemCliente] || 0) + orderRevenue;
       }
     }
     
@@ -283,4 +299,3 @@ export default function VisaoGeralPage() {
     </div>
   );
 }
-
