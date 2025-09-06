@@ -1,3 +1,4 @@
+
 import React from "react";
 import { ArrowDownRight, ArrowUpRight } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -6,7 +7,7 @@ import { cn } from "@/lib/utils";
 interface KpiCardProps {
   title: string;
   value: string;
-  change: string;
+  change?: string;
   icon: React.ReactNode;
   changeType?: "positive" | "negative";
 }
