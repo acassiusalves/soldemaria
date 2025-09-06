@@ -190,7 +190,7 @@ export function SupportDataDialog({ children, onProcessData, uploadedFileNames, 
                                 ))}
                                 {uploadedFileNames.map(name => (
                                     <div key={name} className="flex items-center justify-between p-2 rounded-md bg-muted/50 text-sm">
-                                        <div className="flex items-center gap-2 overflow-hidden">
+                                        <div className="flex items-center gap-2 flex-1 overflow-hidden">
                                             <FileIcon className="w-5 h-5 text-muted-foreground flex-shrink-0" />
                                             <span className="truncate text-muted-foreground" title={name}>{name} (Salvo)</span>
                                         </div>
