@@ -74,16 +74,10 @@ const mergeForHeader = (base: any, row: any) => {
     "origem", "origemCliente", "fidelizacao", "logistica", "final", "custoFrete",
   ];
   for (const k of headerFields) {
-    // Prioritize non-empty values
     if (!isEmptyCell(row[k]) && isEmptyCell(out[k])) {
       out[k] = row[k];
     }
   }
-   // Ensure 'final' value is taken from a non-detail row if possible
-  if (!isDetailRow(row) && !isEmptyCell(row.final)) {
-      out.final = row.final;
-  }
-
   return out;
 };
 
@@ -106,26 +100,27 @@ const calculateChannelMetrics = (data: VendaDetalhada[]) => {
     const matrix: Record<string, Record<string, number>> = {};
 
     for (const [code, sales] of salesGroups.entries()) {
-        let headerRow: any = { final: 0, tipo: ''};
-        let totalItems = 0;
-
+        let headerRow: any = {};
         sales.forEach(row => {
             headerRow = mergeForHeader(headerRow, row);
-            if (isDetailRow(row)) {
-                totalItems += Number(row.quantidade) || 0;
-            }
         });
+
+        const detailRows = sales.filter(isDetailRow);
         
-        // If it's a single-line order, count its quantity
-        if (sales.length === 1 && !isDetailRow(sales[0])) {
-            totalItems = Number(sales[0].quantidade) || 1;
+        let orderRevenue = 0;
+        let totalItems = 0;
+
+        if (detailRows.length > 0) {
+            orderRevenue = detailRows.reduce((acc, s) => acc + (Number(s.final) || 0), 0);
+            totalItems = detailRows.reduce((acc, s) => acc + (Number(s.quantidade) || 0), 0);
+        } else if (sales.length > 0) {
+            orderRevenue = Number(headerRow.final) || 0;
+            totalItems = Number(headerRow.quantidade) || 1;
         }
 
         const tipoVenda = String(headerRow.tipo || '').toLowerCase();
-        const channel = tipoVenda.includes('loja') ? 'Loja' : 'Delivery';
+        const channel = tipoVenda.includes('venda loja') ? 'Loja' : 'Delivery';
         const origin = headerRow.origemCliente || 'N/A';
-        
-        const orderRevenue = Number(headerRow.final) || 0;
         
         channels[channel].revenue += orderRevenue;
         channels[channel].orders += 1;
@@ -200,7 +195,7 @@ export default function CanaisEOrigensPage() {
     <div className="flex flex-col gap-6">
       <Card>
         <CardHeader>
-          <CardTitle>Análise de Canais & Origens</CardTitle>
+          <CardTitle>Análise de Canais &amp; Origens</CardTitle>
           <CardDescription>
             Selecione o período para analisar a performance de seus canais de venda e origens de clientes.
           </CardDescription>
