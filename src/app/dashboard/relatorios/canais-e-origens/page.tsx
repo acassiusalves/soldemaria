@@ -106,7 +106,8 @@ const calculateChannelMetrics = (data: VendaDetalhada[]) => {
         let subRows = sales.filter(isDetailRow);
         if (subRows.length === 0 && sales.length > 0) subRows = sales;
         
-        const channel = /loja/i.test(headerRow.logistica || '') ? 'Loja' : 'Delivery';
+        const tipoVenda = (headerRow.tipo || '').toLowerCase();
+        const channel = tipoVenda === 'venda loja' ? 'Loja' : 'Delivery';
         const origin = headerRow.origemCliente || 'N/A';
         
         const orderRevenue = subRows.reduce((acc, s) => {
