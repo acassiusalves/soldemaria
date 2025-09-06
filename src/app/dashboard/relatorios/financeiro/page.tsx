@@ -55,6 +55,29 @@ const normCode = (v: any) => {
   return s;
 };
 
+const isEmptyCell = (v: any) => {
+  if (v === null || v === undefined) return true;
+  if (typeof v === "string") {
+    const s = v.replace(/\u00A0/g, " ").trim().toLowerCase();
+    return s === "" || s === "n/a" || s === "na" || s === "-" || s === "--";
+  }
+  return false;
+};
+
+const mergeForHeader = (base: any, row: any) => {
+  let out = { ...base };
+  const headerFields = [
+    "data", "codigo", "tipo", "nomeCliente", "vendedor", "cidade",
+    "origem", "origemCliente", "fidelizacao", "logistica", "final", "custoFrete",
+  ];
+  for (const k of headerFields) {
+    if (isEmptyCell(out[k]) && !isEmptyCell(row[k])) {
+      out[k] = row[k];
+    }
+  }
+  return out;
+};
+
 
 const calculateFinancialMetrics = (
   currentData: VendaDetalhada[], 
@@ -79,8 +102,9 @@ const calculateFinancialMetrics = (
 
 
       for (const [code, sales] of salesGroups.entries()) {
-          const headerRow = sales.reduce((acc, row) => ({...acc, ...row}), {} as VendaDetalhada);
-          
+          let headerRow: any = {};
+          sales.forEach(row => headerRow = mergeForHeader(headerRow, row));
+
           const isMultiLineOrder = sales.some(s => s.item || s.descricao);
 
           const revenue = isMultiLineOrder 
@@ -161,7 +185,7 @@ const calculateFinancialMetrics = (
                 existing.previousRevenue = item.revenue;
                 existing.previousGrossMargin = item.grossMargin;
             } else {
-                map.set(item.name, { ...item, revenue: 0, grossMargin: 0, previousRevenue: item.revenue, previousGrossMargin: item.grossMargin });
+                map.set(item.name, { ...item, revenue: 0, grossMargin: 0, discounts: 0, cmv: 0, shipping: 0, previousRevenue: item.revenue, previousGrossMargin: item.grossMargin });
             }
         });
         return Array.from(map.values()).sort((a,b) => b.revenue - a.revenue);
@@ -172,11 +196,11 @@ const calculateFinancialMetrics = (
         const start = dateRange.from;
         const end = dateRange.to || dateRange.from;
         const days = eachDayOfInterval({ start, end });
-        const dayDiff = differenceInDays(end, start);
         
-        for(let i=0; i <= dayDiff; i++) {
-            const currentDay = days[i];
+        for(const currentDay of days) {
             const currentDayKey = format(currentDay, 'yyyy-MM-dd');
+            
+            const dayDiff = differenceInDays(end, start);
             const prevDay = subDays(currentDay, dayDiff + 1);
             const prevDayKey = format(prevDay, 'yyyy-MM-dd');
             
@@ -213,16 +237,7 @@ export default function FinanceiroPage() {
     from: startOfMonth(new Date()),
     to: new Date(),
   });
-  const [compareDate, setCompareDate] = React.useState<DateRange | undefined>(() => {
-      if (!date?.from || !date.to) return undefined;
-      const diff = differenceInDays(date.to, date.from);
-      return {
-          from: subDays(date.from, diff + 1),
-          to: subDays(date.to, diff + 1),
-      }
-  });
-
-
+  
   React.useEffect(() => {
     let unsub: () => void;
     (async () => {
@@ -237,6 +252,26 @@ export default function FinanceiroPage() {
     })();
     return () => unsub && unsub();
   }, []);
+  
+  const [compareDate, setCompareDate] = React.useState<DateRange | undefined>(() => {
+      if (!date?.from) return undefined;
+      const diff = differenceInDays(date.to ?? new Date(), date.from);
+      return {
+          from: subDays(date.from, diff + 1),
+          to: subDays(date.to ?? new Date(), diff + 1),
+      }
+  });
+  
+  React.useEffect(() => {
+    if (date?.from && date?.to) {
+        const diff = differenceInDays(date.to, date.from);
+        setCompareDate({
+            from: subDays(date.from, diff + 1),
+            to: subDays(date.to, diff + 1),
+        })
+    }
+  }, [date])
+
 
   const { filteredData, comparisonData } = React.useMemo(() => {
     const filterByDate = (data: VendaDetalhada[], dateRange: DateRange | undefined) => {
