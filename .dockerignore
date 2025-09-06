@@ -1,7 +1,8 @@
-.git
-.nixpacks
-Dockerfile
-.dockerignore
 node_modules
-.next
-*.log
+.next/cache
+.vercel
+.vscode
+.git
+.DS_Store
+.env
+.env.*
