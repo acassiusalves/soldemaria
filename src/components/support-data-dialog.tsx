@@ -152,7 +152,7 @@ export function SupportDataDialog({ children, onProcessData, uploadedFileNames, 
         setIsOpen(open);
     }}>
       <DialogTrigger asChild>{children}</DialogTrigger>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-4xl">
         <DialogHeader>
           <DialogTitle>Importar Dados de Apoio</DialogTitle>
           <DialogDescription>
@@ -189,12 +189,12 @@ export function SupportDataDialog({ children, onProcessData, uploadedFileNames, 
                                     </div>
                                 ))}
                                 {uploadedFileNames.map(name => (
-                                    <div key={name} className="flex items-center justify-between p-2 rounded-md bg-muted/50 text-sm">
-                                        <div className="flex items-center gap-2 flex-1 overflow-hidden">
+                                    <div key={name} className="grid grid-cols-[1fr_auto] items-center p-2 rounded-md bg-muted/50 text-sm">
+                                        <div className="flex items-center gap-2 overflow-hidden">
                                             <FileIcon className="w-5 h-5 text-muted-foreground flex-shrink-0" />
                                             <span className="truncate text-muted-foreground" title={name}>{name} (Salvo)</span>
                                         </div>
-                                        <Button variant="ghost" size="icon" className="h-6 w-6 flex-shrink-0" onClick={() => onRemoveUploadedFile(name)}>
+                                        <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={() => onRemoveUploadedFile(name)}>
                                             <Trash2 className="h-4 w-4" />
                                         </Button>
                                     </div>
