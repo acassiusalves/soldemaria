@@ -915,7 +915,11 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
             headerRow.final = Number(rows[0].final) || 0;
         }
 
-        headerRow.costs = rows.flatMap(r => r.costs || []);
+        headerRow.costs = rows.flatMap(r => r.costs || []).filter((cost, index, self) => 
+            index === self.findIndex(c => (
+                c.id === cost.id && c.valor === cost.valor
+            ))
+        );
         headerRow.valor = rows.find(r => !isEmptyCell(r.valor))?.valor;
 
 
@@ -1512,4 +1516,3 @@ React.useEffect(() => {
     </>
   );
 }
-
