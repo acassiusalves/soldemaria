@@ -61,7 +61,7 @@ const calculateFinancialMetrics = (
   previousData: VendaDetalhada[], 
   dateRange?: DateRange
 ) => {
-    const processDataSet = (data: VendaDetalhada[], range?: DateRange) => {
+    const processDataSet = (data: VendaDetalhada[]) => {
       const salesGroups = new Map<string, VendaDetalhada[]>();
       data.forEach(sale => {
         const code = normCode(sale.codigo);
@@ -75,17 +75,8 @@ const calculateFinancialMetrics = (
       let totalShipping = 0;
       const byChannel: Record<string, BreakdownData> = {};
       const byOrigin: Record<string, BreakdownData> = {};
-      
-      const byDay: Record<string, { date: string, revenue: number, discounts: number, cmv: number, shipping: number }> = {};
-      if (range?.from) {
-          const start = range.from;
-          const end = range.to || range.from;
-          const days = eachDayOfInterval({ start, end });
-          days.forEach(day => {
-              const dayKey = format(day, "yyyy-MM-dd");
-              byDay[dayKey] = { date: dayKey, revenue: 0, discounts: 0, cmv: 0, shipping: 0 };
-          })
-      }
+      const byDay: Record<string, { revenue: number, discounts: number, cmv: number, shipping: number }> = {};
+
 
       for (const [code, sales] of salesGroups.entries()) {
           const headerRow = sales.reduce((acc, row) => ({...acc, ...row}), {} as VendaDetalhada);
@@ -109,12 +100,11 @@ const calculateFinancialMetrics = (
           const saleDate = toDate(headerRow.data);
           if (saleDate) {
               const dayKey = format(saleDate, "yyyy-MM-dd");
-              if (byDay[dayKey]) {
-                  byDay[dayKey].revenue += revenue;
-                  byDay[dayKey].discounts += discounts;
-                  byDay[dayKey].cmv += cmv;
-                  byDay[dayKey].shipping += shipping;
-              }
+              if (!byDay[dayKey]) byDay[dayKey] = { revenue: 0, discounts: 0, cmv: 0, shipping: 0 };
+              byDay[dayKey].revenue += revenue;
+              byDay[dayKey].discounts += discounts;
+              byDay[dayKey].cmv += cmv;
+              byDay[dayKey].shipping += shipping;
           }
 
           const channel = headerRow.logistica || 'N/A';
@@ -139,13 +129,13 @@ const calculateFinancialMetrics = (
       return {
         totalRevenue, totalDiscounts, totalCmv, totalShipping,
         grossMargin: totalRevenue - totalDiscounts - totalCmv - totalShipping,
-        byDay: Object.values(byDay).sort((a, b) => a.date.localeCompare(b.date)),
+        byDay,
         byChannel: Object.values(byChannel),
         byOrigin: Object.values(byOrigin),
       };
     };
 
-    const current = processDataSet(currentData, dateRange);
+    const current = processDataSet(currentData);
     const previous = processDataSet(previousData);
 
     const calcChange = (currentVal: number, previousVal: number) => {
@@ -177,24 +167,40 @@ const calculateFinancialMetrics = (
         return Array.from(map.values()).sort((a,b) => b.revenue - a.revenue);
     }
     
-    const mergedChartData = current.byDay.map((dayData, index) => {
-        const previousDayData = previous.byDay[index] || {};
-        return {
-            date: dayData.date,
-            revenue: dayData.revenue,
-            discounts: dayData.discounts,
-            cmv: dayData.cmv,
-            shipping: dayData.shipping,
-            previousRevenue: previousDayData.revenue,
-            previousDiscounts: previousDayData.discounts,
-            previousCmv: previousDayData.cmv,
-            previousShipping: previousDayData.shipping,
+    const chartData = [];
+    if (dateRange?.from) {
+        const start = dateRange.from;
+        const end = dateRange.to || dateRange.from;
+        const days = eachDayOfInterval({ start, end });
+        const dayDiff = differenceInDays(end, start);
+        
+        for(let i=0; i <= dayDiff; i++) {
+            const currentDay = days[i];
+            const currentDayKey = format(currentDay, 'yyyy-MM-dd');
+            const prevDay = subDays(currentDay, dayDiff + 1);
+            const prevDayKey = format(prevDay, 'yyyy-MM-dd');
+            
+            const currentDayData = current.byDay[currentDayKey] || { revenue: 0, discounts: 0, cmv: 0, shipping: 0 };
+            const prevDayData = previous.byDay[prevDayKey] || { revenue: 0, discounts: 0, cmv: 0, shipping: 0 };
+
+            chartData.push({
+                date: currentDayKey,
+                revenue: currentDayData.revenue,
+                discounts: currentDayData.discounts,
+                cmv: currentDayData.cmv,
+                shipping: currentDayData.shipping,
+                previousRevenue: prevDayData.revenue,
+                previousDiscounts: prevDayData.discounts,
+                previousCmv: prevDayData.cmv,
+                previousShipping: prevDayData.shipping,
+            });
         }
-    })
+    }
+
 
     return {
         kpis,
-        chartData: mergedChartData,
+        chartData,
         channelData: mergeBreakdownData(current.byChannel, previous.byChannel),
         originData: mergeBreakdownData(current.byOrigin, previous.byOrigin),
     };
@@ -208,12 +214,11 @@ export default function FinanceiroPage() {
     to: new Date(),
   });
   const [compareDate, setCompareDate] = React.useState<DateRange | undefined>(() => {
-      const from = startOfMonth(new Date());
-      const to = new Date();
-      const diff = differenceInDays(to, from);
+      if (!date?.from || !date.to) return undefined;
+      const diff = differenceInDays(date.to, date.from);
       return {
-          from: subDays(from, diff + 1),
-          to: subDays(to, diff + 1),
+          from: subDays(date.from, diff + 1),
+          to: subDays(date.to, diff + 1),
       }
   });
 

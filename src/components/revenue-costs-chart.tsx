@@ -113,6 +113,7 @@ export default function RevenueCostsChart({ title, data, dataKey, comparisonData
                     fill="var(--color-value)"
                     fillOpacity={0.4}
                     stroke="var(--color-value)"
+                    name="Período Atual"
                   />
                   {hasComparison && (
                     <Area
@@ -121,6 +122,7 @@ export default function RevenueCostsChart({ title, data, dataKey, comparisonData
                         fill="var(--color-previousValue)"
                         fillOpacity={0.2}
                         stroke="var(--color-previousValue)"
+                        name="Período Anterior"
                     />
                   )}
                 </AreaChart>
