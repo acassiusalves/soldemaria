@@ -1,6 +1,8 @@
 
 
 "use client";
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 import * as React from "react";
 import Link from "next/link";
@@ -37,7 +39,7 @@ import {
 } from "firebase/firestore";
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
-import { auth, db } from "@/lib/firebase";
+import { getAuthClient, getDbClient } from "@/lib/firebase";
 
 
 import { cn } from "@/lib/utils";
@@ -139,8 +141,8 @@ const headerMappingNormalized: Record<string, string> = {
 
 /* ========== limpadores ========= */
 const isDateLike = (s: string) =>
-  /^\d{4}[-/]\d{2}[-/]\d{2}$/.test(s) ||
-  /^\d{2}[-/]\d{2}[-/]\d{4}$/.test(s);
+  /^\d{4}[-\/]\d{2}[-\/]\d{2}$/.test(s) ||
+  /^\d{2}[-\/]\d{2}[-\/]\d{4}$/.test(s);
 
 const cleanNumericValue = (value: any): number | string => {
   if (typeof value === "number") return value;
@@ -291,55 +293,68 @@ export default function LogisticaPage() {
 
 
     const handleLogout = async () => {
-    await auth.signOut();
-    router.push('/login');
+    const auth = await getAuthClient();
+    if (auth) {
+        await auth.signOut();
+        router.push('/login');
+    }
   };
 
 
   /* ======= Realtime listeners ======= */
   React.useEffect(() => {
-    const qy = query(collection(db, "logistica"));
-    const unsub = onSnapshot(qy, (snapshot) => {
-      if (snapshot.metadata.hasPendingWrites) return;
-      let newData: VendaDetalhada[] = [];
-      let modifiedData: VendaDetalhada[] = [];
-      snapshot.docChanges().forEach((change) => {
-        if (change.type === "added")
-          newData.push({ ...change.doc.data(), id: change.doc.id } as VendaDetalhada);
-        if (change.type === "modified")
-          modifiedData.push({ ...change.doc.data(), id: change.doc.id } as VendaDetalhada);
-      });
-      if (newData.length || modifiedData.length) {
-        setLogisticaData((curr) => {
-          const map = new Map(curr.map((s) => [s.id, s]));
-          newData.forEach((s) => map.set(s.id, s));
-          modifiedData.forEach((s) => map.set(s.id, s));
-          return Array.from(map.values());
+    let unsub: () => void;
+    let metaUnsub: () => void;
+    (async () => {
+        const db = await getDbClient();
+        if(!db) return;
+
+        const qy = query(collection(db, "logistica"));
+        unsub = onSnapshot(qy, (snapshot) => {
+        if (snapshot.metadata.hasPendingWrites) return;
+        let newData: VendaDetalhada[] = [];
+        let modifiedData: VendaDetalhada[] = [];
+        snapshot.docChanges().forEach((change) => {
+            if (change.type === "added")
+            newData.push({ ...change.doc.data(), id: change.doc.id } as VendaDetalhada);
+            if (change.type === "modified")
+            modifiedData.push({ ...change.doc.data(), id: change.doc.id } as VendaDetalhada);
         });
-      }
-      snapshot.docChanges().forEach((change) => {
-        if (change.type === "removed") {
-          setLogisticaData((curr) => curr.filter((s) => s.id !== change.doc.id));
+        if (newData.length || modifiedData.length) {
+            setLogisticaData((curr) => {
+            const map = new Map(curr.map((s) => [s.id, s]));
+            newData.forEach((s) => map.set(s.id, s));
+            modifiedData.forEach((s) => map.set(s.id, s));
+            return Array.from(map.values());
+            });
         }
-      });
-    });
+        snapshot.docChanges().forEach((change) => {
+            if (change.type === "removed") {
+            setLogisticaData((curr) => curr.filter((s) => s.id !== change.doc.id));
+            }
+        });
+        });
 
-    const metaUnsub = onSnapshot(doc(db, "metadata", "logistica"), (docSnap) => {
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        const filteredColumns = (data.columns || [])
-          .map((col: ColumnDef) => {
-            // força label correto; se faltar label, cai no getLabel por id
-            const label = col.id === 'valor' ? getLabel('valor') : (col.label || getLabel(col.id));
-            return { ...col, label };
-          });
+        metaUnsub = onSnapshot(doc(db, "metadata", "logistica"), (docSnap) => {
+        if (docSnap.exists()) {
+            const data = docSnap.data();
+            const filteredColumns = (data.columns || [])
+            .map((col: ColumnDef) => {
+                // força label correto; se faltar label, cai no getLabel por id
+                const label = col.id === 'valor' ? getLabel('valor') : (col.label || getLabel(col.id));
+                return { ...col, label };
+            });
 
-        setColumns(filteredColumns);
-        setUploadedFileNames(data.uploadedFileNames || []);
-      }
-    });
+            setColumns(filteredColumns);
+            setUploadedFileNames(data.uploadedFileNames || []);
+        }
+        });
+    })();
 
-    return () => { unsub(); metaUnsub(); };
+    return () => { 
+        if (unsub) unsub(); 
+        if (metaUnsub) metaUnsub(); 
+    };
   }, []);
 
   /* ======= Mescla banco + staged (staged tem prioridade) ======= */
@@ -453,6 +468,8 @@ export default function LogisticaPage() {
       toast({ title: "Nenhum dado novo para salvar", variant: "default" });
       return;
     }
+    const db = await getDbClient();
+    if(!db) return;
 
     setIsSaving(true);
     setSaveProgress(0);
@@ -546,6 +563,8 @@ export default function LogisticaPage() {
       _t({ title: "Removido da Fila", description: `Dados do arquivo ${fileName} não serão salvos.` });
       return;
     }
+    const db = await getDbClient();
+    if(!db) return;
     try {
       const metaRef = doc(db, "metadata", "logistica");
       await updateDoc(metaRef, { uploadedFileNames: arrayRemove(fileName) });
@@ -563,6 +582,8 @@ export default function LogisticaPage() {
   };
 
   const handleClearAllData = async () => {
+    const db = await getDbClient();
+    if(!db) return;
     try {
       const logisticaQuery = query(collection(db, "logistica"));
       const logisticaSnapshot = await getDocsFromServer(logisticaQuery);
@@ -804,7 +825,3 @@ export default function LogisticaPage() {
     </div>
   );
 }
-
-    
-
-    

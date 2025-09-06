@@ -1,10 +1,13 @@
+
 "use client";
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { signInWithEmailAndPassword, onAuthStateChanged } from "firebase/auth";
-import { auth } from "@/lib/firebase"; 
+import { getAuthClient } from "@/lib/firebase"; 
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -29,15 +32,23 @@ export default function LoginPage() {
   const { toast } = useToast();
 
   React.useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (user) {
-        router.replace("/");
-      } else {
-        setIsLoading(false);
-      }
-    });
+    (async () => {
+        const auth = await getAuthClient();
+        if(!auth) {
+            setIsLoading(false);
+            return;
+        };
 
-    return () => unsubscribe();
+        const unsubscribe = onAuthStateChanged(auth, (user) => {
+        if (user) {
+            router.replace("/");
+        } else {
+            setIsLoading(false);
+        }
+        });
+
+        return () => unsubscribe();
+    })();
   }, [router]);
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -50,6 +61,8 @@ export default function LoginPage() {
       });
       return;
     }
+    const auth = await getAuthClient();
+    if(!auth) return;
 
     setIsLoggingIn(true);
     try {

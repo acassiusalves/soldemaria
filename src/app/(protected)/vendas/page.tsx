@@ -1,6 +1,8 @@
 
 
 "use client";
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 import * as React from "react";
 import Link from "next/link";
@@ -45,7 +47,7 @@ import {
 } from "firebase/firestore";
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
-import { auth, db } from "@/lib/firebase";
+import { getAuthClient, getDbClient } from "@/lib/firebase";
 import Image from "next/image";
 
 
@@ -352,12 +354,12 @@ const GLOBAL_SETTINGS_COLLECTION = "app-settings";
 
 
 async function loadUserPreferences(userId: string) {
-    const defaultPrefs = {
+    const db = await getDbClient();
+    if (!db || !userId) return {
         vendas_columns_visibility: {},
         vendas_columns_order: [],
         custom_calculations: [],
     };
-    if (!userId) return defaultPrefs;
 
     const userDocRef = doc(db, PREFERENCES_COLLECTION, userId);
     const globalDocRef = doc(db, GLOBAL_SETTINGS_COLLECTION, "globalCalculations");
@@ -378,12 +380,15 @@ async function loadUserPreferences(userId: string) {
 }
 
 async function saveUserPreference(userId: string, key: string, value: any) {
-    if (!userId) return;
+    const db = await getDbClient();
+    if (!db || !userId) return;
     const docRef = doc(db, PREFERENCES_COLLECTION, userId);
     await setDoc(docRef, { [key]: value }, { merge: true });
 }
 
 async function saveGlobalCalculations(calculations: CustomCalculation[]) {
+    const db = await getDbClient();
+    if(!db) return;
     const docRef = doc(db, GLOBAL_SETTINGS_COLLECTION, "globalCalculations");
     
     const cleanCalcs = stripUndefinedDeep(
@@ -420,6 +425,8 @@ async function saveGlobalCalculations(calculations: CustomCalculation[]) {
 }
 
 async function persistCalcColumns(calcs: CustomCalculation[]) {
+  const db = await getDbClient();
+  if(!db) return;
   const metaRef = doc(db, "metadata", "vendas");
   const snap = await getDoc(metaRef);
   const current = snap.exists() ? (snap.data() as any) : {};
@@ -471,8 +478,11 @@ export default function VendasPage() {
 
 
     const handleLogout = async () => {
-    await auth.signOut();
-    router.push('/login');
+    const auth = await getAuthClient();
+    if(auth) {
+        await auth.signOut();
+        router.push('/login');
+    }
   };
   
     const allData = React.useMemo(() => {
@@ -504,62 +514,69 @@ export default function VendasPage() {
 
 
   React.useEffect(() => {
-    const collectionsToWatch = [
-        { name: "vendas", setter: setVendasData },
-        { name: "logistica", setter: setLogisticaData },
-        { name: "custos", setter: setCustosData },
-        { name: "custos-embalagem", setter: setCustosEmbalagem },
-    ];
+    const unsubs: (()=>void)[] = [];
+    (async () => {
+        const db = await getDbClient();
+        if(!db) return;
 
-    const unsubs = collectionsToWatch.map(({ name, setter }) => {
-        const q = query(collection(db, name));
-        return onSnapshot(q, (snapshot) => {
-            if (snapshot.metadata.hasPendingWrites) return;
-            const data = snapshot.docs.map(d => ({ ...d.data(), id: d.id })) as any[];
-            setter(data);
-        });
-    });
-
-    const metaUnsub = onSnapshot(doc(db, "metadata", "vendas"), (docSnap) => {
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        let fetchedColumns = data.columns || [];
-        
-        const requiredCols = [
-            { id: 'quantidadeTotal', label: 'Qtd. Total', isSortable: true },
-            { id: 'custoUnitario', label: 'Custo Unitário', isSortable: true },
-            { id: 'valorDescontos', label: 'Valor Descontos', isSortable: true },
+        const collectionsToWatch = [
+            { name: "vendas", setter: setVendasData },
+            { name: "logistica", setter: setLogisticaData },
+            { name: "custos", setter: setCustosData },
+            { name: "custos-embalagem", setter: setCustosEmbalagem },
         ];
-        
-        requiredCols.forEach(reqCol => {
-            if (!fetchedColumns.some((c: ColumnDef) => c.id === reqCol.id)) {
-                fetchedColumns.push(reqCol);
-            }
+
+        collectionsToWatch.forEach(({ name, setter }) => {
+            const q = query(collection(db, name));
+            const unsub = onSnapshot(q, (snapshot) => {
+                if (snapshot.metadata.hasPendingWrites) return;
+                const data = snapshot.docs.map(d => ({ ...d.data(), id: d.id })) as any[];
+                setter(data);
+            });
+            unsubs.push(unsub);
         });
 
-        setColumns(fetchedColumns);
-        setUploadedFileNames(data.uploadedFileNames || []);
-      }
-    });
+        const metaUnsub = onSnapshot(doc(db, "metadata", "vendas"), (docSnap) => {
+        if (docSnap.exists()) {
+            const data = docSnap.data();
+            let fetchedColumns = data.columns || [];
+            
+            const requiredCols = [
+                { id: 'quantidadeTotal', label: 'Qtd. Total', isSortable: true },
+                { id: 'custoUnitario', label: 'Custo Unitário', isSortable: true },
+                { id: 'valorDescontos', label: 'Valor Descontos', isSortable: true },
+            ];
+            
+            requiredCols.forEach(reqCol => {
+                if (!fetchedColumns.some((c: ColumnDef) => c.id === reqCol.id)) {
+                    fetchedColumns.push(reqCol);
+                }
+            });
 
-    const taxasUnsub = onSnapshot(collection(db, "taxas"), (snapshot) => {
-      const data = snapshot.docs.map(d => ({ ...d.data(), id: d.id })) as Operadora[];
-      setTaxasOperadoras(data);
-    });
+            setColumns(fetchedColumns);
+            setUploadedFileNames(data.uploadedFileNames || []);
+        }
+        });
+        unsubs.push(metaUnsub);
 
+        const taxasUnsub = onSnapshot(collection(db, "taxas"), (snapshot) => {
+        const data = snapshot.docs.map(d => ({ ...d.data(), id: d.id })) as Operadora[];
+        setTaxasOperadoras(data);
+        });
+        unsubs.push(taxasUnsub);
+    })();
+    
     return () => { 
         unsubs.forEach(unsub => unsub());
-        metaUnsub(); 
-        taxasUnsub();
     };
   }, []);
 
   React.useEffect(() => {
       const loadPrefs = async () => {
           setIsLoadingPreferences(true);
-          const user = auth.currentUser;
-          if (user) {
-              const prefs = await loadUserPreferences(user.uid);
+          const auth = await getAuthClient();
+          if (auth?.currentUser) {
+              const prefs = await loadUserPreferences(auth.currentUser.uid);
               setColumnVisibility(prefs.vendas_columns_visibility);
               setColumnOrder(prefs.vendas_columns_order);
               setCustomCalculations(prefs.custom_calculations);
@@ -570,21 +587,28 @@ export default function VendasPage() {
   }, []);
   
   React.useEffect(() => {
-    const ref = doc(db, GLOBAL_SETTINGS_COLLECTION, "globalCalculations");
-    const unsub = onSnapshot(ref, snap => {
-        const data = snap.data();
-        setCustomCalculations(Array.isArray(data?.calculations) ? data.calculations : []);
-    });
-    return () => unsub();
+    let unsub: () => void;
+    (async () => {
+        const db = await getDbClient();
+        if(!db) return;
+        const ref = doc(db, GLOBAL_SETTINGS_COLLECTION, "globalCalculations");
+        unsub = onSnapshot(ref, snap => {
+            const data = snap.data();
+            setCustomCalculations(Array.isArray(data?.calculations) ? data.calculations : []);
+        });
+    })();
+    return () => {
+        if(unsub) unsub();
+    };
   }, []);
 
 
   const handleVisibilityChange = async (newVisibility: Record<string, boolean>) => {
     setColumnVisibility(newVisibility);
     setIsSavingPreferences(true);
-    const user = auth.currentUser;
-    if (user) {
-        await saveUserPreference(user.uid, 'vendas_columns_visibility', newVisibility);
+    const auth = await getAuthClient();
+    if (auth?.currentUser) {
+        await saveUserPreference(auth.currentUser.uid, 'vendas_columns_visibility', newVisibility);
     }
     setIsSavingPreferences(false);
   };
@@ -598,9 +622,9 @@ export default function VendasPage() {
     
     setColumnOrder(finalOrder);
     setIsSavingPreferences(true);
-    const user = auth.currentUser;
-    if (user) {
-        await saveUserPreference(user.uid, 'vendas_columns_order', finalOrder);
+    const auth = await getAuthClient();
+    if (auth?.currentUser) {
+        await saveUserPreference(auth.currentUser.uid, 'vendas_columns_order', finalOrder);
     }
     setIsSavingPreferences(false);
 };
@@ -654,24 +678,24 @@ const handleDeleteCustomCalculation = async (calcId: string) => {
   await persistCalcColumns(newCalculations);
 
   // 3) Limpa prefs do usuário
-  const user = auth.currentUser;
-  if (user) {
+  const auth = await getAuthClient();
+  if (auth?.currentUser) {
     const newVisibility = { ...columnVisibility };
     delete newVisibility[calcId];
     setColumnVisibility(newVisibility);
-    await saveUserPreference(user.uid, 'vendas_columns_visibility', newVisibility);
+    await saveUserPreference(auth.currentUser.uid, 'vendas_columns_visibility', newVisibility);
 
     const newOrder = columnOrder.filter(id => id !== calcId);
     setColumnOrder(newOrder);
-    await saveUserPreference(user.uid, 'vendas_columns_order', newOrder);
+    await saveUserPreference(auth.currentUser.uid, 'vendas_columns_order', newOrder);
   }
 
   toast({ title: "Cálculo Removido!" });
 };
 
 const syncExistingCustomColumns = React.useCallback(async () => {
-    const user = auth.currentUser;
-    if (!user || customCalculations.length === 0) return;
+    const auth = await getAuthClient();
+    if (!auth?.currentUser || customCalculations.length === 0) return;
     
     const newVisibility = { ...columnVisibility };
     let needsVisibilityUpdate = false;
@@ -695,12 +719,12 @@ const syncExistingCustomColumns = React.useCallback(async () => {
     
     if (needsVisibilityUpdate) {
         setColumnVisibility(newVisibility);
-        await saveUserPreference(user.uid, 'vendas_columns_visibility', newVisibility);
+        await saveUserPreference(auth.currentUser.uid, 'vendas_columns_visibility', newVisibility);
     }
     
     if (needsOrderUpdate) {
         setColumnOrder(currentOrder);
-        await saveUserPreference(user.uid, 'vendas_columns_order', currentOrder);
+        await saveUserPreference(auth.currentUser.uid, 'vendas_columns_order', currentOrder);
     }
     
 }, [customCalculations, columnVisibility, columnOrder]);
@@ -734,68 +758,45 @@ React.useEffect(() => {
   if (isLoadingPreferences) return;
   if (!columns || columns.length === 0) return;
 
-  const user = auth.currentUser;
-  const allIds = mergedColumns.map(c => c.id);
+  (async () => {
+    const auth = await getAuthClient();
+    const allIds = mergedColumns.map(c => c.id);
 
-  const orderNow = Array.isArray(columnOrder) ? [...columnOrder] : [];
-  const missingInOrder = allIds.filter(id => !orderNow.includes(id));
-  const nextOrder = missingInOrder.length ? [...orderNow, ...missingInOrder] : orderNow;
+    const orderNow = Array.isArray(columnOrder) ? [...columnOrder] : [];
+    const missingInOrder = allIds.filter(id => !orderNow.includes(id));
+    const nextOrder = missingInOrder.length ? [...orderNow, ...missingInOrder] : orderNow;
 
-  const visNow = { ...(columnVisibility || {}) };
-  let visChanged = false;
-  for (const id of allIds) {
-    if (visNow[id] === undefined) { visNow[id] = true; visChanged = true; }
-  }
+    const visNow = { ...(columnVisibility || {}) };
+    let visChanged = false;
+    for (const id of allIds) {
+        if (visNow[id] === undefined) { visNow[id] = true; visChanged = true; }
+    }
 
-  const promises: Promise<any>[] = [];
-  if (missingInOrder.length) {
-    setColumnOrder(nextOrder);
-    if (user) promises.push(saveUserPreference(user.uid, 'vendas_columns_order', nextOrder));
-  }
-  if (visChanged) {
-    setColumnVisibility(visNow);
-    if (user) promises.push(saveUserPreference(user.uid, 'vendas_columns_visibility', visNow));
-  }
-  if (promises.length) { Promise.all(promises).catch(console.error); }
+    const promises: Promise<any>[] = [];
+    if (missingInOrder.length) {
+        setColumnOrder(nextOrder);
+        if (auth?.currentUser) promises.push(saveUserPreference(auth.currentUser.uid, 'vendas_columns_order', nextOrder));
+    }
+    if (visChanged) {
+        setColumnVisibility(visNow);
+        if (auth?.currentUser) promises.push(saveUserPreference(auth.currentUser.uid, 'vendas_columns_visibility', visNow));
+    }
+    if (promises.length) { Promise.all(promises).catch(console.error); }
+  })();
 }, [isLoadingPreferences, columns, mergedColumns, columnOrder, columnVisibility]);
 
 const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): VendaDetalhada[] => {
     if (customCalculations.length === 0) return data;
 
-    const sanitizeOp = (raw: string) => {
-        const m = {
-            'x': '*', 'X': '*', '×': '*',
-            '÷': '/', ':': '/',
-        } as Record<string, string>;
-        return m[raw] || raw;
-    };
-
-    const sanitizeNumberLiteral = (raw: string) => {
-        let s = String(raw).trim();
-        const hasPercent = s.endsWith('%');
-        s = s.replace('%', '').replace(',', '.');
-        const n = Number(s);
-        return {
-            value: Number.isFinite(n) ? n : 0,
-            hadPercent: hasPercent,
-        };
-    };
-
-    const getNumericField = (row: any, keyOrLabel: string, currentCalcId?: string): number => {
+    const getNumericField = (row: any, keyOrLabel: string): number => {
       let val = row[keyOrLabel];
 
-      // 1) tenta id exato (preferir colunas do sistema)
+      if (val === undefined || val === null) val = row.customData?.[keyOrLabel];
       if (val === undefined || val === null) {
-        const byId = mergedColumns.find(c => c.id === keyOrLabel && c.id !== currentCalcId);
-        if (byId) val = row[byId.id];
+        const byLabel = mergedColumns.find(c => c.label === keyOrLabel);
+        if (byLabel) val = row[byLabel.id] ?? row.customData?.[byLabel.id];
       }
-
-      // 2) tenta por label, evitando a própria coluna
-      if (val === undefined || val === null) {
-        const byLabel = mergedColumns.find(c => c.label === keyOrLabel && c.id !== currentCalcId);
-        if (byLabel) val = row[byLabel.id];
-      }
-
+      
       if (typeof val === 'number') return val;
       if (typeof val === 'string') {
         const cleaned = val.replace(/[^\d,.-]/g, '').replace(',', '.');
@@ -809,73 +810,19 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
         const newRow = { ...row, customData: { ...(row.customData || {}) } };
   
         customCalculations.forEach(calc => {
-            const flatRowForCalcs = { ...row, ...newRow.customData };
+            const formulaString = calc.formula.map(item => {
+                if (item.type === 'column') return getNumericField({ ...row, ...newRow.customData }, item.value);
+                if (item.type === 'number') return parseFloat(String(item.value).replace(',', '.'));
+                return item.value;
+            }).join(' ');
             
             try {
-                let formulaString = '';
-
-                for (let i = 0; i < calc.formula.length; i++) {
-                  const item = calc.formula[i];
-                
-                  if (item.type === 'column') {
-                    const value = getNumericField(flatRowForCalcs, item.value, calc.id);
-                    const safe = Number.isFinite(value) ? String(value) : '0';
-                    formulaString += safe;
-                    continue;
-                  }
-                
-                  if (item.type === 'number') {
-                    const parsed = sanitizeNumberLiteral(String(item.value));
-                    let numValue = parsed.value;
-                    if (parsed.hadPercent) numValue = numValue / 100;
-                    formulaString += String(numValue);
-                    continue;
-                  }
-                
-                  if (item.type === 'op') {
-                    const op = sanitizeOp(String(item.value));
-                    if (!/^[\+\-\*\/\(\)]$/.test(op)) {
-                      continue;
-                    }
-                    formulaString += ` ${op} `;
-                    continue;
-                  }
-                }
-                
-                formulaString = formulaString.replace(/\s+/g, ' ').trim();
-                formulaString = formulaString.replace(/[\+\-\*\/]\s*$/, '');
-                
-                if (!/^[\d\.\s\+\-\*\/\(\)]+$/.test(formulaString)) {
-                  console.warn(`Fórmula com chars fora do permitido, sanitizada:`, formulaString);
-                }
-                
-                if (!formulaString) {
-                    throw new Error("Fórmula vazia");
-                }
-                
+                // Basic eval, not safe for production with user input
                 const result = new Function(`return ${formulaString}`)();
-                let numResult = typeof result === 'number' && Number.isFinite(result) ? result : 0;
-                
-                if (calc.isPercentage) {
-                    numResult = numResult / 100;
-                }
-  
-                newRow.customData[calc.id] = numResult;
-  
-                if (calc.interaction?.targetColumn) {
-                    const baseValue = getNumericField({...flatRowForCalcs, ...newRow.customData}, calc.interaction.targetColumn, calc.id);
-                    const newValue = calc.interaction.operator === '-' 
-                        ? baseValue - numResult 
-                        : baseValue + numResult;
-                    
-                    newRow.customData[calc.interaction.targetColumn] = newValue;
-                }
-            } catch (e: any) {
-                console.error(`\n❌ ERRO DETALHADO no cálculo ${calc.name}:`);
-                console.error('Mensagem:', e.message);
-                console.error('Fórmula que causou erro:', calc.formula);
-                console.error('Row data:', flatRowForCalcs);
-                console.error('Stack trace:', e.stack);
+                newRow.customData[calc.id] = result;
+
+            } catch (e) {
+                console.error(`Error calculating formula for ${calc.name}:`, e);
                 newRow.customData[calc.id] = 0;
             }
         });
@@ -1136,6 +1083,9 @@ React.useEffect(() => {
       return;
     }
 
+    const db = await getDbClient();
+    if(!db) return;
+
     setIsSaving(true);
     setSaveProgress(0);
 
@@ -1217,6 +1167,8 @@ React.useEffect(() => {
       _t({ title: "Removido da Fila", description: `Dados do arquivo ${fileName} não serão salvos.` });
       return;
     }
+    const db = await getDbClient();
+    if(!db) return;
     try {
       const metaRef = doc(db, "metadata", "vendas");
       await updateDoc(metaRef, { uploadedFileNames: arrayRemove(fileName) });
@@ -1234,6 +1186,8 @@ React.useEffect(() => {
   };
 
   const handleClearAllData = async () => {
+    const db = await getDbClient();
+    if(!db) return;
     try {
       const vendasQuery = query(collection(db, "vendas"));
       const vendasSnapshot = await getDocsFromServer(vendasQuery);
@@ -1526,8 +1480,10 @@ React.useEffect(() => {
             isSavingPreferences={isSavingPreferences}
             customCalculations={customCalculations}
             onSavePreferences={(key, value) => {
-                const user = auth.currentUser;
-                if (user) saveUserPreference(user.uid, key, value);
+                (async () => {
+                    const auth = await getAuthClient();
+                    if (auth?.currentUser) saveUserPreference(auth.currentUser.uid, key, value);
+                })();
             }}
             taxasOperadoras={taxasOperadoras}
         />
@@ -1545,13 +1501,3 @@ React.useEffect(() => {
     </>
   );
 }
-
-
-
-
-
-    
-
-
-
-    

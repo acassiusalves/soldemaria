@@ -1,5 +1,7 @@
 
 "use client";
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 import * as React from "react";
 import Link from "next/link";
@@ -25,7 +27,7 @@ import {
   updateDoc,
 } from "firebase/firestore";
 import { useRouter } from "next/navigation";
-import { auth, db } from "@/lib/firebase";
+import { getAuthClient, getDbClient } from "@/lib/firebase";
 
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -96,18 +98,28 @@ export default function CustosEmbalagemPage() {
 
 
   React.useEffect(() => {
-    const unsub = onSnapshot(collection(db, "custos-embalagem"), (snapshot) => {
-      const data = snapshot.docs.map(
-        (doc) => ({ id: doc.id, ...doc.data() } as Embalagem)
-      );
-      setEmbalagens(data);
-    });
-    return () => unsub();
+    let unsub: () => void;
+    (async () => {
+        const db = await getDbClient();
+        if(!db) return;
+        unsub = onSnapshot(collection(db, "custos-embalagem"), (snapshot) => {
+        const data = snapshot.docs.map(
+            (doc) => ({ id: doc.id, ...doc.data() } as Embalagem)
+        );
+        setEmbalagens(data);
+        });
+    })();
+    return () => {
+        if(unsub) unsub();
+    };
   }, []);
 
     const handleLogout = async () => {
-    await auth.signOut();
-    router.push('/login');
+    const auth = await getAuthClient();
+    if(auth) {
+        await auth.signOut();
+        router.push('/login');
+    }
   };
 
 
@@ -147,6 +159,8 @@ export default function CustosEmbalagemPage() {
 
 
   const handleSave = async () => {
+    const db = await getDbClient();
+    if(!db) return;
     if (!novaEmbalagem.nome || !novaEmbalagem.custo) {
       toast({
         title: "Erro",
@@ -193,6 +207,8 @@ export default function CustosEmbalagemPage() {
   }
 
   const handleDelete = async (id: string) => {
+    const db = await getDbClient();
+    if(!db) return;
     try {
         await deleteDoc(doc(db, "custos-embalagem", id));
         toast({ title: "Removido", description: "Custo de embalagem removido com sucesso." });

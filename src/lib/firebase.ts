@@ -1,9 +1,7 @@
+
 "use client";
 
 import { initializeApp, getApps, getApp, type FirebaseApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
-import { getAnalytics, isSupported } from "firebase/analytics";
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY!,
@@ -17,17 +15,25 @@ const firebaseConfig = {
 
 // Initialize Firebase
 const app: FirebaseApp = !getApps().length ? initializeApp(firebaseConfig) : getApp();
-const auth = getAuth(app);
-const db = getFirestore(app);
 
-// Analytics (conditionally)
-let analytics: ReturnType<typeof getAnalytics> | null = null;
-if (typeof window !== 'undefined') {
-  isSupported().then(yes => {
-    if (yes) {
-      analytics = getAnalytics(app);
-    }
-  });
+export const getAuthClient = async () => {
+  if (typeof window === 'undefined') return null;
+  const { getAuth } = await import('firebase/auth');
+  return getAuth(app);
+};
+
+export const getDbClient = async () => {
+    if (typeof window === 'undefined') return null;
+    const { getFirestore } = await import('firebase/firestore');
+    return getFirestore(app);
 }
 
-export { app, db, auth, analytics };
+export const getAnalyticsClient = async () => {
+    if (typeof window === 'undefined') return null;
+    const { getAnalytics, isSupported } = await import('firebase/analytics');
+    const supported = await isSupported();
+    return supported ? getAnalytics(app) : null;
+};
+
+
+export { app };

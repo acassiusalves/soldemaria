@@ -1,6 +1,8 @@
 
 
 "use client";
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 import * as React from "react";
 import Link from "next/link";
@@ -19,7 +21,7 @@ import {
   ChevronDown,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { auth } from "@/lib/firebase";
+import { getAuthClient } from "@/lib/firebase";
 
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -64,8 +66,11 @@ export default function ConexoesPage() {
   }, []);
 
     const handleLogout = async () => {
-    await auth.signOut();
-    router.push('/login');
+    const auth = await getAuthClient();
+    if(auth) {
+        await auth.signOut();
+        router.push('/login');
+    }
   };
 
 

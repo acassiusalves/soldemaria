@@ -14,9 +14,9 @@ import {
   ChevronDown
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { onAuthStateChanged } from "firebase/auth";
+import { User, onAuthStateChanged } from "firebase/auth";
 
-import { auth } from "@/lib/firebase";
+import { getAuthClient } from "@/lib/firebase";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
@@ -66,10 +66,29 @@ const topProductsData = [
 
 function DashboardPage() {
   const router = useRouter();
+  const [user, setUser] = React.useState<User | null>(null);
+
+   React.useEffect(() => {
+    (async () => {
+      const auth = await getAuthClient();
+      if (!auth) return;
+      const unsub = onAuthStateChanged(auth, (user) => {
+        if (user) {
+          setUser(user);
+        } else {
+          router.push("/login");
+        }
+      });
+      return () => unsub();
+    })();
+  }, [router]);
   
   const handleLogout = async () => {
-    await auth.signOut();
-    router.push('/login');
+    const auth = await getAuthClient();
+    if(auth) {
+        await auth.signOut();
+        router.push('/login');
+    }
   };
 
   return (

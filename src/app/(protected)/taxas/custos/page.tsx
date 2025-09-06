@@ -1,6 +1,8 @@
 
 
 "use client";
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 import * as React from "react";
 import Link from "next/link";
@@ -33,7 +35,7 @@ import {
 } from "firebase/firestore";
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
-import { auth, db } from "@/lib/firebase";
+import { getAuthClient, getDbClient } from "@/lib/firebase";
 
 
 import {
@@ -253,47 +255,59 @@ export default function CustosVendasPage() {
 
 
     const handleLogout = async () => {
-    await auth.signOut();
-    router.push('/login');
+    const auth = await getAuthClient();
+    if(auth) {
+        await auth.signOut();
+        router.push('/login');
+    }
   };
 
 
   /* ======= Realtime listeners ======= */
   React.useEffect(() => {
-    const qy = query(collection(db, "custos"));
-    const unsub = onSnapshot(qy, (snapshot) => {
-      if (snapshot.metadata.hasPendingWrites) return;
-      let newData: VendaDetalhada[] = [];
-      let modifiedData: VendaDetalhada[] = [];
-      snapshot.docChanges().forEach((change) => {
-        if (change.type === "added")
-          newData.push({ ...change.doc.data(), id: change.doc.id } as VendaDetalhada);
-        if (change.type === "modified")
-          modifiedData.push({ ...change.doc.data(), id: change.doc.id } as VendaDetalhada);
-      });
-      if (newData.length || modifiedData.length) {
-        setCustosData((curr) => {
-          const map = new Map(curr.map((s) => [s.id, s]));
-          newData.forEach((s) => map.set(s.id, s));
-          modifiedData.forEach((s) => map.set(s.id, s));
-          return Array.from(map.values());
+    let unsub: () => void;
+    let metaUnsub: () => void;
+    (async () => {
+        const db = await getDbClient();
+        if(!db) return;
+        const qy = query(collection(db, "custos"));
+        unsub = onSnapshot(qy, (snapshot) => {
+        if (snapshot.metadata.hasPendingWrites) return;
+        let newData: VendaDetalhada[] = [];
+        let modifiedData: VendaDetalhada[] = [];
+        snapshot.docChanges().forEach((change) => {
+            if (change.type === "added")
+            newData.push({ ...change.doc.data(), id: change.doc.id } as VendaDetalhada);
+            if (change.type === "modified")
+            modifiedData.push({ ...change.doc.data(), id: change.doc.id } as VendaDetalhada);
         });
-      }
-      snapshot.docChanges().forEach((change) => {
-        if (change.type === "removed") {
-          setCustosData((curr) => curr.filter((s) => s.id !== change.doc.id));
+        if (newData.length || modifiedData.length) {
+            setCustosData((curr) => {
+            const map = new Map(curr.map((s) => [s.id, s]));
+            newData.forEach((s) => map.set(s.id, s));
+            modifiedData.forEach((s) => map.set(s.id, s));
+            return Array.from(map.values());
+            });
         }
-      });
-    });
+        snapshot.docChanges().forEach((change) => {
+            if (change.type === "removed") {
+            setCustosData((curr) => curr.filter((s) => s.id !== change.doc.id));
+            }
+        });
+        });
 
-    const metaUnsub = onSnapshot(doc(db, "metadata", "custos"), (docSnap) => {
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        setUploadedFileNames(data.uploadedFileNames || []);
-      }
-    });
+        metaUnsub = onSnapshot(doc(db, "metadata", "custos"), (docSnap) => {
+        if (docSnap.exists()) {
+            const data = docSnap.data();
+            setUploadedFileNames(data.uploadedFileNames || []);
+        }
+        });
+    })();
 
-    return () => { unsub(); metaUnsub(); };
+    return () => {
+        if(unsub) unsub();
+        if(metaUnsub) metaUnsub();
+    };
   }, []);
 
   /* ======= Mescla banco + staged (staged tem prioridade) ======= */
@@ -381,6 +395,8 @@ export default function CustosVendasPage() {
       toast({ title: "Nenhum dado novo para salvar", variant: "default" });
       return;
     }
+    const db = await getDbClient();
+    if(!db) return;
 
     setIsSaving(true);
     setSaveProgress(0);
@@ -451,6 +467,8 @@ export default function CustosVendasPage() {
       _t({ title: "Removido da Fila", description: `Dados do arquivo ${fileName} não serão salvos.` });
       return;
     }
+    const db = await getDbClient();
+    if(!db) return;
     try {
       const metaRef = doc(db, "metadata", "custos");
       await updateDoc(metaRef, { uploadedFileNames: arrayRemove(fileName) });
@@ -468,6 +486,8 @@ export default function CustosVendasPage() {
   };
 
   const handleClearAllData = async () => {
+    const db = await getDbClient();
+    if(!db) return;
     try {
       const custosQuery = query(collection(db, "custos"));
       const custosSnapshot = await getDocsFromServer(custosQuery);

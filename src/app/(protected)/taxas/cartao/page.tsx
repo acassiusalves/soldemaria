@@ -1,6 +1,8 @@
 
 
 "use client";
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 import * as React from "react";
 import Link from "next/link";
@@ -29,7 +31,7 @@ import {
   updateDoc,
 } from "firebase/firestore";
 import { useRouter } from "next/navigation";
-import { auth, db } from "@/lib/firebase";
+import { getAuthClient, getDbClient } from "@/lib/firebase";
 
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -105,18 +107,28 @@ export default function TaxasCartaoPage() {
 
 
   React.useEffect(() => {
-    const unsub = onSnapshot(collection(db, "taxas"), (snapshot) => {
-      const data = snapshot.docs.map(
-        (doc) => ({ id: doc.id, ...doc.data() } as Operadora)
-      );
-      setOperadoras(data);
-    });
-    return () => unsub();
+    let unsub: () => void;
+    (async () => {
+        const db = await getDbClient();
+        if(!db) return;
+        unsub = onSnapshot(collection(db, "taxas"), (snapshot) => {
+        const data = snapshot.docs.map(
+            (doc) => ({ id: doc.id, ...doc.data() } as Operadora)
+        );
+        setOperadoras(data);
+        });
+    })();
+    return () => {
+        if(unsub) unsub();
+    };
   }, []);
 
     const handleLogout = async () => {
-    await auth.signOut();
-    router.push('/login');
+    const auth = await getAuthClient();
+    if(auth) {
+        await auth.signOut();
+        router.push('/login');
+    }
   };
 
 
@@ -147,6 +159,9 @@ export default function TaxasCartaoPage() {
 
 
   const handleSave = async () => {
+    const db = await getDbClient();
+    if(!db) return;
+
     if (!novaOperadora.nome) {
       toast({
         title: "Erro",
@@ -199,6 +214,8 @@ export default function TaxasCartaoPage() {
   }
 
   const handleDelete = async (id: string) => {
+    const db = await getDbClient();
+    if(!db) return;
     try {
         await deleteDoc(doc(db, "taxas", id));
         toast({ title: "Removido", description: "Operadora removida com sucesso." });
