@@ -74,7 +74,7 @@ const mergeForHeader = (base: any, row: any) => {
     "origem", "origemCliente", "fidelizacao", "logistica", "final", "custoFrete",
   ];
   for (const k of headerFields) {
-    if (!isEmptyCell(row[k]) && isEmptyCell(out[k])) {
+    if (isEmptyCell(out[k]) && !isEmptyCell(row[k])) {
       out[k] = row[k];
     }
   }
@@ -111,11 +111,11 @@ const calculateChannelMetrics = (data: VendaDetalhada[]) => {
         let totalItems = 0;
 
         if (detailRows.length > 0) {
-            orderRevenue = detailRows.reduce((acc, s) => acc + (Number(s.final) || 0), 0);
+            orderRevenue = detailRows.reduce((acc, s) => acc + (Number(s.final) || (Number(s.valorUnitario) * Number(s.quantidade)) || 0), 0);
             totalItems = detailRows.reduce((acc, s) => acc + (Number(s.quantidade) || 0), 0);
         } else if (sales.length > 0) {
             orderRevenue = Number(headerRow.final) || 0;
-            totalItems = Number(headerRow.quantidade) || 1;
+            totalItems = Number(headerRow.quantidade) || (orderRevenue > 0 ? 1 : 0);
         }
 
         const tipoVenda = String(headerRow.tipo || '').toLowerCase();
