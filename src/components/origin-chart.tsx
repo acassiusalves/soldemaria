@@ -2,7 +2,7 @@
 "use client";
 
 import * as React from "react";
-import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis, LabelList } from "recharts";
+import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis, LabelList, Legend } from "recharts";
 import {
   ChartConfig,
   ChartContainer,
@@ -10,17 +10,26 @@ import {
 } from "@/components/ui/chart";
 
 interface OriginChartProps {
-  data: { name: string; value: number }[];
+  data: {
+    name: string;
+    current: number;
+    previous?: number;
+  }[];
+  hasComparison: boolean;
 }
 
 const chartConfig = {
-  value: {
-    label: "Receita",
+  current: {
+    label: "Período Atual",
     color: "hsl(var(--chart-1))",
+  },
+  previous: {
+    label: "Período Anterior",
+    color: "hsl(var(--chart-2))",
   },
 } satisfies ChartConfig;
 
-export default function OriginChart({ data }: OriginChartProps) {
+export default function OriginChart({ data, hasComparison }: OriginChartProps) {
     const reversedData = React.useMemo(() => [...data].reverse(), [data]);
 
     if (!data || data.length === 0) {
@@ -38,6 +47,7 @@ export default function OriginChart({ data }: OriginChartProps) {
             layout="vertical"
             margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
             accessibilityLayer
+            barGap={4}
             >
             <YAxis
                 dataKey="name"
@@ -51,8 +61,8 @@ export default function OriginChart({ data }: OriginChartProps) {
                 value.length > 12 ? `${value.substring(0, 12)}...` : value
                 }
             />
-            <XAxis 
-                type="number" 
+            <XAxis
+                type="number"
                 stroke="#888888"
                 fontSize={12}
                 tickLine={false}
@@ -62,24 +72,16 @@ export default function OriginChart({ data }: OriginChartProps) {
             <Tooltip
                 cursor={{ fill: "hsl(var(--accent))" }}
                 content={
-                    <ChartTooltipContent 
+                    <ChartTooltipContent
                         nameKey="name"
-                        formatter={(value) => typeof value === 'number' ? value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : value}
+                        formatter={(value, name) => typeof value === 'number' ? value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : value}
                     />
                 }
             />
-            <Bar dataKey="value" fill="var(--color-value)" radius={[0, 4, 4, 0]}>
-                 <LabelList
-                    dataKey="value"
-                    position="right"
-                    offset={8}
-                    className="fill-foreground"
-                    fontSize={12}
-                    formatter={(value: number) =>
-                        value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
-                    }
-                />
-            </Bar>
+             {hasComparison && <Legend />}
+            <Bar dataKey="current" name="Período Atual" fill="var(--color-current)" radius={[0, 4, 4, 0]} />
+            {hasComparison && <Bar dataKey="previous" name="Período Anterior" fill="var(--color-previous)" radius={[0, 4, 4, 0]} />}
+
             </BarChart>
       </ResponsiveContainer>
     </ChartContainer>

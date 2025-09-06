@@ -9,7 +9,7 @@ import {
   CardTitle,
   CardDescription,
 } from "@/components/ui/card";
-import { DollarSign, ShoppingCart, Tag, Package } from "lucide-react";
+import { DollarSign, ShoppingCart, Tag, Package, Calendar as CalendarIcon } from "lucide-react";
 import KpiCard from "@/components/kpi-card";
 import LogisticsChart from "@/components/logistics-chart";
 import OriginChart from "@/components/origin-chart";
@@ -21,7 +21,6 @@ import { endOfDay, format, isValid, parseISO, startOfMonth } from "date-fns";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { Calendar as CalendarIcon } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { ptBR } from "date-fns/locale";
 import CitySalesTable from "@/components/city-sales-table";
@@ -37,14 +36,6 @@ const toDate = (value: unknown): Date | null => {
   }
   return null;
 };
-
-const normalizeText = (s: unknown) =>
-  String(s ?? "")
-    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/\s+/g, " ")
-    .trim();
-
 
 const normCode = (v: any) => {
   let s = String(v ?? "").replace(/\u00A0/g, " ").trim();
@@ -71,69 +62,10 @@ const mergeForHeader = (base: any, row: any) => {
   return out;
 };
 
-
-export default function VisaoGeralPage() {
-  const [allSales, setAllSales] = React.useState<VendaDetalhada[]>([]);
-  const [logisticaData, setLogisticaData] = React.useState<VendaDetalhada[]>([]);
-  const [custosEmbalagem, setCustosEmbalagem] = React.useState<Embalagem[]>([]);
-  const [date, setDate] = React.useState<DateRange | undefined>({
-    from: startOfMonth(new Date()),
-    to: new Date(),
-  });
-
-  React.useEffect(() => {
-    const unsubs: (() => void)[] = [];
-    (async () => {
-      const db = await getDbClient();
-      if (!db) return;
-
-      const collectionsToWatch = [
-        { name: "vendas", setter: setAllSales },
-        { name: "logistica", setter: setLogisticaData },
-        { name: "custos-embalagem", setter: setCustosEmbalagem },
-      ];
-
-      collectionsToWatch.forEach(({ name, setter }) => {
-        const q = query(collection(db, name));
-        const unsub = onSnapshot(q, (snapshot) => {
-          if (snapshot.metadata.hasPendingWrites) return;
-          const data = snapshot.docs.map((d) => ({ ...d.data(), id: d.id })) as any[];
-          setter(data);
-        });
-        unsubs.push(unsub);
-      });
-    })();
-    return () => unsubs.forEach(unsub => unsub());
-  }, []);
-
-  const consolidatedData = React.useMemo(() => {
-    const logisticaMap = new Map(logisticaData.map(l => [normCode(l.codigo), l]));
-    return allSales.map(venda => {
-        const code = normCode(venda.codigo);
-        const logistica = logisticaMap.get(code);
-        return {
-            ...venda,
-            ...(logistica && { logistica: logistica.logistica, entregador: logistica.entregador, valor: logistica.valor }),
-        };
-    });
-  }, [allSales, logisticaData]);
-
-
-  const filteredData = React.useMemo(() => {
-    if (!date?.from) return [];
-    const fromDate = date.from;
-    const toDateVal = date.to ? endOfDay(date.to) : endOfDay(fromDate);
-
-    return consolidatedData.filter((item) => {
-      const itemDate = toDate(item.data);
-      return itemDate && itemDate >= fromDate && itemDate <= toDateVal;
-    });
-  }, [date, consolidatedData]);
-
- const { kpis, logisticsChartData, originChartData, citySalesData } = React.useMemo(() => {
+const calculateMetrics = (data: VendaDetalhada[]) => {
     const salesGroups = new Map<string, VendaDetalhada[]>();
 
-    for (const sale of filteredData) {
+    for (const sale of data) {
       const code = normCode(sale.codigo);
       if (!salesGroups.has(code)) {
         salesGroups.set(code, []);
@@ -173,28 +105,138 @@ export default function VisaoGeralPage() {
       }
     }
     
-    const kpisResult = {
+    return {
         totalRevenue: totalRevenue,
         averageTicket: totalOrders > 0 ? totalRevenue / totalOrders : 0,
         averagePrice: totalItems > 0 ? totalRevenue / totalItems : 0,
         averageItems: totalOrders > 0 ? totalItems / totalOrders : 0,
+        logistics,
+        origins,
+        cities,
+    };
+};
+
+export default function VisaoGeralPage() {
+  const [allSales, setAllSales] = React.useState<VendaDetalhada[]>([]);
+  const [logisticaData, setLogisticaData] = React.useState<VendaDetalhada[]>([]);
+  
+  const [date, setDate] = React.useState<DateRange | undefined>({
+    from: startOfMonth(new Date()),
+    to: new Date(),
+  });
+  const [compareDate, setCompareDate] = React.useState<DateRange | undefined>(undefined);
+
+  React.useEffect(() => {
+    const unsubs: (() => void)[] = [];
+    (async () => {
+      const db = await getDbClient();
+      if (!db) return;
+
+      const collectionsToWatch = [
+        { name: "vendas", setter: setAllSales },
+        { name: "logistica", setter: setLogisticaData },
+      ];
+
+      collectionsToWatch.forEach(({ name, setter }) => {
+        const q = query(collection(db, name));
+        const unsub = onSnapshot(q, (snapshot) => {
+          if (snapshot.metadata.hasPendingWrites) return;
+          const data = snapshot.docs.map((d) => ({ ...d.data(), id: d.id })) as any[];
+          setter(data);
+        });
+        unsubs.push(unsub);
+      });
+    })();
+    return () => unsubs.forEach(unsub => unsub());
+  }, []);
+
+  const consolidatedData = React.useMemo(() => {
+    const logisticaMap = new Map(logisticaData.map(l => [normCode(l.codigo), l]));
+    return allSales.map(venda => {
+        const code = normCode(venda.codigo);
+        const logistica = logisticaMap.get(code);
+        return {
+            ...venda,
+            ...(logistica && { logistica: logistica.logistica, entregador: logistica.entregador, valor: logistica.valor }),
+        };
+    });
+  }, [allSales, logisticaData]);
+
+  const { filteredData, comparisonData } = React.useMemo(() => {
+    const filterByDate = (data: VendaDetalhada[], dateRange: DateRange | undefined) => {
+      if (!dateRange?.from) return [];
+      const fromDate = dateRange.from;
+      const toDateVal = dateRange.to ? endOfDay(dateRange.to) : endOfDay(fromDate);
+      return data.filter((item) => {
+        const itemDate = toDate(item.data);
+        return itemDate && itemDate >= fromDate && itemDate <= toDateVal;
+      });
+    };
+    return {
+      filteredData: filterByDate(consolidatedData, date),
+      comparisonData: filterByDate(consolidatedData, compareDate),
+    };
+  }, [consolidatedData, date, compareDate]);
+
+  const { kpis, logisticsChartData, originChartData, citySalesData } = React.useMemo(() => {
+    const currentMetrics = calculateMetrics(filteredData);
+    const previousMetrics = calculateMetrics(comparisonData);
+
+    const calcChange = (current: number, previous: number) => {
+        if (previous === 0) return current > 0 ? Infinity : 0;
+        return ((current - previous) / previous) * 100;
     };
     
-    const logisticsChartData = Object.entries(logistics).map(([name, value]) => ({ name, value }));
-    const originChartData = Object.entries(origins).map(([name, value]) => ({ name, value }));
+    const kpisResult = {
+        totalRevenue: {
+          value: currentMetrics.totalRevenue,
+          change: calcChange(currentMetrics.totalRevenue, previousMetrics.totalRevenue),
+        },
+        averageTicket: {
+          value: currentMetrics.averageTicket,
+          change: calcChange(currentMetrics.averageTicket, previousMetrics.averageTicket),
+        },
+        averagePrice: {
+          value: currentMetrics.averagePrice,
+          change: calcChange(currentMetrics.averagePrice, previousMetrics.averagePrice),
+        },
+        averageItems: {
+          value: currentMetrics.averageItems,
+          change: calcChange(currentMetrics.averageItems, previousMetrics.averageItems),
+        },
+    };
+    
+    const allLogisticsKeys = new Set([...Object.keys(currentMetrics.logistics), ...Object.keys(previousMetrics.logistics)]);
+    const logisticsChartData = Array.from(allLogisticsKeys).map(key => ({
+        name: key,
+        current: currentMetrics.logistics[key] || 0,
+        previous: previousMetrics.logistics[key] || 0,
+    }));
 
-    const citySalesData = Object.entries(cities)
-      .map(([name, revenue]) => ({
-        name,
-        revenue,
-        percentage: totalRevenue > 0 ? (revenue / totalRevenue) * 100 : 0,
-      }))
-      .sort((a, b) => b.revenue - a.revenue)
-      .slice(0, 10);
+    const allOriginsKeys = new Set([...Object.keys(currentMetrics.origins), ...Object.keys(previousMetrics.origins)]);
+    const originChartData = Array.from(allOriginsKeys).map(key => ({
+        name: key,
+        current: currentMetrics.origins[key] || 0,
+        previous: previousMetrics.origins[key] || 0,
+    }));
+
+    const allCitiesKeys = new Set([...Object.keys(currentMetrics.cities), ...Object.keys(previousMetrics.cities)]);
+    const citySalesData = Array.from(allCitiesKeys).map(name => {
+        const revenue = currentMetrics.cities[name] || 0;
+        const previousRevenue = previousMetrics.cities[name] || 0;
+        return {
+            name,
+            revenue,
+            previousRevenue,
+            percentage: currentMetrics.totalRevenue > 0 ? (revenue / currentMetrics.totalRevenue) * 100 : 0,
+            change: calcChange(revenue, previousRevenue),
+        }
+    }).sort((a, b) => b.revenue - a.revenue).slice(0, 10);
 
     return { kpis: kpisResult, logisticsChartData, originChartData, citySalesData };
-  }, [filteredData]);
+  }, [filteredData, comparisonData]);
 
+  const hasComparison = !!compareDate;
 
   return (
     <div className="flex flex-col gap-6">
@@ -205,42 +247,27 @@ export default function VisaoGeralPage() {
             Selecione o período para analisar os indicadores chave do seu negócio.
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="flex flex-wrap gap-4">
           <Popover>
             <PopoverTrigger asChild>
-              <Button
-                id="date"
-                variant={"outline"}
-                className={cn(
-                  "w-[300px] justify-start text-left font-normal",
-                  !date && "text-muted-foreground"
-                )}
-              >
+              <Button id="date" variant={"outline"} className={cn("w-[300px] justify-start text-left font-normal",!date && "text-muted-foreground")}>
                 <CalendarIcon className="mr-2 h-4 w-4" />
-                {date?.from ? (
-                  date.to ? (
-                    <>
-                      {format(date.from, "dd/MM/y", { locale: ptBR })} -{" "}
-                      {format(date.to, "dd/MM/y", { locale: ptBR })}
-                    </>
-                  ) : (
-                    format(date.from, "dd/MM/y", { locale: ptBR })
-                  )
-                ) : (
-                  <span>Selecione uma data</span>
-                )}
+                {date?.from ? (date.to ? (<>{format(date.from, "dd/MM/y", { locale: ptBR })} - {format(date.to, "dd/MM/y", { locale: ptBR })}</>) : (format(date.from, "dd/MM/y", { locale: ptBR }))) : (<span>Selecione uma data</span>)}
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-auto p-0" align="start">
-              <Calendar
-                locale={ptBR}
-                initialFocus
-                mode="range"
-                defaultMonth={date?.from}
-                selected={date}
-                onSelect={setDate}
-                numberOfMonths={2}
-              />
+              <Calendar locale={ptBR} initialFocus mode="range" defaultMonth={date?.from} selected={date} onSelect={setDate} numberOfMonths={2} />
+            </PopoverContent>
+          </Popover>
+           <Popover>
+            <PopoverTrigger asChild>
+              <Button id="compareDate" variant={"outline"} className={cn("w-[300px] justify-start text-left font-normal", !compareDate && "text-muted-foreground")}>
+                <CalendarIcon className="mr-2 h-4 w-4" />
+                {compareDate?.from ? (compareDate.to ? (<>{format(compareDate.from, "dd/MM/y", { locale: ptBR })} - {format(compareDate.to, "dd/MM/y", { locale: ptBR })}</>) : (format(compareDate.from, "dd/MM/y", { locale: ptBR }))) : (<span>Comparar com...</span>)}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar locale={ptBR} initialFocus mode="range" defaultMonth={compareDate?.from} selected={compareDate} onSelect={setCompareDate} numberOfMonths={2} />
             </PopoverContent>
           </Popover>
         </CardContent>
@@ -249,28 +276,31 @@ export default function VisaoGeralPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <KpiCard
           title="Faturamento Total"
-          value={kpis.totalRevenue.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
-          change="+5.2% vs. mês anterior"
-          icon={<DollarSign className="text-green-500" />}
+          value={kpis.totalRevenue.value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+          change={`${kpis.totalRevenue.change.toFixed(2)}% vs. período anterior`}
+          changeType={kpis.totalRevenue.change >= 0 ? 'positive' : 'negative'}
+          icon={<DollarSign className={kpis.totalRevenue.change >= 0 ? "text-green-500" : "text-red-500"} />}
         />
         <KpiCard
           title="Ticket Médio"
-          value={kpis.averageTicket.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
-          change="-1.8% vs. mês anterior"
-          changeType="negative"
-          icon={<ShoppingCart className="text-red-500" />}
+          value={kpis.averageTicket.value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+          change={`${kpis.averageTicket.change.toFixed(2)}% vs. período anterior`}
+          changeType={kpis.averageTicket.change >= 0 ? 'positive' : 'negative'}
+          icon={<ShoppingCart className={kpis.averageTicket.change >= 0 ? "text-green-500" : "text-red-500"} />}
         />
         <KpiCard
           title="Preço Médio por Item"
-          value={kpis.averagePrice.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
-          change="+2.1% vs. mês anterior"
-          icon={<Tag className="text-green-500" />}
+          value={kpis.averagePrice.value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+          change={`${kpis.averagePrice.change.toFixed(2)}% vs. período anterior`}
+          changeType={kpis.averagePrice.change >= 0 ? 'positive' : 'negative'}
+          icon={<Tag className={kpis.averagePrice.change >= 0 ? "text-green-500" : "text-red-500"} />}
         />
          <KpiCard
           title="Itens por Pedido (Média)"
-          value={kpis.averageItems.toFixed(2)}
-          change="+0.5% vs. mês anterior"
-          icon={<Package className="text-green-500" />}
+          value={kpis.averageItems.value.toFixed(2)}
+          change={`${kpis.averageItems.change.toFixed(2)}% vs. período anterior`}
+          changeType={kpis.averageItems.change >= 0 ? 'positive' : 'negative'}
+          icon={<Package className={kpis.averageItems.change >= 0 ? "text-green-500" : "text-red-500"} />}
         />
       </div>
 
@@ -283,7 +313,7 @@ export default function VisaoGeralPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <LogisticsChart data={logisticsChartData} />
+            <LogisticsChart data={logisticsChartData} hasComparison={hasComparison} />
           </CardContent>
         </Card>
         <Card>
@@ -294,7 +324,7 @@ export default function VisaoGeralPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <OriginChart data={originChartData} />
+            <OriginChart data={originChartData} hasComparison={hasComparison} />
           </CardContent>
         </Card>
       </div>
@@ -305,7 +335,7 @@ export default function VisaoGeralPage() {
                   <CardTitle>Vendas por Cidade (Top 10)</CardTitle>
               </CardHeader>
               <CardContent>
-                  <CitySalesTable data={citySalesData} />
+                  <CitySalesTable data={citySalesData} hasComparison={hasComparison} />
               </CardContent>
           </Card>
       </div>

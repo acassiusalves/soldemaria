@@ -2,7 +2,7 @@
 "use client";
 
 import * as React from "react";
-import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip } from "recharts";
+import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip, Legend } from "recharts";
 import {
   ChartConfig,
   ChartContainer,
@@ -10,19 +10,28 @@ import {
 } from "@/components/ui/chart";
 
 interface LogisticsChartProps {
-  data: { name: string; value: number }[];
+  data: {
+    name: string;
+    current: number;
+    previous?: number;
+  }[];
+  hasComparison: boolean;
 }
 
 const chartConfig = {
-  value: {
-    label: "Receita",
+  current: {
+    label: "Período Atual",
+    color: "hsl(var(--chart-1))",
+  },
+  previous: {
+    label: "Período Anterior",
     color: "hsl(var(--chart-2))",
   },
 } satisfies ChartConfig;
 
-export default function LogisticsChart({ data }: LogisticsChartProps) {
+export default function LogisticsChart({ data, hasComparison }: LogisticsChartProps) {
   return (
-    <ChartContainer config={chartConfig} className="min-h-[200px] w-full h-[240px]">
+    <ChartContainer config={chartConfig} className="min-h-[200px] w-full h-[300px]">
       <ResponsiveContainer width="100%" height="100%">
         <BarChart
           data={data}
@@ -47,14 +56,28 @@ export default function LogisticsChart({ data }: LogisticsChartProps) {
             cursor={false}
             content={<ChartTooltipContent
                 nameKey="name"
-                formatter={(value) => typeof value === 'number' ? value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : value}
+                formatter={(value, name) => {
+                    const label = name === 'current' ? 'Período Atual' : 'Período Anterior';
+                    const formattedValue = typeof value === 'number' ? value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : value;
+                    return `${formattedValue}`;
+                }}
              />}
           />
+          {hasComparison && <Legend />}
           <Bar
-            dataKey="value"
-            fill="var(--color-value)"
+            dataKey="current"
+            name="Período Atual"
+            fill="var(--color-current)"
             radius={[4, 4, 0, 0]}
           />
+          {hasComparison && (
+            <Bar
+              dataKey="previous"
+              name="Período Anterior"
+              fill="var(--color-previous)"
+              radius={[4, 4, 0, 0]}
+            />
+          )}
         </BarChart>
       </ResponsiveContainer>
     </ChartContainer>
