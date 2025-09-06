@@ -63,12 +63,15 @@ export default function RevenueCostsChart({ data }: RevenueCostsChartProps) {
           <Tooltip
             cursor={false}
             content={<ChartTooltipContent
-                formatter={(value, name) => {
+                formatter={(value, name, item) => {
+                    const dataKey = item.dataKey as keyof typeof chartConfig;
+                    const config = chartConfig[dataKey];
                     const formattedValue = typeof value === 'number' ? value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : value;
+                    if (!config) return null;
                     return (
                         <div className="flex items-center gap-2">
-                           <div className="w-2 h-2 rounded-full" style={{backgroundColor: chartConfig[name as keyof typeof chartConfig].color}}/>
-                           <span>{chartConfig[name as keyof typeof chartConfig].label}: {formattedValue}</span>
+                           <div className="w-2 h-2 rounded-full" style={{backgroundColor: config.color}}/>
+                           <span>{config.label}: {formattedValue}</span>
                         </div>
                     )
                 }}
