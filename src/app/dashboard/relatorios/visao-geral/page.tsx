@@ -24,6 +24,7 @@ import { cn } from "@/lib/utils";
 import { Calendar as CalendarIcon } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { ptBR } from "date-fns/locale";
+import CitySalesTable from "@/components/city-sales-table";
 
 const toDate = (value: unknown): Date | null => {
   if (!value) return null;
@@ -129,7 +130,7 @@ export default function VisaoGeralPage() {
     });
   }, [date, consolidatedData]);
 
- const { kpis, logisticsChartData, originChartData } = React.useMemo(() => {
+ const { kpis, logisticsChartData, originChartData, citySalesData } = React.useMemo(() => {
     const salesGroups = new Map<string, VendaDetalhada[]>();
 
     for (const sale of filteredData) {
@@ -145,6 +146,7 @@ export default function VisaoGeralPage() {
     const totalOrders = salesGroups.size;
     const logistics: Record<string, number> = {};
     const origins: Record<string, number> = {};
+    const cities: Record<string, number> = {};
 
     for (const [code, sales] of salesGroups.entries()) {
       let headerRow: any = {};
@@ -165,6 +167,10 @@ export default function VisaoGeralPage() {
       
       const originKey = headerRow.origemCliente || 'Não Identificado';
       origins[originKey] = (origins[originKey] || 0) + orderRevenue;
+      
+      if (headerRow.cidade) {
+        cities[headerRow.cidade] = (cities[headerRow.cidade] || 0) + orderRevenue;
+      }
     }
     
     const kpisResult = {
@@ -177,8 +183,16 @@ export default function VisaoGeralPage() {
     const logisticsChartData = Object.entries(logistics).map(([name, value]) => ({ name, value }));
     const originChartData = Object.entries(origins).map(([name, value]) => ({ name, value }));
 
+    const citySalesData = Object.entries(cities)
+      .map(([name, revenue]) => ({
+        name,
+        revenue,
+        percentage: totalRevenue > 0 ? (revenue / totalRevenue) * 100 : 0,
+      }))
+      .sort((a, b) => b.revenue - a.revenue)
+      .slice(0, 10);
 
-    return { kpis: kpisResult, logisticsChartData, originChartData };
+    return { kpis: kpisResult, logisticsChartData, originChartData, citySalesData };
   }, [filteredData]);
 
 
@@ -286,17 +300,15 @@ export default function VisaoGeralPage() {
       </div>
 
        <div className="grid grid-cols-1 gap-6">
-        <Card>
-            <CardHeader>
-                <CardTitle>Vendas por Cidade (Top 10)</CardTitle>
-            </CardHeader>
-            <CardContent>
-                <div className="flex justify-center items-center h-48 border-2 border-dashed rounded-lg">
-                    <p className="text-muted-foreground">Em breve: Gráfico de barras com as 10 cidades que mais geraram receita.</p>
-                </div>
-            </CardContent>
-        </Card>
-    </div>
+          <Card>
+              <CardHeader>
+                  <CardTitle>Vendas por Cidade (Top 10)</CardTitle>
+              </CardHeader>
+              <CardContent>
+                  <CitySalesTable data={citySalesData} />
+              </CardContent>
+          </Card>
+      </div>
     </div>
   );
 }
