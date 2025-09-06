@@ -82,67 +82,110 @@ const mergeForHeader = (base: any, row: any) => {
 };
 
 
+// helper: número BR
+const numBR = (v: any): number => {
+  if (v == null) return 0;
+  if (typeof v === "number") return v;
+  if (typeof v === "string") {
+    const s = v
+      .replace(/\u00A0/g, " ")
+      .replace(/[R$\s]/g, "")
+      .replace(/\./g, "")
+      .replace(",", ".")
+      .trim();
+    const n = Number(s);
+    return Number.isFinite(n) ? n : 0;
+  }
+  if (v instanceof Timestamp) return v.toDate().getTime(); // não usado aqui, mas seguro
+  return 0;
+};
+
+// normaliza string (lowercase, sem acento)
+const normStr = (s: any) =>
+  String(s ?? "")
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase()
+    .trim();
+
 const calculateChannelMetrics = (data: VendaDetalhada[]) => {
-    const salesGroups = new Map<string, VendaDetalhada[]>();
-    data.forEach(sale => {
-        const code = normCode(sale.codigo);
-        if (!code) return;
-        if (!salesGroups.has(code)) salesGroups.set(code, []);
-        salesGroups.get(code)!.push(sale);
-    });
+  const salesGroups = new Map<string, VendaDetalhada[]>();
+  data.forEach((sale) => {
+    const code = normCode(sale.codigo);
+    if (!code) return;
+    if (!salesGroups.has(code)) salesGroups.set(code, []);
+    salesGroups.get(code)!.push(sale);
+  });
 
-    const channels: Record<string, { revenue: number, orders: number, items: number }> = {
-        Delivery: { revenue: 0, orders: 0, items: 0 },
-        Loja: { revenue: 0, orders: 0, items: 0 },
-    };
-    const origins: Record<string, number> = {};
-    const logistics: Record<string, number> = {};
-    const matrix: Record<string, Record<string, number>> = {};
+  const channels: Record<string, { revenue: number; orders: number; items: number }> = {
+    Delivery: { revenue: 0, orders: 0, items: 0 },
+    Loja: { revenue: 0, orders: 0, items: 0 },
+  };
+  const origins: Record<string, number> = {};
+  const logistics: Record<string, number> = {};
+  const matrix: Record<string, Record<string, number>> = {};
 
-    for (const [code, sales] of salesGroups.entries()) {
-        let headerRow: any = {};
-        sales.forEach(row => {
-            headerRow = mergeForHeader(headerRow, row);
-        });
+  for (const [, sales] of salesGroups.entries()) {
+    // junta header
+    let headerRow: any = {};
+    sales.forEach((row) => { headerRow = mergeForHeader(headerRow, row); });
 
-        const detailRows = sales.filter(isDetailRow);
-        
-        let orderRevenue = 0;
-        let totalItems = 0;
+    const detailRows = sales.filter(isDetailRow);
 
-        // Se há itens de detalhe, some a receita e quantidade deles.
-        if (detailRows.length > 0) {
-            orderRevenue = detailRows.reduce((acc, s) => acc + (Number(s.final) || (Number(s.valorUnitario) * Number(s.quantidade)) || 0), 0);
-            totalItems = detailRows.reduce((acc, s) => acc + (Number(s.quantidade) || 0), 0);
-        } else if (sales.length > 0) {
-            // Se for uma venda de linha única, pegue o valor do cabeçalho.
-            orderRevenue = Number(headerRow.final) || 0;
-            totalItems = Number(headerRow.quantidade) || (orderRevenue > 0 ? 1 : 0); // Se há receita, conte como 1 item.
-        }
+    // ===== classificação do canal (tolerante) =====
+    const tipoNorm = normStr(headerRow.tipo || headerRow["tipo de venda"] || headerRow["Tipo"]);
+    const isLoja = /(^|[\s\-_.])loja($|[\s\-_.])/.test(tipoNorm) || tipoNorm.includes("venda loja");
+    const channel = isLoja ? "Loja" : "Delivery";
 
-        const tipoVenda = String(headerRow.tipo || '').toLowerCase();
-        const channel = tipoVenda.includes('venda loja') ? 'Loja' : 'Delivery';
-        const origin = headerRow.origemCliente || 'N/A';
-        
-        channels[channel].revenue += orderRevenue;
-        channels[channel].orders += 1;
-        channels[channel].items += totalItems;
-        
-        if (orderRevenue > 0) {
-            origins[origin] = (origins[origin] || 0) + orderRevenue;
-            logistics[channel] = (logistics[channel] || 0) + orderRevenue;
+    // ===== receita e itens por regra =====
+    let orderRevenue = 0;
+    let totalItems = 0;
 
-            if (!matrix[origin]) matrix[origin] = {};
-            matrix[origin][channel] = (matrix[origin][channel] || 0) + orderRevenue;
-        }
+    if (isLoja) {
+      // Loja: sempre Valor final do cabeçalho (pedido)
+      orderRevenue = numBR(headerRow.final);
+      totalItems = numBR(headerRow.quantidade) ||
+                   (orderRevenue > 0 ? 1 : 0);
+    } else {
+      // Delivery: soma unitário * quantidade das linhas
+      if (detailRows.length > 0) {
+        orderRevenue = detailRows.reduce(
+          (acc, s) => acc + numBR(s.valorUnitario) * numBR(s.quantidade),
+          0
+        );
+        totalItems = detailRows.reduce((acc, s) => acc + numBR(s.quantidade), 0);
+      } else {
+        // fallback se vier sem detalhe
+        orderRevenue = numBR(headerRow.final);
+        totalItems = numBR(headerRow.quantidade) || (orderRevenue > 0 ? 1 : 0);
+      }
     }
-    
-    return {
-        channels,
-        originsChart: Object.entries(origins).map(([name, value]) => ({ name, current: value })),
-        logisticsChart: Object.entries(logistics).map(([name, value]) => ({ name, current: value })),
-        matrix,
-    };
+
+    // trava negativos/NaN
+    orderRevenue = Math.max(0, orderRevenue);
+    totalItems = Math.max(0, totalItems);
+
+    const origin = headerRow.origemCliente || "N/A";
+
+    channels[channel].revenue += orderRevenue;
+    channels[channel].orders += 1;
+    channels[channel].items += totalItems;
+
+    if (orderRevenue > 0) {
+      origins[origin] = (origins[origin] || 0) + orderRevenue;
+      logistics[channel] = (logistics[channel] || 0) + orderRevenue;
+
+      if (!matrix[origin]) matrix[origin] = {};
+      matrix[origin][channel] = (matrix[origin][channel] || 0) + orderRevenue;
+    }
+  }
+
+  return {
+    channels,
+    originsChart: Object.entries(origins).map(([name, value]) => ({ name, current: value })),
+    logisticsChart: Object.entries(logistics).map(([name, value]) => ({ name, current: value })),
+    matrix,
+  };
 };
 
 export default function CanaisEOrigensPage() {
