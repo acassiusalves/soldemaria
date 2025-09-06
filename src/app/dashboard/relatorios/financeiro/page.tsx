@@ -56,99 +56,132 @@ const normCode = (v: any) => {
 };
 
 
-const calculateFinancialMetrics = (data: VendaDetalhada[], dateRange?: DateRange) => {
-    const salesGroups = new Map<string, VendaDetalhada[]>();
+const calculateFinancialMetrics = (
+  currentData: VendaDetalhada[], 
+  previousData: VendaDetalhada[], 
+  dateRange?: DateRange
+) => {
+    const processDataSet = (data: VendaDetalhada[]) => {
+      const salesGroups = new Map<string, VendaDetalhada[]>();
+      data.forEach(sale => {
+        const code = normCode(sale.codigo);
+        if (!salesGroups.has(code)) salesGroups.set(code, []);
+        salesGroups.get(code)!.push(sale);
+      });
 
-    for (const sale of data) {
-      const code = normCode(sale.codigo);
-      if (!salesGroups.has(code)) salesGroups.set(code, []);
-      salesGroups.get(code)!.push(sale);
-    }
+      let totalRevenue = 0;
+      let totalDiscounts = 0;
+      let totalCmv = 0;
+      let totalShipping = 0;
+      const byChannel: Record<string, BreakdownData> = {};
+      const byOrigin: Record<string, BreakdownData> = {};
+      const byDay: Record<string, { date: string, revenue: number, discounts: number, cmv: number, shipping: number }> = {};
+      
+      if (dateRange?.from) {
+          const start = dateRange.from;
+          const end = dateRange.to || dateRange.from;
+          const days = eachDayOfInterval({ start, end });
+          days.forEach(day => {
+              const dayKey = format(day, "yyyy-MM-dd");
+              byDay[dayKey] = { date: dayKey, revenue: 0, discounts: 0, cmv: 0, shipping: 0 };
+          })
+      }
 
-    let totalRevenue = 0;
-    let totalDiscounts = 0;
-    let totalCmv = 0;
-    let totalShipping = 0;
-    
-    const byChannel: Record<string, BreakdownData> = {};
-    const byOrigin: Record<string, BreakdownData> = {};
-    const byDay: Record<string, { date: string, revenue: number, discounts: number, cmv: number, shipping: number }> = {};
-    
-    if (dateRange?.from) {
-        const start = dateRange.from;
-        const end = dateRange.to || dateRange.from;
-        const days = eachDayOfInterval({ start, end });
-        days.forEach(day => {
-            const dayKey = format(day, "yyyy-MM-dd");
-            byDay[dayKey] = { date: dayKey, revenue: 0, discounts: 0, cmv: 0, shipping: 0 };
-        })
-    }
+      for (const [code, sales] of salesGroups.entries()) {
+          const headerRow = sales.reduce((acc, row) => ({...acc, ...row}), {} as VendaDetalhada);
+          
+          const isMultiLineOrder = sales.some(s => s.item || s.descricao);
 
+          const revenue = isMultiLineOrder 
+              ? sales.reduce((sum, item) => sum + (Number(item.final) || (Number(item.valorUnitario) * Number(item.quantidade)) || 0), 0)
+              : Number(headerRow.final) || 0;
 
-    for (const [code, sales] of salesGroups.entries()) {
-        const headerRow = sales.reduce((acc, row) => ({...acc, ...row}), {} as VendaDetalhada);
-        
-        const isMultiLineOrder = sales.some(s => s.item || s.descricao);
+          const discounts = sales.reduce((sum, item) => sum + (Number(item.valorDescontos) || 0), 0);
+          const cmv = sales.reduce((sum, item) => sum + (Number(item.custoUnitario) * Number(item.quantidade) || 0), 0);
+          const shipping = Number(headerRow.custoFrete) || 0;
+          const grossMargin = revenue - discounts - cmv - shipping;
 
-        const revenue = isMultiLineOrder 
-            ? sales.reduce((sum, item) => sum + (Number(item.final) || (Number(item.valorUnitario) * Number(item.quantidade)) || 0), 0)
-            : Number(headerRow.final) || 0;
+          totalRevenue += revenue;
+          totalDiscounts += discounts;
+          totalCmv += cmv;
+          totalShipping += shipping;
+          
+          const saleDate = toDate(headerRow.data);
+          if (saleDate) {
+              const dayKey = format(saleDate, "yyyy-MM-dd");
+              if (byDay[dayKey]) {
+                  byDay[dayKey].revenue += revenue;
+                  byDay[dayKey].discounts += discounts;
+                  byDay[dayKey].cmv += cmv;
+                  byDay[dayKey].shipping += shipping;
+              }
+          }
 
-        const discounts = sales.reduce((sum, item) => sum + (Number(item.valorDescontos) || 0), 0);
-        const cmv = sales.reduce((sum, item) => sum + (Number(item.custoUnitario) * Number(item.quantidade) || 0), 0);
-        const shipping = Number(headerRow.custoFrete) || 0;
-        const grossMargin = revenue - discounts - cmv - shipping;
+          const channel = headerRow.logistica || 'N/A';
+          const origin = headerRow.origemCliente || 'N/A';
 
-        totalRevenue += revenue;
-        totalDiscounts += discounts;
-        totalCmv += cmv;
-        totalShipping += shipping;
-        
-        const saleDate = toDate(headerRow.data);
-        if (saleDate) {
-            const dayKey = format(saleDate, "yyyy-MM-dd");
-            if (byDay[dayKey]) {
-                byDay[dayKey].revenue += revenue;
-                byDay[dayKey].discounts += discounts;
-                byDay[dayKey].cmv += cmv;
-                byDay[dayKey].shipping += shipping;
-            }
-        }
+          if (!byChannel[channel]) byChannel[channel] = { name: channel, revenue: 0, discounts: 0, cmv: 0, shipping: 0, grossMargin: 0 };
+          if (!byOrigin[origin]) byOrigin[origin] = { name: origin, revenue: 0, discounts: 0, cmv: 0, shipping: 0, grossMargin: 0 };
+          
+          byChannel[channel].revenue += revenue;
+          byChannel[channel].discounts += discounts;
+          byChannel[channel].cmv += cmv;
+          byChannel[channel].shipping += shipping;
+          byChannel[channel].grossMargin += grossMargin;
+          
+          byOrigin[origin].revenue += revenue;
+          byOrigin[origin].discounts += discounts;
+          byOrigin[origin].cmv += cmv;
+          byOrigin[origin].shipping += shipping;
+          byOrigin[origin].grossMargin += grossMargin;
+      }
 
-        const channel = headerRow.logistica || 'N/A';
-        const origin = headerRow.origemCliente || 'N/A';
-
-        if (!byChannel[channel]) byChannel[channel] = { name: channel, revenue: 0, discounts: 0, cmv: 0, shipping: 0, grossMargin: 0 };
-        if (!byOrigin[origin]) byOrigin[origin] = { name: origin, revenue: 0, discounts: 0, cmv: 0, shipping: 0, grossMargin: 0 };
-        
-        byChannel[channel].revenue += revenue;
-        byChannel[channel].discounts += discounts;
-        byChannel[channel].cmv += cmv;
-        byChannel[channel].shipping += shipping;
-        byChannel[channel].grossMargin += grossMargin;
-        
-        byOrigin[origin].revenue += revenue;
-        byOrigin[origin].discounts += discounts;
-        byOrigin[origin].cmv += cmv;
-        byOrigin[origin].shipping += shipping;
-        byOrigin[origin].grossMargin += grossMargin;
-    }
-    
-    const chartData = Object.values(byDay).sort((a, b) => a.date.localeCompare(b.date));
-    
-    const kpis = {
-        totalRevenue: { value: totalRevenue },
-        totalDiscounts: { value: totalDiscounts },
-        totalCmv: { value: totalCmv },
-        totalShipping: { value: totalShipping },
-        grossMargin: { value: totalRevenue - totalDiscounts - totalCmv - totalShipping },
+      return {
+        totalRevenue, totalDiscounts, totalCmv, totalShipping,
+        grossMargin: totalRevenue - totalDiscounts - totalCmv - totalShipping,
+        byDay: Object.values(byDay).sort((a, b) => a.date.localeCompare(b.date)),
+        byChannel: Object.values(byChannel),
+        byOrigin: Object.values(byOrigin),
+      };
     };
 
+    const current = processDataSet(currentData);
+    const previous = processDataSet(previousData);
+
+    const calcChange = (currentVal: number, previousVal: number) => {
+        if (previousVal === 0) return currentVal > 0 ? Infinity : 0;
+        return ((currentVal - previousVal) / previousVal) * 100;
+    };
+    
+    const kpis = {
+        totalRevenue: { value: current.totalRevenue, change: calcChange(current.totalRevenue, previous.totalRevenue) },
+        totalDiscounts: { value: current.totalDiscounts, change: calcChange(current.totalDiscounts, previous.totalDiscounts) },
+        totalCmv: { value: current.totalCmv, change: calcChange(current.totalCmv, previous.totalCmv) },
+        totalShipping: { value: current.totalShipping, change: calcChange(current.totalShipping, previous.totalShipping) },
+        grossMargin: { value: current.grossMargin, change: calcChange(current.grossMargin, previous.grossMargin) },
+    };
+
+    const mergeBreakdownData = (currentBreakdown: BreakdownData[], previousBreakdown: BreakdownData[]) => {
+        const map = new Map<string, BreakdownData>();
+        currentBreakdown.forEach(item => map.set(item.name, { ...item, previousRevenue: 0, previousGrossMargin: 0 }));
+        
+        previousBreakdown.forEach(item => {
+            if (map.has(item.name)) {
+                const existing = map.get(item.name)!;
+                existing.previousRevenue = item.revenue;
+                existing.previousGrossMargin = item.grossMargin;
+            } else {
+                map.set(item.name, { ...item, revenue: 0, grossMargin: 0, previousRevenue: item.revenue, previousGrossMargin: item.grossMargin });
+            }
+        });
+        return Array.from(map.values()).sort((a,b) => b.revenue - a.revenue);
+    }
+    
     return {
         kpis,
-        chartData,
-        channelData: Object.values(byChannel).sort((a,b) => b.revenue - a.revenue),
-        originData: Object.values(byOrigin).sort((a,b) => b.revenue - a.revenue),
+        chartData: current.byDay,
+        channelData: mergeBreakdownData(current.byChannel, previous.byChannel),
+        originData: mergeBreakdownData(current.byOrigin, previous.byOrigin),
     };
 };
 
@@ -159,6 +192,8 @@ export default function FinanceiroPage() {
     from: startOfMonth(new Date()),
     to: new Date(),
   });
+  const [compareDate, setCompareDate] = React.useState<DateRange | undefined>(undefined);
+
 
   React.useEffect(() => {
     let unsub: () => void;
@@ -175,19 +210,27 @@ export default function FinanceiroPage() {
     return () => unsub && unsub();
   }, []);
 
-  const filteredData = React.useMemo(() => {
-    if (!date?.from) return [];
-    return allSales.filter((item) => {
-      const itemDate = toDate(item.data);
-      return itemDate && itemDate >= date.from! && itemDate <= endOfDay(date.to || date.from!);
-    });
-  }, [allSales, date]);
+  const { filteredData, comparisonData } = React.useMemo(() => {
+    const filterByDate = (data: VendaDetalhada[], dateRange: DateRange | undefined) => {
+      if (!dateRange?.from) return [];
+      return data.filter((item) => {
+        const itemDate = toDate(item.data);
+        return itemDate && itemDate >= dateRange.from! && itemDate <= endOfDay(dateRange.to || dateRange.from!);
+      });
+    };
+    return {
+      filteredData: filterByDate(allSales, date),
+      comparisonData: filterByDate(allSales, compareDate),
+    };
+  }, [allSales, date, compareDate]);
   
   const { kpis, chartData, channelData, originData } = React.useMemo(
-    () => calculateFinancialMetrics(filteredData, date),
-    [filteredData, date]
+    () => calculateFinancialMetrics(filteredData, comparisonData, date),
+    [filteredData, comparisonData, date]
   );
   
+  const hasComparison = !!compareDate;
+
   return (
     <div className="flex flex-col gap-6">
       <Card>
@@ -197,7 +240,7 @@ export default function FinanceiroPage() {
             Selecione o período para analisar os indicadores financeiros do seu negócio.
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="flex flex-wrap gap-4">
           <Popover>
             <PopoverTrigger asChild>
               <Button id="date" variant={"outline"} className={cn("w-[300px] justify-start text-left font-normal",!date && "text-muted-foreground")}>
@@ -209,15 +252,26 @@ export default function FinanceiroPage() {
               <Calendar locale={ptBR} initialFocus mode="range" defaultMonth={date?.from} selected={date} onSelect={setDate} numberOfMonths={2} />
             </PopoverContent>
           </Popover>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button id="compareDate" variant={"outline"} className={cn("w-[300px] justify-start text-left font-normal", !compareDate && "text-muted-foreground")}>
+                <CalendarIcon className="mr-2 h-4 w-4" />
+                {compareDate?.from ? (compareDate.to ? (<>{format(compareDate.from, "dd/MM/y", { locale: ptBR })} - {format(compareDate.to, "dd/MM/y", { locale: ptBR })}</>) : (format(compareDate.from, "dd/MM/y", { locale: ptBR }))) : (<span>Comparar com...</span>)}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar locale={ptBR} initialFocus mode="range" defaultMonth={compareDate?.from} selected={compareDate} onSelect={setCompareDate} numberOfMonths={2} />
+            </PopoverContent>
+          </Popover>
         </CardContent>
       </Card>
       
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
-        <KpiCard title="Faturamento Bruto" value={kpis.totalRevenue.value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} icon={<DollarSign />} />
-        <KpiCard title="Descontos" value={kpis.totalDiscounts.value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} icon={<TrendingDown />} />
-        <KpiCard title="CMV (Custo)" value={kpis.totalCmv.value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} icon={<Archive />} />
-        <KpiCard title="Frete" value={kpis.totalShipping.value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} icon={<Truck />} />
-        <KpiCard title="Margem Bruta" value={kpis.grossMargin.value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} icon={<Scale />} />
+        <KpiCard title="Faturamento Bruto" value={kpis.totalRevenue.value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} icon={<DollarSign />} change={hasComparison ? `${kpis.totalRevenue.change.toFixed(2)}%` : undefined} changeType={kpis.totalRevenue.change >= 0 ? 'positive' : 'negative'} />
+        <KpiCard title="Descontos" value={kpis.totalDiscounts.value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} icon={<TrendingDown />} change={hasComparison ? `${kpis.totalDiscounts.change.toFixed(2)}%` : undefined} changeType={kpis.totalDiscounts.change >= 0 ? 'positive' : 'negative'} />
+        <KpiCard title="CMV (Custo)" value={kpis.totalCmv.value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} icon={<Archive />} change={hasComparison ? `${kpis.totalCmv.change.toFixed(2)}%` : undefined} changeType={kpis.totalCmv.change >= 0 ? 'positive' : 'negative'} />
+        <KpiCard title="Frete" value={kpis.totalShipping.value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} icon={<Truck />} change={hasComparison ? `${kpis.totalShipping.change.toFixed(2)}%` : undefined} changeType={kpis.totalShipping.change >= 0 ? 'positive' : 'negative'} />
+        <KpiCard title="Margem Bruta" value={kpis.grossMargin.value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} icon={<Scale />} change={hasComparison ? `${kpis.grossMargin.change.toFixed(2)}%` : undefined} changeType={kpis.grossMargin.change >= 0 ? 'positive' : 'negative'} />
       </div>
 
        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
@@ -233,7 +287,7 @@ export default function FinanceiroPage() {
               <CardTitle>Análise Financeira por Canal de Venda</CardTitle>
             </CardHeader>
             <CardContent>
-                <FinancialBreakdownTable data={channelData} />
+                <FinancialBreakdownTable data={channelData} hasComparison={hasComparison} />
             </CardContent>
           </Card>
            <Card>
@@ -241,7 +295,7 @@ export default function FinanceiroPage() {
               <CardTitle>Análise Financeira por Origem do Cliente</CardTitle>
             </CardHeader>
             <CardContent>
-                <FinancialBreakdownTable data={originData} />
+                <FinancialBreakdownTable data={originData} hasComparison={hasComparison} />
             </CardContent>
           </Card>
       </div>

@@ -1,4 +1,6 @@
 
+"use client";
+
 import React from "react";
 import { ArrowDownRight, ArrowUpRight } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -33,15 +35,22 @@ export default function KpiCard({
            <p
             className={cn(
               "text-xs text-muted-foreground flex items-center",
-              isPositive ? "text-green-600" : "text-red-600"
+              isFinite(parseFloat(change)) && (isPositive ? "text-green-600" : "text-red-600")
             )}
           >
-            {isPositive ? (
-              <ArrowUpRight className="h-4 w-4 mr-1" />
+            {isFinite(parseFloat(change)) ? (
+                <>
+                {isPositive ? (
+                <ArrowUpRight className="h-4 w-4 mr-1" />
+                ) : (
+                <ArrowDownRight className="h-4 w-4 mr-1" />
+                )}
+                {change} vs. período anterior
+              </>
             ) : (
-              <ArrowDownRight className="h-4 w-4 mr-1" />
+              <span className="text-muted-foreground">{change}</span>
             )}
-            {change}
+            
           </p>
         )}
       </CardContent>
