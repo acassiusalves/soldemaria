@@ -110,12 +110,14 @@ const calculateChannelMetrics = (data: VendaDetalhada[]) => {
         let orderRevenue = 0;
         let totalItems = 0;
 
+        // Se há itens de detalhe, some a receita e quantidade deles.
         if (detailRows.length > 0) {
             orderRevenue = detailRows.reduce((acc, s) => acc + (Number(s.final) || (Number(s.valorUnitario) * Number(s.quantidade)) || 0), 0);
             totalItems = detailRows.reduce((acc, s) => acc + (Number(s.quantidade) || 0), 0);
         } else if (sales.length > 0) {
+            // Se for uma venda de linha única, pegue o valor do cabeçalho.
             orderRevenue = Number(headerRow.final) || 0;
-            totalItems = Number(headerRow.quantidade) || (orderRevenue > 0 ? 1 : 0);
+            totalItems = Number(headerRow.quantidade) || (orderRevenue > 0 ? 1 : 0); // Se há receita, conte como 1 item.
         }
 
         const tipoVenda = String(headerRow.tipo || '').toLowerCase();
