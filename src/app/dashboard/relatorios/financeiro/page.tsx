@@ -26,7 +26,7 @@ import {
 import { getDbClient } from "@/lib/firebase";
 import type { VendaDetalhada } from "@/lib/data";
 import { DateRange } from "react-day-picker";
-import { endOfDay, format, isValid, parseISO, startOfMonth } from "date-fns";
+import { eachDayOfInterval, endOfDay, format, isValid, parseISO, startOfMonth } from "date-fns";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -56,7 +56,7 @@ const normCode = (v: any) => {
 };
 
 
-const calculateFinancialMetrics = (data: VendaDetalhada[]) => {
+const calculateFinancialMetrics = (data: VendaDetalhada[], dateRange?: DateRange) => {
     const salesGroups = new Map<string, VendaDetalhada[]>();
 
     for (const sale of data) {
@@ -72,7 +72,17 @@ const calculateFinancialMetrics = (data: VendaDetalhada[]) => {
     
     const byChannel: Record<string, BreakdownData> = {};
     const byOrigin: Record<string, BreakdownData> = {};
-    const byMonth: Record<string, { revenue: number, discounts: number, cmv: number, shipping: number }> = {};
+    const byDay: Record<string, { date: string, revenue: number, discounts: number, cmv: number, shipping: number }> = {};
+    
+    if (dateRange?.from) {
+        const start = dateRange.from;
+        const end = dateRange.to || dateRange.from;
+        const days = eachDayOfInterval({ start, end });
+        days.forEach(day => {
+            const dayKey = format(day, "yyyy-MM-dd");
+            byDay[dayKey] = { date: dayKey, revenue: 0, discounts: 0, cmv: 0, shipping: 0 };
+        })
+    }
 
 
     for (const [code, sales] of salesGroups.entries()) {
@@ -96,12 +106,13 @@ const calculateFinancialMetrics = (data: VendaDetalhada[]) => {
         
         const saleDate = toDate(headerRow.data);
         if (saleDate) {
-            const monthKey = format(saleDate, "yyyy-MM");
-            if (!byMonth[monthKey]) byMonth[monthKey] = { revenue: 0, discounts: 0, cmv: 0, shipping: 0 };
-            byMonth[monthKey].revenue += revenue;
-            byMonth[monthKey].discounts += discounts;
-            byMonth[monthKey].cmv += cmv;
-            byMonth[monthKey].shipping += shipping;
+            const dayKey = format(saleDate, "yyyy-MM-dd");
+            if (byDay[dayKey]) {
+                byDay[dayKey].revenue += revenue;
+                byDay[dayKey].discounts += discounts;
+                byDay[dayKey].cmv += cmv;
+                byDay[dayKey].shipping += shipping;
+            }
         }
 
         const channel = headerRow.logistica || 'N/A';
@@ -123,7 +134,7 @@ const calculateFinancialMetrics = (data: VendaDetalhada[]) => {
         byOrigin[origin].grossMargin += grossMargin;
     }
     
-    const chartData = Object.entries(byMonth).map(([month, data]) => ({ month: format(parseISO(month), "MMM/yy", { locale: ptBR }), ...data }));
+    const chartData = Object.values(byDay).sort((a, b) => a.date.localeCompare(b.date));
     
     const kpis = {
         totalRevenue: { value: totalRevenue },
@@ -173,8 +184,8 @@ export default function FinanceiroPage() {
   }, [allSales, date]);
   
   const { kpis, chartData, channelData, originData } = React.useMemo(
-    () => calculateFinancialMetrics(filteredData),
-    [filteredData]
+    () => calculateFinancialMetrics(filteredData, date),
+    [filteredData, date]
   );
   
   return (
@@ -209,15 +220,12 @@ export default function FinanceiroPage() {
         <KpiCard title="Margem Bruta" value={kpis.grossMargin.value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} icon={<Scale />} />
       </div>
 
-       <Card>
-          <CardHeader>
-            <CardTitle>Receita, Custos e Descontos</CardTitle>
-            <CardDescription>Análise da composição do faturamento ao longo do período selecionado.</CardDescription>
-          </CardHeader>
-          <CardContent>
-              <RevenueCostsChart data={chartData} />
-          </CardContent>
-        </Card>
+       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+          <RevenueCostsChart title="Faturamento Bruto" data={chartData} dataKey="revenue" color="hsl(var(--chart-2))" />
+          <RevenueCostsChart title="Descontos" data={chartData} dataKey="discounts" color="hsl(var(--chart-3))" />
+          <RevenueCostsChart title="CMV (Custo)" data={chartData} dataKey="cmv" color="hsl(var(--chart-4))" />
+          <RevenueCostsChart title="Frete" data={chartData} dataKey="shipping" color="hsl(var(--chart-5))" />
+        </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
          <Card>
