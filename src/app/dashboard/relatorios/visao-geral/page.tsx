@@ -15,7 +15,7 @@ import LogisticsChart from "@/components/logistics-chart";
 import OriginChart from "@/components/origin-chart";
 import { collection, onSnapshot, query, Timestamp } from "firebase/firestore";
 import { getDbClient } from "@/lib/firebase";
-import type { VendaDetalhada } from "@/lib/data";
+import type { VendaDetalhada, Embalagem } from "@/lib/data";
 import { DateRange } from "react-day-picker";
 import { endOfDay, format, isValid, parseISO, startOfMonth } from "date-fns";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -37,46 +37,85 @@ const toDate = (value: unknown): Date | null => {
   return null;
 };
 
+const normalizeText = (s: unknown) =>
+  String(s ?? "")
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+
+
+const normCode = (v: any) => {
+  let s = String(v ?? "").replace(/\u00A0/g, " ").trim();
+  if (/^\d+(?:\.0+)?$/.test(s)) s = s.replace(/\.0+$/, "");
+  s = s.replace(/[^\d]/g, "");
+  s = s.replace(/^0+/, "");
+  return s;
+};
+
 export default function VisaoGeralPage() {
   const [allSales, setAllSales] = React.useState<VendaDetalhada[]>([]);
+  const [logisticaData, setLogisticaData] = React.useState<VendaDetalhada[]>([]);
+  const [custosEmbalagem, setCustosEmbalagem] = React.useState<Embalagem[]>([]);
   const [date, setDate] = React.useState<DateRange | undefined>({
     from: startOfMonth(new Date()),
     to: new Date(),
   });
 
   React.useEffect(() => {
-    const fetchSales = async () => {
+    const unsubs: (() => void)[] = [];
+    (async () => {
       const db = await getDbClient();
       if (!db) return;
-      const salesQuery = query(collection(db, "vendas"));
-      const unsubscribe = onSnapshot(salesQuery, (snapshot) => {
-        const salesData = snapshot.docs.map(
-          (doc) => ({ ...doc.data(), id: doc.id } as VendaDetalhada)
-        );
-        setAllSales(salesData);
-      });
-      return unsubscribe;
-    };
 
-    fetchSales();
+      const collectionsToWatch = [
+        { name: "vendas", setter: setAllSales },
+        { name: "logistica", setter: setLogisticaData },
+        { name: "custos-embalagem", setter: setCustosEmbalagem },
+      ];
+
+      collectionsToWatch.forEach(({ name, setter }) => {
+        const q = query(collection(db, name));
+        const unsub = onSnapshot(q, (snapshot) => {
+          if (snapshot.metadata.hasPendingWrites) return;
+          const data = snapshot.docs.map((d) => ({ ...d.data(), id: d.id })) as any[];
+          setter(data);
+        });
+        unsubs.push(unsub);
+      });
+    })();
+    return () => unsubs.forEach(unsub => unsub());
   }, []);
+
+  const consolidatedData = React.useMemo(() => {
+    const logisticaMap = new Map(logisticaData.map(l => [normCode(l.codigo), l]));
+    return allSales.map(venda => {
+        const code = normCode(venda.codigo);
+        const logistica = logisticaMap.get(code);
+        return {
+            ...venda,
+            ...(logistica && { logistica: logistica.logistica, entregador: logistica.entregador, valor: logistica.valor }),
+        };
+    });
+  }, [allSales, logisticaData]);
+
 
   const filteredData = React.useMemo(() => {
     if (!date?.from) return [];
     const fromDate = date.from;
     const toDateVal = date.to ? endOfDay(date.to) : endOfDay(fromDate);
 
-    return allSales.filter((item) => {
+    return consolidatedData.filter((item) => {
       const itemDate = toDate(item.data);
       return itemDate && itemDate >= fromDate && itemDate <= toDateVal;
     });
-  }, [date, allSales]);
+  }, [date, consolidatedData]);
 
   const { kpis, logisticsChartData, originChartData } = React.useMemo(() => {
     const salesGroups = new Map<string, VendaDetalhada[]>();
 
     for (const sale of filteredData) {
-      const code = String(sale.codigo);
+      const code = normCode(sale.codigo);
       if (!salesGroups.has(code)) {
         salesGroups.set(code, []);
       }
@@ -90,7 +129,14 @@ export default function VisaoGeralPage() {
     const origins: Record<string, number> = {};
     
     for (const [code, sales] of salesGroups.entries()) {
-      const orderRevenue = sales.reduce((acc, s) => acc + (Number(s.final) || 0) - (Number(s.valorDescontos) || 0), 0);
+      const isDetailRow = (row: any) => row.descricao || row.item;
+
+      const orderRevenue = sales.reduce((acc, s) => {
+        const final = isDetailRow(s) ? (Number(s.valorUnitario) || 0) * (Number(s.quantidade) || 0) : (Number(s.final) || 0);
+        const discount = Number(s.valorDescontos) || 0;
+        return acc + final - discount;
+      }, 0);
+      
       const orderItems = sales.reduce((acc, s) => acc + (Number(s.quantidade) || 0), 0);
       const mainSale = sales[0];
 
@@ -237,3 +283,4 @@ export default function VisaoGeralPage() {
     </div>
   );
 }
+
