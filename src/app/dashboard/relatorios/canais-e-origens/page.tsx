@@ -65,7 +65,7 @@ const isEmptyCell = (v: any) => {
 };
 
 const isDetailRow = (row: Record<string, any>) =>
-  row.item || row.descricao;
+  !isEmptyCell(row.item) || !isEmptyCell(row.descricao);
 
 const mergeForHeader = (base: any, row: any) => {
   let out = { ...base };
@@ -86,6 +86,7 @@ const calculateChannelMetrics = (data: VendaDetalhada[]) => {
     const salesGroups = new Map<string, VendaDetalhada[]>();
     data.forEach(sale => {
         const code = normCode(sale.codigo);
+        if (!code) return;
         if (!salesGroups.has(code)) salesGroups.set(code, []);
         salesGroups.get(code)!.push(sale);
     });
@@ -100,25 +101,35 @@ const calculateChannelMetrics = (data: VendaDetalhada[]) => {
 
     for (const [code, sales] of salesGroups.entries()) {
         let headerRow: any = {};
+        sales.forEach(row => headerRow = mergeForHeader(headerRow, row));
+        
         let subRows = sales.filter(isDetailRow);
         if (subRows.length === 0 && sales.length > 0) subRows = sales;
-        sales.forEach(row => headerRow = mergeForHeader(headerRow, row));
         
         const channel = /loja/i.test(headerRow.logistica || '') ? 'Loja' : 'Delivery';
         const origin = headerRow.origemCliente || 'N/A';
-
-        const orderRevenue = subRows.reduce((acc, s) => acc + ((Number(s.final) || ((Number(s.valorUnitario) || 0) * (Number(s.quantidade) || 0))) - (Number(s.valorDescontos) || 0)), 0);
+        
+        const orderRevenue = subRows.reduce((acc, s) => {
+            const finalValue = Number(s.final) || 0;
+            const unitValue = (Number(s.valorUnitario) || 0) * (Number(s.quantidade) || 0);
+            const discountValue = Number(s.valorDescontos) || 0;
+            const value = finalValue > 0 ? finalValue : unitValue;
+            return acc + value - discountValue;
+        }, 0);
+        
         const orderItems = subRows.reduce((acc, s) => acc + (Number(s.quantidade) || 0), 0);
         
         channels[channel].revenue += orderRevenue;
         channels[channel].orders += 1;
         channels[channel].items += orderItems;
         
-        origins[origin] = (origins[origin] || 0) + orderRevenue;
-        logistics[channel] = (logistics[channel] || 0) + orderRevenue;
+        if (orderRevenue > 0) {
+            origins[origin] = (origins[origin] || 0) + orderRevenue;
+            logistics[channel] = (logistics[channel] || 0) + orderRevenue;
 
-        if (!matrix[origin]) matrix[origin] = {};
-        matrix[origin][channel] = (matrix[origin][channel] || 0) + orderRevenue;
+            if (!matrix[origin]) matrix[origin] = {};
+            matrix[origin][channel] = (matrix[origin][channel] || 0) + orderRevenue;
+        }
     }
     
     return {
@@ -265,4 +276,3 @@ export default function CanaisEOrigensPage() {
     </div>
   );
 }
-
