@@ -48,7 +48,7 @@ export default function KpiCard({
                 {change} vs. período anterior
               </>
             ) : (
-              <span className="text-muted-foreground">{change}</span>
+              <span className="text-green-600">Novo</span>
             )}
             
           </p>

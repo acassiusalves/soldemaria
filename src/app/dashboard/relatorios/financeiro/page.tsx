@@ -26,7 +26,7 @@ import {
 import { getDbClient } from "@/lib/firebase";
 import type { VendaDetalhada } from "@/lib/data";
 import { DateRange } from "react-day-picker";
-import { eachDayOfInterval, endOfDay, format, isValid, parseISO, startOfMonth } from "date-fns";
+import { eachDayOfInterval, endOfDay, format, isValid, parseISO, startOfMonth, subDays, differenceInDays } from "date-fns";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -61,7 +61,7 @@ const calculateFinancialMetrics = (
   previousData: VendaDetalhada[], 
   dateRange?: DateRange
 ) => {
-    const processDataSet = (data: VendaDetalhada[]) => {
+    const processDataSet = (data: VendaDetalhada[], range?: DateRange) => {
       const salesGroups = new Map<string, VendaDetalhada[]>();
       data.forEach(sale => {
         const code = normCode(sale.codigo);
@@ -75,11 +75,11 @@ const calculateFinancialMetrics = (
       let totalShipping = 0;
       const byChannel: Record<string, BreakdownData> = {};
       const byOrigin: Record<string, BreakdownData> = {};
-      const byDay: Record<string, { date: string, revenue: number, discounts: number, cmv: number, shipping: number }> = {};
       
-      if (dateRange?.from) {
-          const start = dateRange.from;
-          const end = dateRange.to || dateRange.from;
+      const byDay: Record<string, { date: string, revenue: number, discounts: number, cmv: number, shipping: number }> = {};
+      if (range?.from) {
+          const start = range.from;
+          const end = range.to || range.from;
           const days = eachDayOfInterval({ start, end });
           days.forEach(day => {
               const dayKey = format(day, "yyyy-MM-dd");
@@ -145,7 +145,7 @@ const calculateFinancialMetrics = (
       };
     };
 
-    const current = processDataSet(currentData);
+    const current = processDataSet(currentData, dateRange);
     const previous = processDataSet(previousData);
 
     const calcChange = (currentVal: number, previousVal: number) => {
@@ -177,9 +177,24 @@ const calculateFinancialMetrics = (
         return Array.from(map.values()).sort((a,b) => b.revenue - a.revenue);
     }
     
+    const mergedChartData = current.byDay.map((dayData, index) => {
+        const previousDayData = previous.byDay[index] || {};
+        return {
+            date: dayData.date,
+            revenue: dayData.revenue,
+            discounts: dayData.discounts,
+            cmv: dayData.cmv,
+            shipping: dayData.shipping,
+            previousRevenue: previousDayData.revenue,
+            previousDiscounts: previousDayData.discounts,
+            previousCmv: previousDayData.cmv,
+            previousShipping: previousDayData.shipping,
+        }
+    })
+
     return {
         kpis,
-        chartData: current.byDay,
+        chartData: mergedChartData,
         channelData: mergeBreakdownData(current.byChannel, previous.byChannel),
         originData: mergeBreakdownData(current.byOrigin, previous.byOrigin),
     };
@@ -192,7 +207,15 @@ export default function FinanceiroPage() {
     from: startOfMonth(new Date()),
     to: new Date(),
   });
-  const [compareDate, setCompareDate] = React.useState<DateRange | undefined>(undefined);
+  const [compareDate, setCompareDate] = React.useState<DateRange | undefined>(() => {
+      const from = startOfMonth(new Date());
+      const to = new Date();
+      const diff = differenceInDays(to, from);
+      return {
+          from: subDays(from, diff + 1),
+          to: subDays(to, diff + 1),
+      }
+  });
 
 
   React.useEffect(() => {
@@ -268,17 +291,17 @@ export default function FinanceiroPage() {
       
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
         <KpiCard title="Faturamento Bruto" value={kpis.totalRevenue.value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} icon={<DollarSign />} change={hasComparison ? `${kpis.totalRevenue.change.toFixed(2)}%` : undefined} changeType={kpis.totalRevenue.change >= 0 ? 'positive' : 'negative'} />
-        <KpiCard title="Descontos" value={kpis.totalDiscounts.value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} icon={<TrendingDown />} change={hasComparison ? `${kpis.totalDiscounts.change.toFixed(2)}%` : undefined} changeType={kpis.totalDiscounts.change >= 0 ? 'positive' : 'negative'} />
-        <KpiCard title="CMV (Custo)" value={kpis.totalCmv.value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} icon={<Archive />} change={hasComparison ? `${kpis.totalCmv.change.toFixed(2)}%` : undefined} changeType={kpis.totalCmv.change >= 0 ? 'positive' : 'negative'} />
-        <KpiCard title="Frete" value={kpis.totalShipping.value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} icon={<Truck />} change={hasComparison ? `${kpis.totalShipping.change.toFixed(2)}%` : undefined} changeType={kpis.totalShipping.change >= 0 ? 'positive' : 'negative'} />
+        <KpiCard title="Descontos" value={kpis.totalDiscounts.value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} icon={<TrendingDown />} change={hasComparison ? `${kpis.totalDiscounts.change.toFixed(2)}%` : undefined} changeType={kpis.totalDiscounts.change >= 0 ? 'negative' : 'positive'} />
+        <KpiCard title="CMV (Custo)" value={kpis.totalCmv.value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} icon={<Archive />} change={hasComparison ? `${kpis.totalCmv.change.toFixed(2)}%` : undefined} changeType={kpis.totalCmv.change >= 0 ? 'negative' : 'positive'} />
+        <KpiCard title="Frete" value={kpis.totalShipping.value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} icon={<Truck />} change={hasComparison ? `${kpis.totalShipping.change.toFixed(2)}%` : undefined} changeType={kpis.totalShipping.change >= 0 ? 'negative' : 'positive'} />
         <KpiCard title="Margem Bruta" value={kpis.grossMargin.value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} icon={<Scale />} change={hasComparison ? `${kpis.grossMargin.change.toFixed(2)}%` : undefined} changeType={kpis.grossMargin.change >= 0 ? 'positive' : 'negative'} />
       </div>
 
        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-          <RevenueCostsChart title="Faturamento Bruto" data={chartData} dataKey="revenue" color="hsl(var(--chart-2))" />
-          <RevenueCostsChart title="Descontos" data={chartData} dataKey="discounts" color="hsl(var(--chart-3))" />
-          <RevenueCostsChart title="CMV (Custo)" data={chartData} dataKey="cmv" color="hsl(var(--chart-4))" />
-          <RevenueCostsChart title="Frete" data={chartData} dataKey="shipping" color="hsl(var(--chart-5))" />
+          <RevenueCostsChart title="Faturamento Bruto" data={chartData} dataKey="revenue" comparisonDataKey="previousRevenue" hasComparison={hasComparison} />
+          <RevenueCostsChart title="Descontos" data={chartData} dataKey="discounts" comparisonDataKey="previousDiscounts" hasComparison={hasComparison} />
+          <RevenueCostsChart title="CMV (Custo)" data={chartData} dataKey="cmv" comparisonDataKey="previousCmv" hasComparison={hasComparison} />
+          <RevenueCostsChart title="Frete" data={chartData} dataKey="shipping" comparisonDataKey="previousShipping" hasComparison={hasComparison} />
         </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

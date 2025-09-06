@@ -2,43 +2,56 @@
 "use client";
 
 import * as React from "react";
-import { Area, AreaChart, CartesianGrid, ResponsiveContainer, XAxis, YAxis, Tooltip } from "recharts";
+import { Area, AreaChart, CartesianGrid, ResponsiveContainer, XAxis, YAxis, Tooltip, Legend } from "recharts";
 import {
   ChartConfig,
   ChartContainer,
   ChartTooltipContent,
 } from "@/components/ui/chart";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
-import { format } from "date-fns";
+import { format, parseISO } from "date-fns";
+
+type ChartDataType = {
+  date: string;
+  revenue: number;
+  discounts: number;
+  cmv: number;
+  shipping: number;
+  previousRevenue?: number;
+  previousDiscounts?: number;
+  previousCmv?: number;
+  previousShipping?: number;
+};
 
 interface RevenueCostsChartProps {
   title: string;
-  data: {
-    date: string;
-    revenue: number;
-    discounts: number;
-    cmv: number;
-    shipping: number;
-  }[];
+  data: ChartDataType[];
   dataKey: "revenue" | "discounts" | "cmv" | "shipping";
-  color: string;
+  comparisonDataKey: "previousRevenue" | "previousDiscounts" | "previousCmv" | "previousShipping";
+  hasComparison: boolean;
 }
 
 const chartConfig = {
   value: {
-    label: "Valor",
+    label: "Período Atual",
+    color: "hsl(var(--chart-1))",
   },
+  previousValue: {
+      label: "Período Anterior",
+      color: "hsl(var(--chart-2))",
+  }
 } satisfies ChartConfig;
 
 
-export default function RevenueCostsChart({ title, data, dataKey, color }: RevenueCostsChartProps) {
+export default function RevenueCostsChart({ title, data, dataKey, comparisonDataKey, hasComparison }: RevenueCostsChartProps) {
   
   const chartData = React.useMemo(() => {
     return data.map(item => ({
-        date: format(new Date(item.date), "dd/MM"),
-        value: item[dataKey]
+        date: format(parseISO(item.date), "dd/MM"),
+        value: item[dataKey],
+        previousValue: hasComparison ? item[comparisonDataKey] : undefined,
     }))
-  }, [data, dataKey]);
+  }, [data, dataKey, comparisonDataKey, hasComparison]);
 
   return (
     <Card>
@@ -46,7 +59,7 @@ export default function RevenueCostsChart({ title, data, dataKey, color }: Reven
             <CardTitle>{title}</CardTitle>
         </CardHeader>
         <CardContent>
-             <ChartContainer config={{...chartConfig, value: {...chartConfig.value, color } }} className="min-h-[200px] w-full h-[250px]">
+             <ChartContainer config={chartConfig} className="min-h-[200px] w-full h-[250px]">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart
                   data={chartData}
@@ -79,18 +92,38 @@ export default function RevenueCostsChart({ title, data, dataKey, color }: Reven
                   <Tooltip
                     cursor={false}
                     content={<ChartTooltipContent
-                        formatter={(value) => typeof value === 'number' ? value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : value}
+                        formatter={(value, name) => {
+                            const label = chartConfig[name as keyof typeof chartConfig].label;
+                            const formattedValue = typeof value === 'number' ? value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : value
+                            return (
+                                <div className="flex items-center gap-2">
+                                    <div className="w-2 h-2 rounded-full" style={{backgroundColor: chartConfig[name as keyof typeof chartConfig].color}}/>
+                                    <span>{label}: {formattedValue}</span>
+                                </div>
+                            )
+                        }}
                         indicator="dot"
                      />}
                   />
+                  {hasComparison && <Legend />}
                   <Area
                     dataKey="value"
                     type="natural"
-                    fill={color}
+                    fill="var(--color-value)"
                     fillOpacity={0.4}
-                    stroke={color}
+                    stroke="var(--color-value)"
                     stackId="a"
                   />
+                  {hasComparison && (
+                    <Area
+                        dataKey="previousValue"
+                        type="natural"
+                        fill="var(--color-previousValue)"
+                        fillOpacity={0.2}
+                        stroke="var(--color-previousValue)"
+                        stackId="b"
+                    />
+                  )}
                 </AreaChart>
               </ResponsiveContainer>
             </ChartContainer>
