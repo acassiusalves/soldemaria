@@ -2,105 +2,92 @@
 "use client";
 
 import * as React from "react";
-import { Pie, PieChart, ResponsiveContainer, Tooltip, Cell, Legend, LabelProps } from "recharts";
+import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import {
   ChartConfig,
   ChartContainer,
   ChartTooltipContent,
-  ChartLegendContent,
 } from "@/components/ui/chart";
 
 interface OriginChartProps {
-  data: { name: string; value: number }[];
+  data: any[];
+  config: ChartConfig;
 }
 
-const chartConfig = {
-  value: {
-    label: "Receita",
-  },
-} satisfies ChartConfig;
-
-const COLORS = [
-  "hsl(var(--chart-1))",
-  "hsl(var(--chart-2))",
-  "hsl(var(--chart-3))",
-  "hsl(var(--chart-4))",
-  "hsl(var(--chart-5))",
-];
-
-const RADIAN = Math.PI / 180;
-const renderCustomizedLabel = (props: LabelProps & { percent: number }) => {
-  const { cx, cy, midAngle, innerRadius = 0, outerRadius = 0, percent } = props as any;
-  if (percent === 0) return null;
-  const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
-  const x = cx + radius * Math.cos(-midAngle * RADIAN);
-  const y = cy + radius * Math.sin(-midAngle * RADIAN);
+export default function OriginChart({ data, config }: OriginChartProps) {
+  if (!data || data.length === 0) {
+    return (
+      <div className="flex h-[300px] w-full items-center justify-center text-muted-foreground">
+        Nenhum dado para exibir.
+      </div>
+    );
+  }
 
   return (
-    <text
-      x={x}
-      y={y}
-      fill="white"
-      textAnchor={x > cx ? "start" : "end"}
-      dominantBaseline="central"
-      className="text-xs font-bold"
-    >
-      {`${(percent * 100).toFixed(0)}%`}
-    </text>
-  );
-};
-
-
-export default function OriginChart({ data }: OriginChartProps) {
-  const chartData = data.map((item, index) => ({
-    ...item,
-    fill: COLORS[index % COLORS.length],
-  }));
-
-  // Adicionando a configuração dinâmica ao chartConfig
-  chartData.forEach(item => {
-      chartConfig[item.name as keyof typeof chartConfig] = {
-          label: item.name,
-          color: item.fill,
-      }
-  })
-
-  return (
-    <ChartContainer config={chartConfig} className="min-h-[200px] w-full h-[300px]">
+    <ChartContainer config={config} className="min-h-[200px] w-full h-[300px]">
       <ResponsiveContainer width="100%" height="100%">
-        <PieChart>
-          <Tooltip
-            cursor={false}
-            content={<ChartTooltipContent 
-                hideLabel 
-                nameKey="name"
-                formatter={(value) => typeof value === 'number' ? value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : value}
-            />}
+        <AreaChart
+          data={data}
+          margin={{
+            left: -20,
+            right: 20,
+            top: 5,
+          }}
+        >
+          <XAxis
+            dataKey="day"
+            tickLine={false}
+            axisLine={false}
+            tickMargin={8}
+            tickCount={data.length}
+            fontSize={12}
           />
-          <Pie
-            data={chartData}
-            dataKey="value"
-            nameKey="name"
-            cx="50%"
-            cy="50%"
-            outerRadius={100}
-            strokeWidth={2}
-            labelLine={false}
-            label={renderCustomizedLabel}
-          >
-            {chartData.map((entry, index) => (
-              <Cell key={`cell-${index}`} fill={entry.fill} />
-            ))}
-          </Pie>
-          {chartData.length > 1 && (
-            <Legend
-              content={<ChartLegendContent nameKey="name" />}
-              verticalAlign="bottom"
-              align="center"
-              wrapperStyle={{paddingTop: 20}}
+          <YAxis
+            tickLine={false}
+            axisLine={false}
+            tickMargin={8}
+            tickCount={6}
+            fontSize={12}
+            tickFormatter={(value) =>
+                `R$${Number(value) / 1000}k`
+            }
+          />
+          <Tooltip
+            cursor={true}
+            content={
+              <ChartTooltipContent
+                indicator="dot"
+                formatter={(value, name) => (
+                    <div className="flex items-center gap-2">
+                        <div
+                            className="h-2 w-2 shrink-0 rounded-[2px]"
+                            style={{ backgroundColor: config[name]?.color }}
+                        />
+                        <div className="flex flex-1 justify-between">
+                            <span className="text-muted-foreground">{config[name]?.label || name}</span>
+                            <span className="font-bold">{typeof value === 'number' ? value.toLocaleString("pt-BR", {
+                                style: "currency",
+                                currency: "BRL",
+                            }) : value}</span>
+                        </div>
+                    </div>
+                )}
+                labelFormatter={(label) => `Dia ${label}`}
+              />
+            }
+          />
+          {Object.keys(config).map((key) => (
+            <Area
+              key={key}
+              dataKey={key}
+              type="natural"
+              fill={config[key].color}
+              fillOpacity={0.4}
+              stroke={config[key].color}
+              stackId="a"
             />
-          )}
-        </PieChart>
+          ))}
+        </AreaChart>
       </ResponsiveContainer>
     </ChartContainer>
   );

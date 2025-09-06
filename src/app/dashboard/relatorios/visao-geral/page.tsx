@@ -17,7 +17,7 @@ import { collection, onSnapshot, query, Timestamp } from "firebase/firestore";
 import { getDbClient } from "@/lib/firebase";
 import type { VendaDetalhada, Embalagem } from "@/lib/data";
 import { DateRange } from "react-day-picker";
-import { endOfDay, format, isValid, parseISO, startOfMonth } from "date-fns";
+import { endOfDay, format, isValid, parseISO, startOfMonth, eachDayOfInterval } from "date-fns";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -129,7 +129,7 @@ export default function VisaoGeralPage() {
     });
   }, [date, consolidatedData]);
 
-  const { kpis, logisticsChartData, originChartData } = React.useMemo(() => {
+  const { kpis, logisticsChartData, originChartData, originChartConfig } = React.useMemo(() => {
     const salesGroups = new Map<string, VendaDetalhada[]>();
 
     for (const sale of filteredData) {
@@ -146,6 +146,9 @@ export default function VisaoGeralPage() {
     const logistics: Record<string, number> = {};
     const origins: Record<string, number> = {};
     
+    const salesByDayAndOrigin: Record<string, Record<string, number>> = {};
+    const allOrigins = new Set<string>();
+
     for (const [code, sales] of salesGroups.entries()) {
       let headerRow: any = {};
       let subRows = sales.filter(isDetailRow);
@@ -165,6 +168,18 @@ export default function VisaoGeralPage() {
       if (headerRow.origemCliente) {
           origins[headerRow.origemCliente] = (origins[headerRow.origemCliente] || 0) + orderRevenue;
       }
+
+      // For area chart
+      const saleDate = toDate(headerRow.data);
+      if(saleDate && headerRow.origemCliente) {
+          const day = format(saleDate, "d");
+          const origin = headerRow.origemCliente;
+          allOrigins.add(origin);
+          if(!salesByDayAndOrigin[day]) {
+              salesByDayAndOrigin[day] = {};
+          }
+          salesByDayAndOrigin[day][origin] = (salesByDayAndOrigin[day][origin] || 0) + orderRevenue;
+      }
     }
     
     const kpisResult = {
@@ -175,10 +190,31 @@ export default function VisaoGeralPage() {
     };
     
     const logisticsChartData = Object.entries(logistics).map(([name, value]) => ({ name, value }));
-    const originChartData = Object.entries(origins).map(([name, value]) => ({ name, value }));
+    
+    const originAreaChartData = [];
+    const originColors = ["hsl(var(--chart-1))", "hsl(var(--chart-2))", "hsl(var(--chart-3))", "hsl(var(--chart-4))", "hsl(var(--chart-5))"];
+    const tempOriginChartConfig: ChartConfig = {};
+    Array.from(allOrigins).forEach((origin, index) => {
+        tempOriginChartConfig[origin] = {
+            label: origin,
+            color: originColors[index % originColors.length],
+        };
+    });
 
-    return { kpis: kpisResult, logisticsChartData, originChartData };
-  }, [filteredData]);
+    if (date?.from && date.to) {
+        const interval = eachDayOfInterval({ start: date.from, end: date.to });
+        for (const day of interval) {
+            const dayKey = format(day, "d");
+            const dayData: Record<string, any> = { day: dayKey };
+            for(const origin of allOrigins) {
+                dayData[origin] = salesByDayAndOrigin[dayKey]?.[origin] || 0;
+            }
+            originAreaChartData.push(dayData);
+        }
+    }
+
+    return { kpis: kpisResult, logisticsChartData, originChartData: originAreaChartData, originChartConfig: tempOriginChartConfig };
+  }, [filteredData, date]);
 
 
   return (
@@ -279,7 +315,7 @@ export default function VisaoGeralPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <OriginChart data={originChartData} />
+            <OriginChart data={originChartData} config={originChartConfig} />
           </CardContent>
         </Card>
       </div>
