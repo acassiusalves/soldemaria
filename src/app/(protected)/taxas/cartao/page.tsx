@@ -1,8 +1,6 @@
 
 
 "use client";
-export const dynamic = 'force-dynamic';
-export const revalidate = 0;
 
 import * as React from "react";
 import Link from "next/link";
