@@ -1,0 +1,7 @@
+.git
+.nixpacks
+Dockerfile
+.dockerignore
+node_modules
+.next
+*.log
