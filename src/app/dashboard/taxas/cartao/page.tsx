@@ -289,6 +289,15 @@ export default function TaxasCartaoPage() {
                 <DropdownMenuItem asChild>
                   <Link href="/dashboard/relatorios/canais-e-origens">Canais & Origens</Link>
                 </DropdownMenuItem>
+                 <DropdownMenuItem asChild>
+                  <Link href="/dashboard/relatorios/vendedores">Vendedores</Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href="/dashboard/relatorios/produtos">Produtos</Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href="/dashboard/relatorios/clientes">Clientes</Link>
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
            <DropdownMenu>
