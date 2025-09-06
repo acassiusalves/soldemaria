@@ -21,6 +21,7 @@ import {
   Tag,
   Truck,
   Archive,
+  FileText,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { User } from "firebase/auth";
@@ -262,6 +263,12 @@ export default function DashboardPage() {
             >
               Logística
             </Link>
+            <Link
+              href="/dashboard/relatorios"
+              className="text-muted-foreground transition-colors hover:text-foreground"
+            >
+              Relatórios
+            </Link>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                  <Button variant="ghost" className="flex items-center gap-1 text-muted-foreground transition-colors hover:text-foreground data-[state=open]:bg-accent px-3">
@@ -347,7 +354,7 @@ export default function DashboardPage() {
           </div>
         </header>
         <main className="flex flex-1 flex-col gap-4 p-4 md:gap-8 md:p-8">
-          <div className="grid gap-4 md:grid-cols-2 md:gap-8 lg:grid-cols-4">
+          <div className="grid gap-4 md:grid-cols-4">
             <SummaryCard 
                 title="Faturamento" 
                 value={summaryData.faturamento} 

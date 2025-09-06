@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import * as React from "react";
@@ -18,6 +17,7 @@ import {
   Wand2,
   Plug,
   ChevronDown,
+  FileText,
 } from "lucide-react";
 import {
   collection,
@@ -551,6 +551,12 @@ export default function CustosVendasPage() {
             className="text-muted-foreground transition-colors hover:text-foreground"
           >
             Logística
+          </Link>
+          <Link
+            href="/dashboard/relatorios"
+            className="text-muted-foreground transition-colors hover:text-foreground"
+          >
+            Relatórios
           </Link>
            <DropdownMenu>
             <DropdownMenuTrigger asChild>

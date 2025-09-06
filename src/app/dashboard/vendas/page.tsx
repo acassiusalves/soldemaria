@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import * as React from "react";
@@ -29,7 +28,7 @@ import {
   DollarSign,
   Truck,
   Archive,
-  Tag,
+  FileText,
 } from "lucide-react";
 import {
   collection,
@@ -316,8 +315,8 @@ const mergeForHeader = (base: any, row: any) => {
   // preenche primeiro valor não-vazio para campos do header
   const headerFields = [
     "data","codigo","tipo","nomeCliente","vendedor","cidade",
-    "origem","logistica","final","custoFrete","mov_estoque",
-    "valor", "origemCliente", "fidelizacao"
+    "origem", "origemCliente", "fidelizacao", "logistica","final","custoFrete","mov_estoque",
+    "valor"
   ];
   for (const k of headerFields) {
     if (isEmptyCell(out[k]) && !isEmptyCell(row[k])) out[k] = row[k];
@@ -1302,6 +1301,12 @@ React.useEffect(() => {
           >
             Logística
           </Link>
+           <Link
+            href="/dashboard/relatorios"
+            className="text-muted-foreground transition-colors hover:text-foreground"
+          >
+            Relatórios
+          </Link>
            <DropdownMenu>
             <DropdownMenuTrigger asChild>
                <Button variant="ghost" className="flex items-center gap-1 text-muted-foreground transition-colors hover:text-foreground data-[state=open]:bg-accent px-3">
@@ -1475,16 +1480,11 @@ React.useEffect(() => {
           )}
         </Card>
         
-        <div className="grid gap-4 md:grid-cols-4">
+        <div className="grid gap-4 md:grid-cols-3">
           <SummaryCard 
             title="Faturamento" 
             value={summaryData.faturamento} 
             icon={<DollarSign className="text-primary" />}
-          />
-          <SummaryCard 
-            title="Descontos" 
-            value={summaryData.descontos} 
-            icon={<Tag className="text-primary" />}
           />
           <SummaryCard 
             title="Custo Total" 
@@ -1532,4 +1532,3 @@ React.useEffect(() => {
     </>
   );
 }
-
