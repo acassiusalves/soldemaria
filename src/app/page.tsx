@@ -3,6 +3,9 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { format, subDays, startOfMonth, endOfMonth } from "date-fns";
+import { ptBR } from 'date-fns/locale';
+import type { DateRange } from "react-day-picker";
 import {
   Box,
   LayoutDashboard,
@@ -11,14 +14,17 @@ import {
   Plug,
   Settings,
   ShoppingBag,
-  ChevronDown
+  ChevronDown,
+  Calendar as CalendarIcon,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { User } from "firebase/auth";
 
 import { getAuthClient } from "@/lib/firebase";
+import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
 import {
   Card,
   CardContent,
@@ -34,6 +40,11 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import KpiCard from "@/components/kpi-card";
 import SalesChart from "@/components/sales-chart";
 import LogisticsChart from "@/components/logistics-chart";
@@ -67,6 +78,8 @@ const topProductsData = [
 function DashboardPage() {
   const router = useRouter();
   const [user, setUser] = React.useState<User | null>(null);
+  const [date, setDate] = React.useState<DateRange | undefined>(undefined);
+
 
    React.useEffect(() => {
     (async () => {
@@ -174,6 +187,46 @@ function DashboardPage() {
           </div>
         </header>
         <main className="flex flex-1 flex-col gap-4 p-4 md:gap-8 md:p-8">
+          <Card>
+            <CardHeader>
+                <CardTitle className="font-headline text-h3">Seleção de Período</CardTitle>
+                <CardDescription>Filtre os dados que você deseja analisar no painel.</CardDescription>
+            </CardHeader>
+            <CardContent>
+                <Popover>
+                <PopoverTrigger asChild>
+                    <Button
+                    id="date"
+                    variant={"outline"}
+                    className={cn("w-[300px] justify-start text-left font-normal", !date && "text-muted-foreground")}
+                    >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {date?.from ? (
+                        date.to ? (<>{format(date.from, "dd/MM/y")} - {format(date.to, "dd/MM/y")}</>) : (format(date.from, "dd/MM/y"))
+                    ) : (<span>Selecione uma data</span>)}
+                    </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                        locale={ptBR}
+                        initialFocus
+                        mode="range"
+                        defaultMonth={date?.from}
+                        selected={date}
+                        onSelect={setDate}
+                        numberOfMonths={2}
+                        presets={[
+                            { label: 'Hoje', range: { from: new Date(), to: new Date() } },
+                            { label: 'Ontem', range: { from: subDays(new Date(), 1), to: subDays(new Date(), 1) } },
+                            { label: 'Últimos 7 dias', range: { from: subDays(new Date(), 6), to: new Date() } },
+                            { label: 'Últimos 30 dias', range: { from: subDays(new Date(), 29), to: new Date() } },
+                            { label: 'Este mês', range: { from: startOfMonth(new Date()), to: endOfMonth(new Date()) } },
+                        ]}
+                    />
+                </PopoverContent>
+                </Popover>
+            </CardContent>
+          </Card>
           <div className="grid gap-4 md:grid-cols-2 md:gap-8 lg:grid-cols-4">
             <KpiCard
               title="Receita Total"
