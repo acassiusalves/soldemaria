@@ -1301,12 +1301,25 @@ React.useEffect(() => {
           >
             Logística
           </Link>
-           <Link
-            href="/dashboard/relatorios"
-            className="text-muted-foreground transition-colors hover:text-foreground"
-          >
-            Relatórios
-          </Link>
+           <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" className="flex items-center gap-1 text-muted-foreground transition-colors hover:text-foreground data-[state=open]:bg-accent px-3">
+                  Relatórios
+                  <ChevronDown className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                <DropdownMenuItem asChild>
+                  <Link href="/dashboard/relatorios/visao-geral">Visão Geral</Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href="/dashboard/relatorios/financeiro">Financeiro</Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href="/dashboard/relatorios/canais-e-origens">Canais & Origens</Link>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
            <DropdownMenu>
             <DropdownMenuTrigger asChild>
                <Button variant="ghost" className="flex items-center gap-1 text-muted-foreground transition-colors hover:text-foreground data-[state=open]:bg-accent px-3">
@@ -1480,11 +1493,16 @@ React.useEffect(() => {
           )}
         </Card>
         
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-4">
           <SummaryCard 
             title="Faturamento" 
             value={summaryData.faturamento} 
             icon={<DollarSign className="text-primary" />}
+          />
+           <SummaryCard 
+            title="Descontos" 
+            value={summaryData.descontos} 
+            icon={<Tag className="text-primary" />}
           />
           <SummaryCard 
             title="Custo Total" 
