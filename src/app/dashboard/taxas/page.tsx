@@ -1,16 +1,16 @@
 
+
 "use client";
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 
-// Esta página serve apenas para redirecionar para o painel principal.
-export default function Page() {
+export default function TaxasPage() {
   const router = useRouter();
 
   useEffect(() => {
-    router.replace('/dashboard');
+    router.replace('/dashboard/taxas/cartao');
   }, [router]);
 
-  return null; 
+  return null;
 }

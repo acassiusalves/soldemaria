@@ -28,19 +28,21 @@ export default function KpiCard({
       </CardHeader>
       <CardContent>
         <div className="text-2xl font-bold font-headline">{value}</div>
-        <p
-          className={cn(
-            "text-xs text-muted-foreground flex items-center",
-            isPositive ? "text-green-600" : "text-red-600"
-          )}
-        >
-          {isPositive ? (
-            <ArrowUpRight className="h-4 w-4 mr-1" />
-          ) : (
-            <ArrowDownRight className="h-4 w-4 mr-1" />
-          )}
-          {change}
-        </p>
+        {change && (
+           <p
+            className={cn(
+              "text-xs text-muted-foreground flex items-center",
+              isPositive ? "text-green-600" : "text-red-600"
+            )}
+          >
+            {isPositive ? (
+              <ArrowUpRight className="h-4 w-4 mr-1" />
+            ) : (
+              <ArrowDownRight className="h-4 w-4 mr-1" />
+            )}
+            {change}
+          </p>
+        )}
       </CardContent>
     </Card>
   );

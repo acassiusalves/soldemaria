@@ -5,7 +5,7 @@ import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { getAuthClient } from '@/lib/firebase';
 
-export default function ProtectedLayout({ children }: { children: React.ReactNode }) {
+export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
 
   useEffect(() => {
