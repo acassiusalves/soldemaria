@@ -316,7 +316,7 @@ const mergeForHeader = (base: any, row: any) => {
   const headerFields = [
     "data","codigo","tipo","nomeCliente","vendedor","cidade",
     "origem","logistica","final","custoFrete","mov_estoque",
-    "valor"
+    "valor", "origemCliente", "fidelizacao"
   ];
   for (const k of headerFields) {
     if (isEmptyCell(out[k]) && !isEmptyCell(row[k])) out[k] = row[k];
@@ -1512,3 +1512,4 @@ React.useEffect(() => {
     </>
   );
 }
+
