@@ -35,30 +35,37 @@ const salesInsightsFlow = ai.defineFlow(
     outputSchema: SalesInsightsOutputSchema,
   },
   async (input) => {
-    const prompt = `Você é a "Maria", uma analista de vendas expert da empresa "Sol de Maria". Sua tarefa é responder a perguntas sobre um conjunto de dados de vendas.
-    Seja concisa, direta e amigável em suas respostas. Aja como uma assistente prestativa.
-    Baseie sua resposta SOMENTE nos dados de vendas fornecidos. Não invente informações.
-    Se a resposta não estiver nos dados, informe que não encontrou a informação.
     
-    CONTEXTO ATUAL: O usuário está visualizando a página "${input.pathname}". Use isso para entender melhor a pergunta dele.
+    const salesDataIsEmpty = !input.salesData || input.salesData === '[]' || input.salesData.trim() === '';
+    const isGreeting = /^(oi|olá|ola|bom dia|boa tarde|boa noite)\b/i.test(input.question.trim());
 
-    Os dados de vendas (referentes ao período selecionado na tela) estão no seguinte formato JSON:
-    ${input.salesData}
-    
-    A pergunta do usuário é: "${input.question}"
-    
-    Analise os dados e forneça uma resposta clara e objetiva.`;
-    
-    // O Genkit SDK usará a chave de API passada aqui, se disponível.
-    // O ideal seria configurar no 'googleAI()' plugin, mas faremos o override por request.
+    let promptText: string;
+
+    if (isGreeting) {
+        promptText = `Você é a "Maria", uma IA amigável. O usuário disse "${input.question}". Responda com uma saudação curta e simpática.`;
+    } else if (salesDataIsEmpty) {
+        promptText = `Você é a "Maria", uma IA amigável. O usuário perguntou "${input.question}", mas não há dados de vendas para analisar. Informe ao usuário de forma educada que não há dados disponíveis no período selecionado e que ele deve escolher um período com vendas para que você possa ajudar.`;
+    } else {
+        promptText = `Você é a "Maria", uma analista de vendas expert da empresa "Sol de Maria". Sua tarefa é responder a perguntas sobre um conjunto de dados de vendas.
+        Seja concisa, direta e amigável em suas respostas. Aja como uma assistente prestativa.
+        Baseie sua resposta SOMENTE nos dados de vendas fornecidos. Não invente informações.
+        Se a resposta não estiver nos dados, informe que não encontrou a informação.
+        
+        CONTEXTO ATUAL: O usuário está visualizando a página "${input.pathname}". Use isso para entender melhor a pergunta dele.
+
+        Os dados de vendas (referentes ao período selecionado na tela) estão no seguinte formato JSON:
+        ${input.salesData}
+        
+        A pergunta do usuário é: "${input.question}"
+        
+        Analise os dados e forneça uma resposta clara e objetiva.`;
+    }
+
     const llmResponse = await ai.generate({
-      prompt: prompt,
+      prompt: promptText,
       config: {
-        temperature: 0.2, // Reduzir a "criatividade" para respostas mais factuais
+        temperature: 0.2,
       },
-      // Este campo não existe na definição do genkit, mas ilustra a intenção
-      // A chave de API será gerenciada pela configuração do plugin no lado do servidor
-      // A passagem via 'input' serve para cenários onde o client-side precisa autenticar
     });
 
     return {
