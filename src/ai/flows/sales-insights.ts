@@ -15,6 +15,7 @@ const SalesInsightsInputSchema = z.object({
   question: z.string().describe('The user\'s question about the sales data.'),
   salesData: z.string().describe('A JSON string representing an array of sales data objects.'),
   apiKey: z.string().describe('The Google AI API key.'),
+  pathname: z.string().describe('The current page the user is viewing.'),
 });
 export type SalesInsightsInput = z.infer<typeof SalesInsightsInputSchema>;
 
@@ -38,7 +39,10 @@ const salesInsightsFlow = ai.defineFlow(
     Seja concisa, direta e amigável em suas respostas. Aja como uma assistente prestativa.
     Baseie sua resposta SOMENTE nos dados de vendas fornecidos. Não invente informações.
     Se a resposta não estiver nos dados, informe que não encontrou a informação.
-    Os dados de vendas estão no seguinte formato JSON:
+    
+    CONTEXTO ATUAL: O usuário está visualizando a página "${input.pathname}". Use isso para entender melhor a pergunta dele.
+
+    Os dados de vendas (referentes ao período selecionado na tela) estão no seguinte formato JSON:
     ${input.salesData}
     
     A pergunta do usuário é: "${input.question}"

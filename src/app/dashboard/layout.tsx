@@ -2,7 +2,7 @@
 "use client";
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { getAuthClient, getDbClient } from '@/lib/firebase';
 import ChatBubble from '@/components/chat-bubble';
 import { collection, onSnapshot, query, Timestamp } from 'firebase/firestore';
@@ -10,6 +10,7 @@ import type { VendaDetalhada } from '@/lib/data';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
+  const pathname = usePathname();
   const [salesData, setSalesData] = useState<VendaDetalhada[]>([]);
 
   useEffect(() => {
@@ -48,7 +49,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   return (
     <>
         {children}
-        <ChatBubble salesData={salesData} />
+        <ChatBubble salesData={salesData} pathname={pathname} />
     </>
   );
 }

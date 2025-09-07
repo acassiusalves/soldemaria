@@ -14,6 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 
 interface ChatBubbleProps {
   salesData: any[];
+  pathname: string;
 }
 
 type Message = {
@@ -28,7 +29,7 @@ const GREETING_MESSAGE: Message = {
 
 const LAST_GREETING_KEY = "lastMariaGreetingDate";
 
-export default function ChatBubble({ salesData }: ChatBubbleProps) {
+export default function ChatBubble({ salesData, pathname }: ChatBubbleProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -103,6 +104,7 @@ export default function ChatBubble({ salesData }: ChatBubbleProps) {
         question: input,
         salesData: JSON.stringify(salesData),
         apiKey,
+        pathname,
       });
       
       const modelMessage: Message = { role: "model", content: result.answer };
