@@ -26,15 +26,43 @@ const GREETING_MESSAGE: Message = {
     content: "Olá, eu sou a Maria, a inteligência artificial da Sol de Maria.\n\nPosso te ajudar a encontrar informações sobre as vendas, clientes, produtos e por ai vai...",
 };
 
+const LAST_GREETING_KEY = "lastMariaGreetingDate";
+
 export default function ChatBubble({ salesData }: ChatBubbleProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [showGreetingBubble, setShowGreetingBubble] = useState(false);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
-  const handleToggle = () => setIsOpen(!isOpen);
+  useEffect(() => {
+    const today = new Date().toDateString();
+    const lastGreetingDate = localStorage.getItem(LAST_GREETING_KEY);
+
+    if (lastGreetingDate !== today) {
+        // Show greeting bubble for 5 seconds
+        const timer = setTimeout(() => {
+            setShowGreetingBubble(true);
+            localStorage.setItem(LAST_GREETING_KEY, today);
+        }, 2000); // Delay showing it slightly
+
+        const hideTimer = setTimeout(() => {
+            setShowGreetingBubble(false);
+        }, 7000); // Show for 5s then hide
+
+        return () => {
+            clearTimeout(timer);
+            clearTimeout(hideTimer);
+        }
+    }
+  }, []);
+
+  const handleToggle = () => {
+    setShowGreetingBubble(false);
+    setIsOpen(!isOpen);
+  }
 
   useEffect(() => {
     if (isOpen && messages.length === 0) {
@@ -186,16 +214,33 @@ export default function ChatBubble({ salesData }: ChatBubbleProps) {
         )}
       </AnimatePresence>
 
-      <motion.div
-        initial={{ scale: 0 }}
-        animate={{ scale: 1 }}
-        transition={{ delay: 0.5, type: "spring", stiffness: 260, damping: 20 }}
-        className="fixed bottom-5 right-5 z-50"
-      >
-        <Button onClick={handleToggle} size="icon" className="rounded-full w-14 h-14 shadow-lg">
-           {isOpen ? <X className="h-6 w-6"/> : <Sparkles className="h-6 w-6" />}
-        </Button>
-      </motion.div>
+      <div className="fixed bottom-5 right-5 z-50">
+          <AnimatePresence>
+            {showGreetingBubble && (
+              <motion.div
+                initial={{ opacity: 0, y: 10, scale: 0.9 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 10, scale: 0.9 }}
+                transition={{ duration: 0.3 }}
+                className="absolute bottom-full right-0 mb-3"
+              >
+                <div className="bg-background shadow-lg rounded-lg p-3 text-sm relative">
+                  Oi 👋
+                  <div className="absolute -bottom-1 right-4 w-0 h-0 border-x-8 border-x-transparent border-t-8 border-t-background"></div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        <motion.div
+          initial={{ scale: 0 }}
+          animate={{ scale: 1 }}
+          transition={{ delay: 0.5, type: "spring", stiffness: 260, damping: 20 }}
+        >
+          <Button onClick={handleToggle} size="icon" className="rounded-full w-14 h-14 shadow-lg">
+            {isOpen ? <X className="h-6 w-6"/> : <Sparkles className="h-6 w-6" />}
+          </Button>
+        </motion.div>
+      </div>
     </>
   );
 }
