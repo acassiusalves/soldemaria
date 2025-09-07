@@ -11,7 +11,8 @@ import {
   XAxis,
   YAxis,
   Legend,
-  CartesianGrid
+  CartesianGrid,
+  Cell,
 } from "recharts";
 import {
   ChartConfig,
@@ -63,11 +64,13 @@ export default function AbcCurveChart({ data }: AbcCurveChartProps) {
     );
   }
 
-  const CustomBar = (props: any) => {
-    const { x, y, width, height, payload } = props;
-    const color = chartConfig[payload.class as 'A' | 'B' | 'C'].color;
-    return <rect x={x} y={y} width={width} height={height} fill={color} />;
-  };
+  const legendPayload = Object.entries(chartConfig)
+    .filter(([key]) => ['A', 'B', 'C'].includes(key))
+    .map(([key, value]) => ({
+        value: value.label,
+        type: 'square',
+        color: value.color,
+    }));
 
   return (
     <ChartContainer config={chartConfig} className="min-h-[200px] w-full h-[400px]">
@@ -120,18 +123,20 @@ export default function AbcCurveChart({ data }: AbcCurveChartProps) {
                     }
                     return String(value)
                 }}
-                labelFormatter={(label) => `Rank: ${Number(label)+1}`}
+                labelFormatter={(label, payload) => {
+                    const rank = data.findIndex(d => d.name === payload[0]?.payload.name)
+                    return `Rank: ${rank+1}`
+                }}
              />}
           />
-          <Legend />
+          <Legend payload={legendPayload} />
           <Bar
             yAxisId="left"
             dataKey="revenue"
             name="Faturamento"
-            shape={<CustomBar />}
           >
              {data.map((entry, index) => (
-                <rect key={`bar-${index}`} fill={chartConfig[entry.class].color} />
+                <Cell key={`cell-${index}`} fill={chartConfig[entry.class].color} />
              ))}
           </Bar>
           <Line
@@ -148,4 +153,3 @@ export default function AbcCurveChart({ data }: AbcCurveChartProps) {
     </ChartContainer>
   );
 }
-
