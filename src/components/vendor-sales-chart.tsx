@@ -27,13 +27,14 @@ interface VendorSalesChartProps {
 const generateChartConfig = (vendors: string[]): ChartConfig => {
   const config: ChartConfig = {};
   vendors.forEach((vendor, index) => {
+    const colorKey = `hsl(var(--chart-${(index % 5) + 1}))`;
     config[`${vendor}-current`] = {
       label: `${vendor} (Atual)`,
-      color: `hsl(var(--chart-${(index % 5) + 1}))`,
+      color: colorKey,
     };
      config[`${vendor}-previous`] = {
       label: `${vendor} (Anterior)`,
-      color: `hsl(var(--chart-${(index % 5) + 1}))`,
+      color: colorKey,
     };
   });
   return config;
@@ -42,7 +43,7 @@ const generateChartConfig = (vendors: string[]): ChartConfig => {
 export default function VendorSalesChart({ data, vendors, hasComparison }: VendorSalesChartProps) {
     const chartConfig = React.useMemo(() => generateChartConfig(vendors), [vendors]);
     
-  if (data.length === 0) {
+  if (data.length === 0 || vendors.length === 0) {
     return (
       <div className="flex h-80 w-full items-center justify-center rounded-lg border-2 border-dashed">
         <p className="text-muted-foreground">
@@ -86,7 +87,7 @@ export default function VendorSalesChart({ data, vendors, hasComparison }: Vendo
                     const label = chartConfig[configKey]?.label || name;
                     return (
                         <div className="flex items-center gap-2">
-                            <div className="w-2 h-2 rounded-full" style={{backgroundColor: `var(--color-${configKey})`}}/>
+                            <div className="w-2 h-2 rounded-full" style={{backgroundColor: chartConfig[configKey]?.color}}/>
                             <span className="font-medium">{label}:</span>
                             <span className="text-muted-foreground">{typeof value === 'number' ? value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : value}</span>
                         </div>
@@ -101,8 +102,8 @@ export default function VendorSalesChart({ data, vendors, hasComparison }: Vendo
                 <Line
                     type="monotone"
                     dataKey={`${vendor}-current`}
-                    name={`${vendor} (Atual)`}
-                    stroke={`var(--color-${vendor}-current)`}
+                    name={chartConfig[`${vendor}-current`]?.label as string}
+                    stroke={chartConfig[`${vendor}-current`]?.color}
                     strokeWidth={2}
                     dot={false}
                 />
@@ -110,8 +111,8 @@ export default function VendorSalesChart({ data, vendors, hasComparison }: Vendo
                     <Line
                         type="monotone"
                         dataKey={`${vendor}-previous`}
-                        name={`${vendor} (Anterior)`}
-                        stroke={`var(--color-${vendor}-previous)`}
+                        name={chartConfig[`${vendor}-previous`]?.label as string}
+                        stroke={chartConfig[`${vendor}-previous`]?.color}
                         strokeWidth={2}
                         strokeDasharray="5 5"
                         dot={false}
