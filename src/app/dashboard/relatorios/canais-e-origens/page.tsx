@@ -68,15 +68,16 @@ const isDetailRow = (row: Record<string, any>) =>
   !isEmptyCell(row.item) || !isEmptyCell(row.descricao);
 
 const mergeForHeader = (base: any, row: any) => {
-  let out = { ...base };
+  const out = { ...base };
   const headerFields = [
     "data", "codigo", "tipo", "nomeCliente", "vendedor", "cidade",
     "origem", "origemCliente", "fidelizacao", "logistica", "final", "custoFrete",
   ];
   for (const k of headerFields) {
-    // CORREÇÃO: Garante que o valor seja preenchido se a linha atual tiver um valor e o base não.
-    if (!isEmptyCell(row[k]) && isEmptyCell(out[k])) {
-      out[k] = row[k];
+    if (!isEmptyCell(row[k])) {
+        out[k] = row[k];
+    } else if (isEmptyCell(out[k])) {
+        out[k] = row[k];
     }
   }
   return out;
