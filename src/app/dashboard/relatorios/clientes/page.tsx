@@ -73,7 +73,7 @@ const calculateCustomerMetrics = (data: VendaDetalhada[]) => {
     const customerData: Record<string, { revenue: number; orders: Set<string> }> = {};
     
     data.forEach(sale => {
-        const customerName = sale.nomeCliente?.trim();
+        const customerName = String(sale.nomeCliente || '').trim();
         if (!customerName) return;
 
         if (!customerData[customerName]) {
