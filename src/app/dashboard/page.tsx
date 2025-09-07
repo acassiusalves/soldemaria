@@ -462,7 +462,6 @@ export default function DashboardPage() {
             </Card>
           </div>
         </main>
-        <ChatBubble salesData={filteredData} />
       </div>
   );
 }

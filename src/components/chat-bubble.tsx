@@ -100,7 +100,7 @@ export default function ChatBubble({ salesData }: ChatBubbleProps) {
               <CardHeader className="flex flex-row items-center justify-between">
                 <div className="flex items-center gap-2">
                     <Sparkles className="h-6 w-6 text-primary" />
-                    <CardTitle className="font-headline">Seu Analista de Vendas</CardTitle>
+                    <CardTitle className="font-headline">Assistente Maria</CardTitle>
                 </div>
                 <Button variant="ghost" size="icon" onClick={handleToggle} className="h-7 w-7">
                     <X className="h-4 w-4" />
