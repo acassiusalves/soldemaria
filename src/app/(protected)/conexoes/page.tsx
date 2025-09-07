@@ -16,6 +16,7 @@ import {
   EyeOff,
   CheckCircle,
   ChevronDown,
+  FileText,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { getAuthClient } from "@/lib/firebase";
@@ -115,30 +116,58 @@ export default function ConexoesPage() {
       <header className="sticky top-0 flex h-16 items-center gap-4 border-b bg-background px-4 md:px-6">
         <nav className="hidden flex-col gap-6 text-lg font-medium md:flex md:flex-row md:items-center md:gap-5 md:text-sm lg:gap-6">
           <Link
-            href="/"
+            href="/dashboard"
             className="flex items-center gap-2 text-lg font-semibold md:text-base"
           >
             <Logo className="size-8 text-primary" />
             <span className="text-xl font-semibold font-headline">Visão de Vendas</span>
           </Link>
           <Link
-            href="/"
+            href="/dashboard"
             className="text-muted-foreground transition-colors hover:text-foreground"
           >
             Painel
           </Link>
           <Link
-            href="/vendas"
+            href="/dashboard/vendas"
             className="text-muted-foreground transition-colors hover:text-foreground"
           >
             Vendas
           </Link>
           <Link
-            href="/logistica"
+            href="/dashboard/logistica"
             className="text-muted-foreground transition-colors hover:text-foreground"
           >
             Logística
           </Link>
+          <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" className="flex items-center gap-1 text-muted-foreground transition-colors hover:text-foreground data-[state=open]:bg-accent px-3">
+                  Relatórios
+                  <ChevronDown className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                <DropdownMenuItem asChild>
+                  <Link href="/dashboard/relatorios/visao-geral">Visão Geral</Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href="/dashboard/relatorios/financeiro">Financeiro</Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href="/dashboard/relatorios/canais-e-origens">Canais & Origens</Link>
+                </DropdownMenuItem>
+                 <DropdownMenuItem asChild>
+                  <Link href="/dashboard/relatorios/vendedores">Vendedores</Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href="/dashboard/relatorios/produtos">Produtos</Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href="/dashboard/relatorios/clientes">Clientes</Link>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
            <DropdownMenu>
             <DropdownMenuTrigger asChild>
                <Button variant="ghost" className="flex items-center gap-1 text-muted-foreground transition-colors hover:text-foreground data-[state=open]:bg-accent px-3">
@@ -148,18 +177,18 @@ export default function ConexoesPage() {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start">
               <DropdownMenuItem asChild>
-                <Link href="/taxas/cartao">Taxas do Cartão</Link>
+                <Link href="/dashboard/taxas/cartao">Taxas do Cartão</Link>
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
-                <Link href="/taxas/custos">Custos sobre Vendas</Link>
+                <Link href="/dashboard/taxas/custos">Custos sobre Vendas</Link>
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
-                <Link href="/taxas/custos-embalagem">Custos Embalagem</Link>
+                <Link href="/dashboard/taxas/custos-embalagem">Custos Embalagem</Link>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
           <Link
-            href="/conexoes"
+            href="/dashboard/conexoes"
             className="text-foreground transition-colors hover:text-foreground"
           >
             Conexões
