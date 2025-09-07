@@ -26,6 +26,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { ptBR } from "date-fns/locale";
 import { Calendar as CalendarIcon } from "lucide-react";
 import ProductPerformanceTable from "@/components/product-performance-table";
+import AbcCurveChart from "@/components/abc-curve-chart";
 
 const toDate = (value: unknown): Date | null => {
   if (!value) return null;
@@ -73,8 +74,8 @@ const calculateProductMetrics = (data: VendaDetalhada[]) => {
     });
 
     const totalRevenue = Object.values(products).reduce((sum, p) => sum + p.revenue, 0);
-
-    return Object.entries(products).map(([name, metrics]) => ({
+    
+    const sortedProducts = Object.entries(products).map(([name, metrics]) => ({
         name,
         revenue: metrics.revenue,
         quantity: metrics.quantity,
@@ -82,6 +83,30 @@ const calculateProductMetrics = (data: VendaDetalhada[]) => {
         averagePrice: metrics.quantity > 0 ? metrics.revenue / metrics.quantity : 0,
         share: totalRevenue > 0 ? (metrics.revenue / totalRevenue) * 100 : 0,
     })).sort((a,b) => b.revenue - a.revenue);
+
+    let cumulativeRevenue = 0;
+    const abcData = sortedProducts.map(p => {
+        cumulativeRevenue += p.revenue;
+        const cumulativePercentage = totalRevenue > 0 ? (cumulativeRevenue / totalRevenue) * 100 : 0;
+        
+        let abcClass: 'A' | 'B' | 'C' = 'C';
+        if (cumulativePercentage <= 80) {
+            abcClass = 'A';
+        } else if (cumulativePercentage <= 95) {
+            abcClass = 'B';
+        }
+        
+        return {
+            ...p,
+            cumulativePercentage,
+            class: abcClass,
+        }
+    });
+
+    return {
+        tableData: abcData,
+        abcChartData: abcData,
+    };
 };
 
 
@@ -127,18 +152,20 @@ export default function ProdutosPage() {
         };
     }, [allSales, date, compareDate]);
 
-    const tableData = React.useMemo(() => {
-        const currentMetrics = calculateProductMetrics(filteredData);
+    const { tableData, abcChartData } = React.useMemo(() => {
+        const { tableData: currentMetrics, abcChartData: currentAbcData } = calculateProductMetrics(filteredData);
         if (!compareDate) {
-            return currentMetrics;
+            return { tableData: currentMetrics, abcChartData: currentAbcData };
         }
-        const previousMetrics = calculateProductMetrics(comparisonData);
+        const { tableData: previousMetrics } = calculateProductMetrics(comparisonData);
         const previousMetricsMap = new Map(previousMetrics.map(p => [p.name, p]));
 
-        return currentMetrics.map(currentProduct => ({
+        const combinedTableData = currentMetrics.map(currentProduct => ({
             ...currentProduct,
             previousRevenue: previousMetricsMap.get(currentProduct.name)?.revenue,
         }));
+        
+        return { tableData: combinedTableData, abcChartData: currentAbcData };
     }, [filteredData, comparisonData, compareDate]);
     
     const hasComparison = !!compareDate;
@@ -197,6 +224,17 @@ export default function ProdutosPage() {
             )}
         </CardContent>
       </Card>
+       <Card>
+        <CardHeader>
+          <CardTitle>Curva ABC de Produtos</CardTitle>
+           <CardDescription>
+            Análise de Pareto para classificar produtos com base na sua contribuição para o faturamento.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+            <AbcCurveChart data={abcChartData} />
+        </CardContent>
+      </Card>
       
       <Card>
         <CardHeader>
@@ -209,3 +247,4 @@ export default function ProdutosPage() {
     </div>
   );
 }
+
