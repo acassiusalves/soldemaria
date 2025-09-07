@@ -67,23 +67,6 @@ const isEmptyCell = (v: any) => {
 const isDetailRow = (row: Record<string, any>) =>
   !isEmptyCell(row.item) || !isEmptyCell(row.descricao);
 
-const mergeForHeader = (base: any, row: any) => {
-  const out = { ...base };
-  const headerFields = [
-    "data", "codigo", "tipo", "nomeCliente", "vendedor", "cidade",
-    "origem", "origemCliente", "fidelizacao", "logistica", "final", "custoFrete",
-  ];
-  for (const k of headerFields) {
-    if (!isEmptyCell(row[k])) {
-        out[k] = row[k];
-    } else if (isEmptyCell(out[k])) {
-        out[k] = row[k];
-    }
-  }
-  return out;
-};
-
-
 // helper: número BR
 const numBR = (v: any): number => {
   if (v == null) return 0;
@@ -110,13 +93,41 @@ const normStr = (s: any) =>
     .toLowerCase()
     .trim();
 
+// === NOVOS HELPERS ===
+const pick = (obj: any, keys: string[]) => {
+  for (const k of keys) {
+    const v = obj?.[k];
+    if (!isEmptyCell(v)) return v;
+  }
+  return undefined;
+};
+
+// Prioriza linhas de cabeçalho (sem item/descrição) e depois qualquer linha
+const pickFromGroup = (rows: any[], keys: string[]) => {
+  const headers = rows.filter(r => !isDetailRow(r));
+  for (const r of headers) { const v = pick(r, keys); if (!isEmptyCell(v)) return v; }
+  for (const r of rows)    { const v = pick(r, keys); if (!isEmptyCell(v)) return v; }
+  return undefined;
+};
+
+// Sinônimos comuns em planilhas/Firestore
+const CODE_KEYS   = ["codigo","pedido","n_pedido","numero","num_pedido","id"];
+const TIPO_KEYS   = ["tipo","tipo de venda","tipoVenda","Tipo","canal","canal_venda"];
+const FINAL_KEYS  = ["final","valor final","valor_final","valorFinal","total","valor total","valor_total"];
+const UNIT_KEYS   = ["valorUnitario","valor unitario","preco_unitario","preço unitário","preco","preço","unitario"];
+const QTY_KEYS    = ["quantidade","qtd","qtde","qte","itens","itens_total"];
+const ORIGIN_KEYS = ["origemCliente","origem","source"];
+
+// === CÁLCULO ROBUSTO POR CANAL ===
 const calculateChannelMetrics = (data: VendaDetalhada[]) => {
   const salesGroups = new Map<string, VendaDetalhada[]>();
-  data.forEach((sale) => {
-    const code = normCode(sale.codigo);
+
+  data.forEach((row) => {
+    const codeRaw = pick(row, CODE_KEYS);
+    const code = normCode(codeRaw) || String((row as any).id || "");
     if (!code) return;
     if (!salesGroups.has(code)) salesGroups.set(code, []);
-    salesGroups.get(code)!.push(sale);
+    salesGroups.get(code)!.push(row);
   });
 
   const channels: Record<string, { revenue: number; orders: number; items: number }> = {
@@ -127,56 +138,54 @@ const calculateChannelMetrics = (data: VendaDetalhada[]) => {
   const logistics: Record<string, number> = {};
   const matrix: Record<string, Record<string, number>> = {};
 
-  for (const [, sales] of salesGroups.entries()) {
-    // junta header
-    let headerRow: any = {};
-    sales.forEach((row) => { headerRow = mergeForHeader(headerRow, row); });
+  for (const [, rows] of salesGroups.entries()) {
+    const detailRows = rows.filter(isDetailRow);
 
-    const detailRows = sales.filter(isDetailRow);
+    // --- identificar canal (tolerante) ---
+    const tipoRaw  = pickFromGroup(rows, TIPO_KEYS) ?? "";
+    const tipoNorm = normStr(tipoRaw);
+    const isLoja   = /(^|[\s\-_.])loja($|[\s\-_.])/.test(tipoNorm) || tipoNorm.includes("venda loja");
+    const channel  = isLoja ? "Loja" : "Delivery";
 
-    // ===== classificação do canal (tolerante) =====
-    const tipoNorm = normStr(headerRow.tipo || headerRow["tipo de venda"] || headerRow["Tipo"]);
-    const isLoja = /(^|[\s\-_.])loja($|[\s\-_.])/.test(tipoNorm) || tipoNorm.includes("venda loja");
-    const channel = isLoja ? "Loja" : "Delivery";
-
-    // ===== receita e itens por regra =====
+    // --- receita e itens conforme a sua regra ---
     let orderRevenue = 0;
-    let totalItems = 0;
+    let totalItems   = 0;
 
     if (isLoja) {
-      // Loja: sempre Valor final do cabeçalho (pedido)
-      orderRevenue = numBR(headerRow.final);
-      totalItems = numBR(headerRow.quantidade) ||
-                   (orderRevenue > 0 ? 1 : 0);
+      // Loja: SEMPRE a coluna "Valor final" do cabeçalho (ou sinônimos)
+      const finalRaw = pickFromGroup(rows, FINAL_KEYS);
+      orderRevenue   = numBR(finalRaw);
+      totalItems     = numBR(pickFromGroup(rows, QTY_KEYS)) || (orderRevenue > 0 ? 1 : 0);
     } else {
-      // Delivery: soma unitário * quantidade das linhas
+      // Delivery: soma unitário*quantidade por item; fallback para "final" da linha/cabeçalho
       if (detailRows.length > 0) {
-        orderRevenue = detailRows.reduce(
-          (acc, s) => acc + numBR(s.valorUnitario) * numBR(s.quantidade),
-          0
-        );
-        totalItems = detailRows.reduce((acc, s) => acc + numBR(s.quantidade), 0);
+        for (const s of detailRows) {
+          const qty  = numBR(pick(s, QTY_KEYS));
+          const unit = numBR(pick(s, UNIT_KEYS));
+          // se não tiver unitário, usa total da linha (final)
+          const line = (unit && qty) ? unit * qty : numBR(pick(s, FINAL_KEYS));
+          orderRevenue += Math.max(0, line);
+          totalItems   += qty || (line > 0 ? 1 : 0);
+        }
       } else {
-        // fallback se vier sem detalhe
-        orderRevenue = numBR(headerRow.final);
-        totalItems = numBR(headerRow.quantidade) || (orderRevenue > 0 ? 1 : 0);
+        // sem detalhe → usa "final" do cabeçalho
+        orderRevenue = numBR(pickFromGroup(rows, FINAL_KEYS));
+        totalItems   = numBR(pickFromGroup(rows, QTY_KEYS)) || (orderRevenue > 0 ? 1 : 0);
       }
     }
 
-    // trava negativos/NaN
     orderRevenue = Math.max(0, orderRevenue);
-    totalItems = Math.max(0, totalItems);
+    totalItems   = Math.max(0, totalItems);
 
-    const origin = headerRow.origemCliente || "N/A";
+    const origin = pickFromGroup(rows, ORIGIN_KEYS) ?? "N/A";
 
     channels[channel].revenue += orderRevenue;
-    channels[channel].orders += 1;
-    channels[channel].items += totalItems;
+    channels[channel].orders  += 1;
+    channels[channel].items   += totalItems;
 
     if (orderRevenue > 0) {
-      origins[origin] = (origins[origin] || 0) + orderRevenue;
-      logistics[channel] = (logistics[channel] || 0) + orderRevenue;
-
+      origins[origin]     = (origins[origin]     || 0) + orderRevenue;
+      logistics[channel]  = (logistics[channel]  || 0) + orderRevenue;
       if (!matrix[origin]) matrix[origin] = {};
       matrix[origin][channel] = (matrix[origin][channel] || 0) + orderRevenue;
     }
