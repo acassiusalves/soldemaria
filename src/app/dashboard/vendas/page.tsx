@@ -42,6 +42,7 @@ import {
   getDoc,
   arrayRemove,
   query,
+  where,
   getDocsFromServer,
 } from "firebase/firestore";
 import { motion } from "framer-motion";
@@ -736,7 +737,7 @@ const syncExistingCustomColumns = React.useCallback(async () => {
     
     if (needsOrderUpdate) {
         setColumnOrder(currentOrder);
-        await saveUserPreference(auth.currentUser.uid, 'vendas_columns_order', currentOrder);
+        await saveUserPreference(auth.currentUser.uid, 'vendas_columns_order', newOrder);
     }
     
 }, [customCalculations, columnVisibility, columnOrder]);
@@ -1237,6 +1238,36 @@ React.useEffect(() => {
       _t({ title: "Erro na Limpeza", description: "Não foi possível apagar todos os dados. Verifique o console.", variant: "destructive" });
     }
   };
+
+  const handleDeleteOrder = async (orderCode: number | string) => {
+    if (!orderCode) return;
+    const db = await getDbClient();
+    if (!db) return;
+
+    try {
+      const q = query(collection(db, "vendas"), where("codigo", "==", orderCode));
+      const querySnapshot = await getDocsFromServer(q);
+      
+      if (querySnapshot.empty) {
+        toast({ title: "Pedido não encontrado", description: "Nenhuma venda encontrada com este código.", variant: "default" });
+        return;
+      }
+      
+      const batch = writeBatch(db);
+      querySnapshot.forEach((doc) => {
+        batch.delete(doc.ref);
+      });
+
+      await batch.commit();
+
+      setVendasData(prev => prev.filter(v => normCode(v.codigo) !== normCode(orderCode)));
+
+      toast({ title: "Sucesso!", description: `Pedido ${orderCode} foi removido com sucesso.` });
+    } catch (error) {
+      console.error("Error deleting order:", error);
+      toast({ title: "Erro ao Excluir", description: "Não foi possível remover o pedido.", variant: "destructive" });
+    }
+  };
   
     const availableFormulaColumns = React.useMemo(() => {
     const allColumns = [...columns, ...customCalculations.map(c => ({ id: c.id, label: c.name, isSortable: true }))];
@@ -1545,6 +1576,7 @@ React.useEffect(() => {
                 })();
             }}
             taxasOperadoras={taxasOperadoras}
+            onDeleteOrder={handleDeleteOrder}
         />
       </main>
     </div>

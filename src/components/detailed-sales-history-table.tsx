@@ -5,7 +5,7 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { ArrowUpDown, Columns, ChevronRight, X, Eye, EyeOff, Save, Loader2, Settings2, GripVertical, Calculator, Search, Info, Package } from "lucide-react";
+import { ArrowUpDown, Columns, ChevronRight, X, Eye, EyeOff, Save, Loader2, Settings2, GripVertical, Calculator, Search, Info, Package, Trash2 } from "lucide-react";
 import { VendaDetalhada, CustomCalculation, Operadora } from "@/lib/data";
 import {
   Table,
@@ -36,6 +36,17 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import {
   DndContext,
   closestCenter,
@@ -141,7 +152,7 @@ interface DetailedSalesHistoryTableProps {
     columnVisibility?: ColumnVisibility;
     onVisibilityChange?: (newVisibility: ColumnVisibility) => void;
     columnOrder?: ColumnOrder;
-    onOrderChange?: (newOrder: ColumnOrder) => void;
+    onOrderChange?: (newOrder: string[]) => void;
     onSavePreferences?: (key: "vendas_columns_visibility" | "vendas_columns_order", value: any) => void;
     isLoadingPreferences?: boolean;
     isSavingPreferences?: boolean;
@@ -149,6 +160,7 @@ interface DetailedSalesHistoryTableProps {
     taxasOperadoras?: Operadora[];
     isLogisticsPage?: boolean;
     isCostsPage?: boolean;
+    onDeleteOrder?: (orderCode: number | string) => void;
 }
 
 const MultiSelectFilter = ({
@@ -384,6 +396,7 @@ export default function DetailedSalesHistoryTable({
     taxasOperadoras = [],
     isLogisticsPage = false,
     isCostsPage = false,
+    onDeleteOrder,
 }: DetailedSalesHistoryTableProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const [sortKey, setSortKey] = useState<SortKey>("data");
@@ -957,6 +970,7 @@ const renderEmbalagemTab = (row: any) => {
                     </TableHead>
                   )
                 ))}
+                 {onDeleteOrder && <TableHead className="w-[50px]"></TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -976,10 +990,35 @@ const renderEmbalagemTab = (row: any) => {
                            {renderCell(row, col.id)}
                          </TableCell>
                        ))}
+                       {onDeleteOrder && (
+                          <TableCell>
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10">
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Você tem certeza?</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    Esta ação não pode ser desfeita. Isso excluirá permanentemente todas as entradas para o pedido <strong>{row.codigo}</strong>.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                  <AlertDialogAction onClick={() => onDeleteOrder(row.codigo)}>
+                                    Sim, excluir pedido
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          </TableCell>
+                        )}
                     </TableRow>
                     {expandedRows.has(row.id) && (
                         <TableRow>
-                            <TableCell colSpan={visibleColumns.length + 1} className="p-2 bg-muted/50">
+                            <TableCell colSpan={visibleColumns.length + (onDeleteOrder ? 2 : 1)} className="p-2 bg-muted/50">
                                 <Tabs defaultValue="items" className="w-full">
                                     <TabsList>
                                         <TabsTrigger value="items" disabled={!row.subRows || row.subRows.length === 0}>Itens do Pedido</TabsTrigger>
@@ -1058,7 +1097,7 @@ const renderEmbalagemTab = (row: any) => {
                 ))
               ) : (
                 <TableRow>
-                  <TableCell colSpan={visibleColumns.length + 1} className="h-24 text-center">
+                  <TableCell colSpan={visibleColumns.length + (onDeleteOrder ? 2 : 1)} className="h-24 text-center">
                     Nenhum resultado encontrado.
                   </TableCell>
                 </TableRow>
