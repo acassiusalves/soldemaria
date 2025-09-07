@@ -169,25 +169,29 @@ export default function DashboardPage() {
     kpisResult.totalSales = salesGroups.size;
 
     for(const [code, sales] of salesGroups.entries()) {
-        const mainSale = sales[0]; // Header data is mostly the same
-        const totalFinal = sales.reduce((acc, s) => acc + (Number(s.final) || 0), 0);
-        const totalDescontos = sales.reduce((acc, s) => acc + (Number(s.valorDescontos) || 0), 0);
-        const custoTotal = sales.reduce((acc, s) => acc + (Number(s.custoTotal) || 0), 0);
-        const custoFrete = sales.reduce((acc, s) => acc + (Number(s.custoFrete) || 0), 0);
+        const mainSale = sales.find(s => !s.item && !s.descricao) || sales[0];
+        const itemSales = sales.filter(s => s.item || s.descricao);
         
-        summary.faturamento += totalFinal - totalDescontos;
+        const totalFinal = itemSales.reduce((acc, s) => acc + ((Number(s.valorUnitario) || 0) * (Number(s.quantidade) || 0)), 0);
+        const totalDescontos = sales.reduce((acc, s) => acc + (Number(s.valorDescontos) || 0), 0);
+        const custoTotal = sales.reduce((acc, s) => acc + ((Number(s.custoUnitario) || 0) * (Number(s.quantidade) || 0)), 0);
+        const custoFrete = Number(mainSale.custoFrete) || 0;
+        
+        const faturamentoLiquido = totalFinal - totalDescontos;
+        
+        summary.faturamento += faturamentoLiquido;
         summary.descontos += totalDescontos;
         summary.custoTotal += custoTotal;
         summary.frete += custoFrete;
         
-        kpisResult.totalRevenue += totalFinal;
+        kpisResult.totalRevenue += faturamentoLiquido;
 
 
         if (mainSale.logistica) {
-            logistics[mainSale.logistica] = (logistics[mainSale.logistica] || 0) + totalFinal;
+            logistics[mainSale.logistica] = (logistics[mainSale.logistica] || 0) + faturamentoLiquido;
         }
         if (mainSale.origem) {
-            origins[mainSale.origem] = (origins[mainSale.origem] || 0) + totalFinal;
+            origins[mainSale.origem] = (origins[mainSale.origem] || 0) + faturamentoLiquido;
         }
         if (mainSale.nomeCliente && !customerSet.has(mainSale.nomeCliente)) {
             customerSet.add(mainSale.nomeCliente);
@@ -197,7 +201,7 @@ export default function DashboardPage() {
         const saleDate = toDate(mainSale.data);
         if (saleDate) {
             const dateKey = format(saleDate, "yyyy-MM-dd");
-            salesByDate[dateKey] = (salesByDate[dateKey] || 0) + totalFinal;
+            salesByDate[dateKey] = (salesByDate[dateKey] || 0) + faturamentoLiquido;
         }
 
         sales.forEach(item => {
@@ -207,8 +211,8 @@ export default function DashboardPage() {
         });
     }
 
-    const logisticsChartData = Object.entries(logistics).map(([name, value]) => ({ name, value }));
-    const originChartData = Object.entries(origins).map(([name, value]) => ({ name, value }));
+    const logisticsChartData = Object.entries(logistics).map(([name, value]) => ({ name, current: value }));
+    const originChartData = Object.entries(origins).map(([name, value]) => ({ name, current: value }));
     const topProductsChartData = Object.entries(products)
         .map(([name, quantity]) => ({ name, quantity }))
         .sort((a, b) => b.quantity - a.quantity)

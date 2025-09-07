@@ -74,7 +74,7 @@ export default function OriginChart({ data, hasComparison }: OriginChartProps) {
                 content={
                     <ChartTooltipContent
                         nameKey="name"
-                        formatter={(value, name) => typeof value === 'number' ? value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : value}
+                        formatter={(value, name) => typeof value === 'number' ? value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : String(value)}
                     />
                 }
             />

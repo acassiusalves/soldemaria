@@ -59,7 +59,7 @@ export default function LogisticsChart({ data, hasComparison }: LogisticsChartPr
                 formatter={(value, name) => {
                     const label = name === 'current' ? 'Período Atual' : 'Período Anterior';
                     const formattedValue = typeof value === 'number' ? value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : value;
-                    return `${formattedValue}`;
+                    return formattedValue;
                 }}
              />}
           />
