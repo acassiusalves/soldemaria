@@ -737,7 +737,7 @@ const syncExistingCustomColumns = React.useCallback(async () => {
     
     if (needsOrderUpdate) {
         setColumnOrder(currentOrder);
-        await saveUserPreference(auth.currentUser.uid, 'vendas_columns_order', newOrder);
+        await saveUserPreference(auth.currentUser.uid, 'vendas_columns_order', currentOrder);
     }
     
 }, [customCalculations, columnVisibility, columnOrder]);
