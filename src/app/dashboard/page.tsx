@@ -60,6 +60,7 @@ import TopProductsChart from "@/components/top-products-chart";
 import type { Venda, VendaDetalhada } from "@/lib/data";
 import { Logo } from "@/components/icons";
 import SummaryCard from "@/components/summary-card";
+import ChatBubble from "@/components/chat-bubble";
 
 
 const toDate = (value: unknown): Date | null => {
@@ -431,7 +432,7 @@ export default function DashboardPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                 <LogisticsChart data={logisticsChartData} />
+                 <LogisticsChart data={logisticsChartData} hasComparison={false} />
               </CardContent>
             </Card>
             <Card>
@@ -442,7 +443,7 @@ export default function DashboardPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <OriginChart data={originChartData} />
+                <OriginChart data={originChartData} hasComparison={false} />
               </CardContent>
             </Card>
              <Card className="flex flex-col">
@@ -461,6 +462,7 @@ export default function DashboardPage() {
             </Card>
           </div>
         </main>
+        <ChatBubble salesData={filteredData} />
       </div>
   );
 }
