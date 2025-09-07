@@ -18,14 +18,16 @@ import {
 import { getDbClient } from "@/lib/firebase";
 import type { VendaDetalhada } from "@/lib/data";
 import { DateRange } from "react-day-picker";
-import { endOfDay, format, isValid, parseISO, startOfMonth } from "date-fns";
+import { eachDayOfInterval, endOfDay, format, isValid, parseISO, startOfMonth } from "date-fns";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Calendar } from "@/components/ui/calendar";
 import { ptBR } from "date-fns/locale";
-import { Calendar as CalendarIcon } from "lucide-react";
+import { Calendar as CalendarIcon, Check, ChevronsUpDown } from "lucide-react";
 import VendorPerformanceTable from "@/components/vendor-performance-table";
+import VendorSalesChart from "@/components/vendor-sales-chart";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 
 const toDate = (value: unknown): Date | null => {
   if (!value) return null;
@@ -106,11 +108,12 @@ const calculateVendorMetrics = (data: VendaDetalhada[]) => {
     salesGroups.get(code)!.push(row);
   });
 
-  const vendors: Record<string, { revenue: number; orders: number; itemsSold: number }> = {};
+  const vendors: Record<string, { revenue: number; orders: number; itemsSold: number; dailySales: Record<string, number> }> = {};
 
   for (const [, rows] of salesGroups.entries()) {
     const detailRows = rows.filter(isDetailRow);
     const vendorName = pickFromGroup(rows, VENDOR_KEYS) || "Sem Vendedor";
+    const saleDate = toDate(pickFromGroup(rows, ["data"]));
 
     let orderRevenue = 0;
     let totalItems = 0;
@@ -132,23 +135,32 @@ const calculateVendorMetrics = (data: VendaDetalhada[]) => {
     totalItems = Math.max(0, totalItems);
 
     if (!vendors[vendorName]) {
-      vendors[vendorName] = { revenue: 0, orders: 0, itemsSold: 0 };
+      vendors[vendorName] = { revenue: 0, orders: 0, itemsSold: 0, dailySales: {} };
     }
     vendors[vendorName].revenue += orderRevenue;
     vendors[vendorName].orders += 1;
     vendors[vendorName].itemsSold += totalItems;
+    
+    if (saleDate) {
+        const dateKey = format(saleDate, "yyyy-MM-dd");
+        vendors[vendorName].dailySales[dateKey] = (vendors[vendorName].dailySales[dateKey] || 0) + orderRevenue;
+    }
   }
   
   const totalRevenueAllVendors = Object.values(vendors).reduce((sum, v) => sum + v.revenue, 0);
 
-  return Object.entries(vendors).map(([name, metrics]) => ({
+  const tableData = Object.entries(vendors).map(([name, metrics]) => ({
     name,
-    ...metrics,
+    revenue: metrics.revenue,
+    orders: metrics.orders,
+    itemsSold: metrics.itemsSold,
     averageTicket: metrics.orders > 0 ? metrics.revenue / metrics.orders : 0,
     averagePrice: metrics.itemsSold > 0 ? metrics.revenue / metrics.itemsSold : 0,
     averageItemsPerOrder: metrics.orders > 0 ? metrics.itemsSold / metrics.orders : 0,
     share: totalRevenueAllVendors > 0 ? (metrics.revenue / totalRevenueAllVendors) * 100 : 0,
   })).sort((a, b) => b.revenue - a.revenue);
+
+  return { tableData, dailyData: vendors };
 };
 
 
@@ -156,6 +168,7 @@ export default function VendedoresPage() {
     const [allSales, setAllSales] = React.useState<VendaDetalhada[]>([]);
     const [mounted, setMounted] = React.useState(false);
     const [date, setDate] = React.useState<DateRange | undefined>(undefined);
+    const [selectedVendors, setSelectedVendors] = React.useState<string[]>([]);
     
     React.useEffect(() => {
       const now = new Date();
@@ -187,7 +200,31 @@ export default function VendedoresPage() {
         });
     }, [allSales, date]);
 
-    const vendorMetrics = React.useMemo(() => calculateVendorMetrics(filteredData), [filteredData]);
+    const { tableData, dailyData, chartData, allVendorNames } = React.useMemo(() => {
+        const { tableData: vendorMetrics, dailyData: vendorDailyData } = calculateVendorMetrics(filteredData);
+        
+        const allVendors = vendorMetrics.map(v => v.name);
+        
+        // Select top 5 vendors by default if none are selected
+        if (selectedVendors.length === 0 && vendorMetrics.length > 0) {
+            setSelectedVendors(vendorMetrics.slice(0, 5).map(v => v.name));
+        }
+
+        let finalChartData = [];
+        if (date?.from && selectedVendors.length > 0) {
+            const days = eachDayOfInterval({start: date.from, end: date.to || date.from});
+            finalChartData = days.map(day => {
+                const dateKey = format(day, 'yyyy-MM-dd');
+                const dailyEntry: Record<string, any> = { date: format(day, 'dd/MM') };
+                selectedVendors.forEach(vendor => {
+                    dailyEntry[vendor] = vendorDailyData[vendor]?.dailySales[dateKey] || 0;
+                });
+                return dailyEntry;
+            });
+        }
+        
+        return { tableData: vendorMetrics, dailyData: vendorDailyData, chartData: finalChartData, allVendorNames: allVendors };
+    }, [filteredData, date, selectedVendors]);
     
     if (!mounted || !date) {
       return (
@@ -235,10 +272,56 @@ export default function VendedoresPage() {
             <CardTitle>Performance por Vendedor</CardTitle>
         </CardHeader>
         <CardContent>
-            <VendorPerformanceTable data={vendorMetrics} />
+            <VendorPerformanceTable data={tableData} />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+            <CardTitle>Tendência de Vendas por Vendedor</CardTitle>
+            <CardDescription>Selecione os vendedores para comparar suas vendas diárias no período.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+             <Popover>
+                <PopoverTrigger asChild>
+                    <Button
+                        variant="outline"
+                        role="combobox"
+                        className="w-[250px] justify-between"
+                    >
+                        {selectedVendors.length > 0 ? `${selectedVendors.length} vendedor(es) selecionado(s)` : "Selecione vendedores..."}
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[250px] p-0">
+                    <Command>
+                        <CommandInput placeholder="Pesquisar vendedor..." />
+                        <CommandList>
+                            <CommandEmpty>Nenhum vendedor encontrado.</CommandEmpty>
+                            <CommandGroup>
+                                {allVendorNames.map((vendor) => (
+                                    <CommandItem
+                                        key={vendor}
+                                        onSelect={() => {
+                                            setSelectedVendors(current => 
+                                                current.includes(vendor)
+                                                    ? current.filter(v => v !== vendor)
+                                                    : [...current, vendor]
+                                            )
+                                        }}
+                                    >
+                                        <Check className={cn("mr-2 h-4 w-4", selectedVendors.includes(vendor) ? "opacity-100" : "opacity-0")} />
+                                        {vendor}
+                                    </CommandItem>
+                                ))}
+                            </CommandGroup>
+                        </CommandList>
+                    </Command>
+                </PopoverContent>
+            </Popover>
+            <VendorSalesChart data={chartData} vendors={selectedVendors} />
         </CardContent>
       </Card>
     </div>
   );
 }
-
