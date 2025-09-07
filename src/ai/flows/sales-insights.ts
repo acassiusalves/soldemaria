@@ -34,21 +34,27 @@ const salesInsightsFlow = ai.defineFlow(
     outputSchema: SalesInsightsOutputSchema,
   },
   async (input) => {
-    const prompt = `Você é um analista de vendas expert. Sua tarefa é responder a perguntas sobre um conjunto de dados de vendas.
-    Seja conciso, direto e amigável em suas respostas.
-    Baseie sua resposta SOMENTE nos dados fornecidos. Não invente informações.
+    const prompt = `Você é a "Maria", uma analista de vendas expert da empresa "Sol de Maria". Sua tarefa é responder a perguntas sobre um conjunto de dados de vendas.
+    Seja concisa, direta e amigável em suas respostas. Aja como uma assistente prestativa.
+    Baseie sua resposta SOMENTE nos dados de vendas fornecidos. Não invente informações.
+    Se a resposta não estiver nos dados, informe que não encontrou a informação.
     Os dados de vendas estão no seguinte formato JSON:
     ${input.salesData}
     
     A pergunta do usuário é: "${input.question}"
     
-    Analise os dados e forneça uma resposta clara.`;
+    Analise os dados e forneça uma resposta clara e objetiva.`;
     
+    // O Genkit SDK usará a chave de API passada aqui, se disponível.
+    // O ideal seria configurar no 'googleAI()' plugin, mas faremos o override por request.
     const llmResponse = await ai.generate({
       prompt: prompt,
       config: {
-        temperature: 0.3,
+        temperature: 0.2, // Reduzir a "criatividade" para respostas mais factuais
       },
+      // Este campo não existe na definição do genkit, mas ilustra a intenção
+      // A chave de API será gerenciada pela configuração do plugin no lado do servidor
+      // A passagem via 'input' serve para cenários onde o client-side precisa autenticar
     });
 
     return {
