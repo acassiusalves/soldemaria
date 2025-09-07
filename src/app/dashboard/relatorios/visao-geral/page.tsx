@@ -17,7 +17,7 @@ import { collection, onSnapshot, query, Timestamp } from "firebase/firestore";
 import { getDbClient } from "@/lib/firebase";
 import type { VendaDetalhada, Embalagem } from "@/lib/data";
 import { DateRange } from "react-day-picker";
-import { endOfDay, format, isValid, parseISO, startOfMonth } from "date-fns";
+import { endOfDay, format, isValid, parseISO, startOfMonth, differenceInDays, subDays } from "date-fns";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -132,6 +132,17 @@ export default function VisaoGeralPage() {
     setDate({ from, to: today });
     setMounted(true);
   }, []);
+
+  React.useEffect(() => {
+    if (date?.from && date?.to) {
+        const diff = differenceInDays(date.to, date.from);
+        setCompareDate({
+            from: subDays(date.from, diff + 1),
+            to: subDays(date.to, diff + 1),
+        })
+    }
+  }, [date])
+
 
   React.useEffect(() => {
     const unsubs: (() => void)[] = [];
@@ -299,30 +310,30 @@ export default function VisaoGeralPage() {
         <KpiCard
           title="Faturamento Total"
           value={kpis.totalRevenue.value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
-          change={`${kpis.totalRevenue.change.toFixed(2)}% vs. período anterior`}
+          change={hasComparison ? `${kpis.totalRevenue.change.toFixed(2)}%` : undefined}
           changeType={kpis.totalRevenue.change >= 0 ? 'positive' : 'negative'}
-          icon={<DollarSign className={kpis.totalRevenue.change >= 0 ? "text-green-500" : "text-red-500"} />}
+          icon={<DollarSign />}
         />
         <KpiCard
           title="Ticket Médio"
           value={kpis.averageTicket.value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
-          change={`${kpis.averageTicket.change.toFixed(2)}% vs. período anterior`}
+          change={hasComparison ? `${kpis.averageTicket.change.toFixed(2)}%` : undefined}
           changeType={kpis.averageTicket.change >= 0 ? 'positive' : 'negative'}
-          icon={<ShoppingCart className={kpis.averageTicket.change >= 0 ? "text-green-500" : "text-red-500"} />}
+          icon={<ShoppingCart />}
         />
         <KpiCard
           title="Preço Médio por Item"
           value={kpis.averagePrice.value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
-          change={`${kpis.averagePrice.change.toFixed(2)}% vs. período anterior`}
+          change={hasComparison ? `${kpis.averagePrice.change.toFixed(2)}%` : undefined}
           changeType={kpis.averagePrice.change >= 0 ? 'positive' : 'negative'}
-          icon={<Tag className={kpis.averagePrice.change >= 0 ? "text-green-500" : "text-red-500"} />}
+          icon={<Tag />}
         />
          <KpiCard
           title="Itens por Pedido (Média)"
           value={kpis.averageItems.value.toFixed(2)}
-          change={`${kpis.averageItems.change.toFixed(2)}% vs. período anterior`}
+          change={hasComparison ? `${kpis.averageItems.change.toFixed(2)}%` : undefined}
           changeType={kpis.averageItems.change >= 0 ? 'positive' : 'negative'}
-          icon={<Package className={kpis.averageItems.change >= 0 ? "text-green-500" : "text-red-500"} />}
+          icon={<Package />}
         />
       </div>
 
