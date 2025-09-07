@@ -45,6 +45,14 @@ const normCode = (v: any) => {
   return s;
 };
 
+const normalizeText = (s: unknown) =>
+  String(s ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+
 const isDetailRow = (row: Record<string, any>) =>
   row.item || row.descricao;
 
@@ -94,8 +102,13 @@ const calculateMetrics = (data: VendaDetalhada[]) => {
       totalRevenue += orderRevenue;
       totalItems += orderItems;
       
-      if (headerRow.logistica) {
-          logistics[headerRow.logistica] = (logistics[headerRow.logistica] || 0) + orderRevenue;
+      const tipoVenda = normalizeText(headerRow.tipo);
+      const tiposLoja = ["venda loja", "faturamento de hoje", "venda funcionario"];
+
+      if (tiposLoja.includes(tipoVenda)) {
+        logistics['Loja'] = (logistics['Loja'] || 0) + orderRevenue;
+      } else if (headerRow.logistica) {
+        logistics[headerRow.logistica] = (logistics[headerRow.logistica] || 0) + orderRevenue;
       }
       
       const originKey = headerRow.origemCliente || 'Não Identificado';
