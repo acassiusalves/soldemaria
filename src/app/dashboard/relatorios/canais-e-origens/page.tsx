@@ -239,7 +239,7 @@ export default function CanaisEOrigensPage() {
         };
     }, [allSales, date, compareDate]);
     
-    const { deliveryKpis, storeKpis, originsChart, logisticsChart, matrix } = React.useMemo(() => {
+    const { deliveryKpis, storeKpis, originsChart, logisticsChart, matrix, compareMatrix } = React.useMemo(() => {
         const currentMetrics = calculateChannelMetrics(filteredData);
         const previousMetrics = calculateChannelMetrics(comparisonData);
 
@@ -279,6 +279,7 @@ export default function CanaisEOrigensPage() {
             originsChart: originsChartData,
             logisticsChart: logisticsChartData,
             matrix: currentMetrics.matrix,
+            compareMatrix: previousMetrics.matrix,
         }
 
     }, [filteredData, comparisonData]);
@@ -393,7 +394,7 @@ export default function CanaisEOrigensPage() {
                     </CardDescription>
               </CardHeader>
               <CardContent>
-                  <ChannelOriginTable data={matrix} />
+                  <ChannelOriginTable data={matrix} compareData={compareMatrix} hasComparison={hasComparison} />
               </CardContent>
           </Card>
       </div>
