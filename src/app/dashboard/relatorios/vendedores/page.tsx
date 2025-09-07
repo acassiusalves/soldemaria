@@ -18,7 +18,7 @@ import {
 import { getDbClient } from "@/lib/firebase";
 import type { VendaDetalhada } from "@/lib/data";
 import { DateRange } from "react-day-picker";
-import { eachDayOfInterval, endOfDay, format, isValid, parseISO, startOfMonth } from "date-fns";
+import { eachDayOfInterval, endOfDay, format, isValid, parseISO, startOfMonth, differenceInDays, subDays } from "date-fns";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -146,21 +146,8 @@ const calculateVendorMetrics = (data: VendaDetalhada[]) => {
         vendors[vendorName].dailySales[dateKey] = (vendors[vendorName].dailySales[dateKey] || 0) + orderRevenue;
     }
   }
-  
-  const totalRevenueAllVendors = Object.values(vendors).reduce((sum, v) => sum + v.revenue, 0);
 
-  const tableData = Object.entries(vendors).map(([name, metrics]) => ({
-    name,
-    revenue: metrics.revenue,
-    orders: metrics.orders,
-    itemsSold: metrics.itemsSold,
-    averageTicket: metrics.orders > 0 ? metrics.revenue / metrics.orders : 0,
-    averagePrice: metrics.itemsSold > 0 ? metrics.revenue / metrics.itemsSold : 0,
-    averageItemsPerOrder: metrics.orders > 0 ? metrics.itemsSold / metrics.orders : 0,
-    share: totalRevenueAllVendors > 0 ? (metrics.revenue / totalRevenueAllVendors) * 100 : 0,
-  })).sort((a, b) => b.revenue - a.revenue);
-
-  return { tableData, dailyData: vendors };
+  return { vendors };
 };
 
 
@@ -168,6 +155,7 @@ export default function VendedoresPage() {
     const [allSales, setAllSales] = React.useState<VendaDetalhada[]>([]);
     const [mounted, setMounted] = React.useState(false);
     const [date, setDate] = React.useState<DateRange | undefined>(undefined);
+    const [compareDate, setCompareDate] = React.useState<DateRange | undefined>(undefined);
     const [selectedVendors, setSelectedVendors] = React.useState<string[]>([]);
     
     React.useEffect(() => {
@@ -177,6 +165,16 @@ export default function VendedoresPage() {
       setDate({ from, to: today });
       setMounted(true);
     }, []);
+
+    React.useEffect(() => {
+        if (date?.from && date?.to) {
+            const diff = differenceInDays(date.to, date.from);
+            setCompareDate({
+                from: subDays(date.from, diff + 1),
+                to: subDays(date.to, diff + 1),
+            })
+        }
+    }, [date])
 
     React.useEffect(() => {
         let unsub: () => void;
@@ -192,22 +190,48 @@ export default function VendedoresPage() {
         return () => unsub && unsub();
     }, []);
     
-    const filteredData = React.useMemo(() => {
-        if (!date?.from) return [];
-        return allSales.filter((item) => {
-            const itemDate = toDate(item.data);
-            return itemDate && itemDate >= date.from! && itemDate <= endOfDay(date.to || date.from!);
-        });
-    }, [allSales, date]);
+    const { filteredData, comparisonData } = React.useMemo(() => {
+        const filterByDate = (data: VendaDetalhada[], dateRange: DateRange | undefined) => {
+            if (!dateRange?.from) return [];
+            return data.filter((item) => {
+                const itemDate = toDate(item.data);
+                return itemDate && itemDate >= dateRange.from! && itemDate <= endOfDay(dateRange.to || dateRange.from!);
+            });
+        };
+        return {
+            filteredData: filterByDate(allSales, date),
+            comparisonData: filterByDate(allSales, compareDate),
+        };
+    }, [allSales, date, compareDate]);
+    
+    const { tableData, chartData, allVendorNames } = React.useMemo(() => {
+        const { vendors: currentVendors } = calculateVendorMetrics(filteredData);
+        const { vendors: previousVendors } = calculateVendorMetrics(comparisonData);
 
-    const { tableData, dailyData, chartData, allVendorNames } = React.useMemo(() => {
-        const { tableData: vendorMetrics, dailyData: vendorDailyData } = calculateVendorMetrics(filteredData);
-        
-        const allVendors = vendorMetrics.map(v => v.name);
-        
+        const allVendors = Array.from(new Set([...Object.keys(currentVendors), ...Object.keys(previousVendors)]));
+
+        const totalRevenueAllVendors = Object.values(currentVendors).reduce((sum, v) => sum + v.revenue, 0);
+
+        const combinedTableData = allVendors.map(name => {
+            const current = currentVendors[name] || { revenue: 0, orders: 0, itemsSold: 0 };
+            const previous = previousVendors[name] || { revenue: 0, orders: 0, itemsSold: 0 };
+
+            return {
+                name,
+                revenue: current.revenue,
+                orders: current.orders,
+                itemsSold: current.itemsSold,
+                averageTicket: current.orders > 0 ? current.revenue / current.orders : 0,
+                averagePrice: current.itemsSold > 0 ? current.revenue / current.itemsSold : 0,
+                averageItemsPerOrder: current.orders > 0 ? current.itemsSold / current.orders : 0,
+                share: totalRevenueAllVendors > 0 ? (current.revenue / totalRevenueAllVendors) * 100 : 0,
+                previousRevenue: previous.revenue
+            };
+        }).sort((a, b) => b.revenue - a.revenue);
+
         // Select top 5 vendors by default if none are selected
-        if (selectedVendors.length === 0 && vendorMetrics.length > 0) {
-            setSelectedVendors(vendorMetrics.slice(0, 5).map(v => v.name));
+        if (selectedVendors.length === 0 && combinedTableData.length > 0) {
+            setSelectedVendors(combinedTableData.slice(0, 5).map(v => v.name));
         }
 
         let finalChartData = [];
@@ -216,16 +240,22 @@ export default function VendedoresPage() {
             finalChartData = days.map(day => {
                 const dateKey = format(day, 'yyyy-MM-dd');
                 const dailyEntry: Record<string, any> = { date: format(day, 'dd/MM') };
+                
                 selectedVendors.forEach(vendor => {
-                    dailyEntry[vendor] = vendorDailyData[vendor]?.dailySales[dateKey] || 0;
+                    dailyEntry[`${vendor}-current`] = currentVendors[vendor]?.dailySales[dateKey] || 0;
+                    
+                    const prevDateKey = format(subDays(day, differenceInDays(date.to || date.from!, date.from!) + 1), 'yyyy-MM-dd');
+                    dailyEntry[`${vendor}-previous`] = previousVendors[vendor]?.dailySales[prevDateKey] || 0;
                 });
                 return dailyEntry;
             });
         }
         
-        return { tableData: vendorMetrics, dailyData: vendorDailyData, chartData: finalChartData, allVendorNames: allVendors };
-    }, [filteredData, date, selectedVendors]);
+        return { tableData: combinedTableData, chartData: finalChartData, allVendorNames: allVendors };
+    }, [filteredData, comparisonData, date, selectedVendors]);
     
+    const hasComparison = !!compareDate;
+
     if (!mounted || !date) {
       return (
         <div className="flex flex-col gap-6">
@@ -248,7 +278,7 @@ export default function VendedoresPage() {
             Selecione o período para analisar a performance de seus vendedores.
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="flex flex-wrap gap-4">
              <Popover>
                 <PopoverTrigger asChild>
                 <Button id="date" variant={"outline"} className={cn("w-[300px] justify-start text-left font-normal",!date && "text-muted-foreground")}>
@@ -264,6 +294,17 @@ export default function VendedoresPage() {
                 <Calendar locale={ptBR} initialFocus mode="range" defaultMonth={date.from} selected={date} onSelect={setDate} numberOfMonths={2} />
                 </PopoverContent>
             </Popover>
+             <Popover>
+                <PopoverTrigger asChild>
+                <Button id="compareDate" variant={"outline"} className={cn("w-[300px] justify-start text-left font-normal", !compareDate && "text-muted-foreground")}>
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {compareDate?.from ? (compareDate.to ? (<>{format(compareDate.from, "dd/MM/y", { locale: ptBR })} - {format(compareDate.to, "dd/MM/y", { locale: ptBR })}</>) : (format(compareDate.from, "dd/MM/y", { locale: ptBR }))) : (<span>Comparar com...</span>)}
+                </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                <Calendar locale={ptBR} initialFocus mode="range" defaultMonth={compareDate?.from} selected={compareDate} onSelect={setCompareDate} numberOfMonths={2} />
+                </PopoverContent>
+            </Popover>
         </CardContent>
       </Card>
       
@@ -272,7 +313,7 @@ export default function VendedoresPage() {
             <CardTitle>Performance por Vendedor</CardTitle>
         </CardHeader>
         <CardContent>
-            <VendorPerformanceTable data={tableData} />
+            <VendorPerformanceTable data={tableData} hasComparison={hasComparison}/>
         </CardContent>
       </Card>
 
@@ -319,7 +360,7 @@ export default function VendedoresPage() {
                     </Command>
                 </PopoverContent>
             </Popover>
-            <VendorSalesChart data={chartData} vendors={selectedVendors} />
+            <VendorSalesChart data={chartData} vendors={selectedVendors} hasComparison={hasComparison} />
         </CardContent>
       </Card>
     </div>

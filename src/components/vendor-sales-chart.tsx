@@ -21,20 +21,25 @@ import {
 interface VendorSalesChartProps {
   data: any[];
   vendors: string[];
+  hasComparison: boolean;
 }
 
 const generateChartConfig = (vendors: string[]): ChartConfig => {
   const config: ChartConfig = {};
   vendors.forEach((vendor, index) => {
-    config[vendor] = {
-      label: vendor,
+    config[`${vendor}-current`] = {
+      label: `${vendor} (Atual)`,
+      color: `hsl(var(--chart-${(index % 5) + 1}))`,
+    };
+     config[`${vendor}-previous`] = {
+      label: `${vendor} (Anterior)`,
       color: `hsl(var(--chart-${(index % 5) + 1}))`,
     };
   });
   return config;
 };
 
-export default function VendorSalesChart({ data, vendors }: VendorSalesChartProps) {
+export default function VendorSalesChart({ data, vendors, hasComparison }: VendorSalesChartProps) {
     const chartConfig = React.useMemo(() => generateChartConfig(vendors), [vendors]);
     
   if (data.length === 0) {
@@ -76,26 +81,43 @@ export default function VendorSalesChart({ data, vendors }: VendorSalesChartProp
           />
           <Tooltip
             content={<ChartTooltipContent
-                formatter={(value, name) => (
-                    <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full" style={{backgroundColor: chartConfig[name as string]?.color}}/>
-                        <span className="font-medium">{name}:</span>
-                        <span className="text-muted-foreground">{typeof value === 'number' ? value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : value}</span>
-                    </div>
-                )}
+                formatter={(value, name) => {
+                    const configKey = name as string;
+                    const label = chartConfig[configKey]?.label || name;
+                    return (
+                        <div className="flex items-center gap-2">
+                            <div className="w-2 h-2 rounded-full" style={{backgroundColor: `var(--color-${configKey})`}}/>
+                            <span className="font-medium">{label}:</span>
+                            <span className="text-muted-foreground">{typeof value === 'number' ? value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : value}</span>
+                        </div>
+                    )
+                }}
                 indicator="line"
             />}
           />
           <Legend />
           {vendors.map((vendor) => (
-            <Line
-              key={vendor}
-              type="monotone"
-              dataKey={vendor}
-              stroke={chartConfig[vendor]?.color}
-              strokeWidth={2}
-              dot={false}
-            />
+            <React.Fragment key={vendor}>
+                <Line
+                    type="monotone"
+                    dataKey={`${vendor}-current`}
+                    name={`${vendor} (Atual)`}
+                    stroke={`var(--color-${vendor}-current)`}
+                    strokeWidth={2}
+                    dot={false}
+                />
+                {hasComparison && (
+                    <Line
+                        type="monotone"
+                        dataKey={`${vendor}-previous`}
+                        name={`${vendor} (Anterior)`}
+                        stroke={`var(--color-${vendor}-previous)`}
+                        strokeWidth={2}
+                        strokeDasharray="5 5"
+                        dot={false}
+                    />
+                )}
+            </React.Fragment>
           ))}
         </LineChart>
       </ResponsiveContainer>

@@ -12,6 +12,8 @@ import {
 } from "@/components/ui/table";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
+import { ArrowDownRight, ArrowUpRight } from "lucide-react";
 
 type VendorMetric = {
   name: string;
@@ -22,10 +24,12 @@ type VendorMetric = {
   averagePrice: number;
   averageItemsPerOrder: number;
   share: number;
+  previousRevenue?: number;
 };
 
 interface VendorPerformanceTableProps {
   data: VendorMetric[];
+  hasComparison: boolean;
 }
 
 const formatCurrency = (value?: number) => {
@@ -43,7 +47,7 @@ const formatNumber = (value?: number) => {
 }
 
 
-export default function VendorPerformanceTable({ data }: VendorPerformanceTableProps) {
+export default function VendorPerformanceTable({ data, hasComparison }: VendorPerformanceTableProps) {
   if (!data || data.length === 0) {
     return (
       <div className="flex h-48 w-full items-center justify-center rounded-lg border-2 border-dashed">
@@ -62,36 +66,51 @@ export default function VendorPerformanceTable({ data }: VendorPerformanceTableP
             <TableHead className="w-12">#</TableHead>
             <TableHead>Vendedor</TableHead>
             <TableHead className="text-right">Faturamento</TableHead>
+            {hasComparison && <TableHead className="text-right">% Variação</TableHead>}
             <TableHead className="text-right">Pedidos</TableHead>
             <TableHead className="text-right">Ticket Médio</TableHead>
-            <TableHead className="text-right">Preço Médio/Item</TableHead>
             <TableHead className="text-right">Itens/Pedido</TableHead>
             <TableHead className="w-[200px] text-right">Participação</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {data.map((vendor, index) => (
-            <TableRow key={vendor.name}>
-              <TableCell>
-                 <Badge variant={index < 3 ? "default" : "secondary"}>{index + 1}</Badge>
-              </TableCell>
-              <TableCell className="font-medium">{vendor.name}</TableCell>
-              <TableCell className="text-right font-semibold">{formatCurrency(vendor.revenue)}</TableCell>
-              <TableCell className="text-right">{vendor.orders}</TableCell>
-              <TableCell className="text-right">{formatCurrency(vendor.averageTicket)}</TableCell>
-              <TableCell className="text-right">{formatCurrency(vendor.averagePrice)}</TableCell>
-              <TableCell className="text-right">{formatNumber(vendor.averageItemsPerOrder)}</TableCell>
-              <TableCell className="text-right">
-                <div className="flex items-center justify-end gap-4">
-                   <span className="w-16 text-right">{vendor.share.toFixed(2)}%</span>
-                   <Progress value={vendor.share} className="w-24 h-2" />
-                </div>
-              </TableCell>
-            </TableRow>
-          ))}
+          {data.map((vendor, index) => {
+            const revenueChange = (vendor.previousRevenue && vendor.previousRevenue > 0)
+                ? ((vendor.revenue - vendor.previousRevenue) / vendor.previousRevenue) * 100
+                : vendor.revenue > 0 ? Infinity : 0;
+            return (
+                <TableRow key={vendor.name}>
+                <TableCell>
+                    <Badge variant={index < 3 ? "default" : "secondary"}>{index + 1}</Badge>
+                </TableCell>
+                <TableCell className="font-medium">{vendor.name}</TableCell>
+                <TableCell className="text-right font-semibold">{formatCurrency(vendor.revenue)}</TableCell>
+                {hasComparison && (
+                    <TableCell className="text-right">
+                        <div className={cn("flex items-center justify-end text-xs", revenueChange >= 0 ? "text-green-600" : "text-red-600")}>
+                            {isFinite(revenueChange) ? (
+                                <>
+                                    {revenueChange >= 0 ? <ArrowUpRight className="h-4 w-4 mr-1" /> : <ArrowDownRight className="h-4 w-4 mr-1" />}
+                                    {revenueChange.toFixed(2)}%
+                                </>
+                            ) : 'Novo'}
+                        </div>
+                    </TableCell>
+                )}
+                <TableCell className="text-right">{vendor.orders}</TableCell>
+                <TableCell className="text-right">{formatCurrency(vendor.averageTicket)}</TableCell>
+                <TableCell className="text-right">{formatNumber(vendor.averageItemsPerOrder)}</TableCell>
+                <TableCell className="text-right">
+                    <div className="flex items-center justify-end gap-4">
+                    <span className="w-16 text-right">{vendor.share.toFixed(2)}%</span>
+                    <Progress value={vendor.share} className="w-24 h-2" />
+                    </div>
+                </TableCell>
+                </TableRow>
+            )
+            })}
         </TableBody>
       </Table>
     </div>
   );
 }
-
