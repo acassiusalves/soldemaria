@@ -160,34 +160,37 @@ const calculateFinancialMetrics = (
     };
 
     const current = processDataSet(currentData);
-    const previous = processDataSet(previousData);
+    const previous = previousData.length > 0 ? processDataSet(previousData) : null;
 
-    const calcChange = (currentVal: number, previousVal: number) => {
+    const calcChange = (currentVal: number, previousVal?: number) => {
+        if (previousVal === undefined || previousVal === null) return 0;
         if (previousVal === 0) return currentVal > 0 ? Infinity : 0;
         return ((currentVal - previousVal) / previousVal) * 100;
     };
     
     const kpis = {
-        totalRevenue: { value: current.totalRevenue, change: calcChange(current.totalRevenue, previous.totalRevenue) },
-        totalDiscounts: { value: current.totalDiscounts, change: calcChange(current.totalDiscounts, previous.totalDiscounts) },
-        totalCmv: { value: current.totalCmv, change: calcChange(current.totalCmv, previous.totalCmv) },
-        totalShipping: { value: current.totalShipping, change: calcChange(current.totalShipping, previous.totalShipping) },
-        grossMargin: { value: current.grossMargin, change: calcChange(current.grossMargin, previous.grossMargin) },
+        totalRevenue: { value: current.totalRevenue, change: calcChange(current.totalRevenue, previous?.totalRevenue) },
+        totalDiscounts: { value: current.totalDiscounts, change: calcChange(current.totalDiscounts, previous?.totalDiscounts) },
+        totalCmv: { value: current.totalCmv, change: calcChange(current.totalCmv, previous?.totalCmv) },
+        totalShipping: { value: current.totalShipping, change: calcChange(current.totalShipping, previous?.totalShipping) },
+        grossMargin: { value: current.grossMargin, change: calcChange(current.grossMargin, previous?.grossMargin) },
     };
 
-    const mergeBreakdownData = (currentBreakdown: BreakdownData[], previousBreakdown: BreakdownData[]) => {
+    const mergeBreakdownData = (currentBreakdown: BreakdownData[], previousBreakdown?: BreakdownData[]) => {
         const map = new Map<string, BreakdownData>();
         currentBreakdown.forEach(item => map.set(item.name, { ...item, previousRevenue: 0, previousGrossMargin: 0 }));
         
-        previousBreakdown.forEach(item => {
-            if (map.has(item.name)) {
-                const existing = map.get(item.name)!;
-                existing.previousRevenue = item.revenue;
-                existing.previousGrossMargin = item.grossMargin;
-            } else {
-                map.set(item.name, { ...item, revenue: 0, grossMargin: 0, discounts: 0, cmv: 0, shipping: 0, previousRevenue: item.revenue, previousGrossMargin: item.grossMargin });
-            }
-        });
+        if (previousBreakdown) {
+            previousBreakdown.forEach(item => {
+                if (map.has(item.name)) {
+                    const existing = map.get(item.name)!;
+                    existing.previousRevenue = item.revenue;
+                    existing.previousGrossMargin = item.grossMargin;
+                } else {
+                    map.set(item.name, { ...item, revenue: 0, grossMargin: 0, discounts: 0, cmv: 0, shipping: 0, previousRevenue: item.revenue, previousGrossMargin: item.grossMargin });
+                }
+            });
+        }
         return Array.from(map.values()).sort((a,b) => b.revenue - a.revenue);
     }
     
@@ -199,34 +202,35 @@ const calculateFinancialMetrics = (
         
         for(const currentDay of days) {
             const currentDayKey = format(currentDay, 'yyyy-MM-dd');
-            
-            const dayDiff = differenceInDays(end, start);
-            const prevDay = subDays(currentDay, dayDiff + 1);
-            const prevDayKey = format(prevDay, 'yyyy-MM-dd');
-            
-            const currentDayData = current.byDay[currentDayKey] || { revenue: 0, discounts: 0, cmv: 0, shipping: 0 };
-            const prevDayData = previous.byDay[prevDayKey] || { revenue: 0, discounts: 0, cmv: 0, shipping: 0 };
-
-            chartData.push({
+            const dayData = {
                 date: currentDayKey,
-                revenue: currentDayData.revenue,
-                discounts: currentDayData.discounts,
-                cmv: currentDayData.cmv,
-                shipping: currentDayData.shipping,
-                previousRevenue: prevDayData.revenue,
-                previousDiscounts: prevDayData.discounts,
-                previousCmv: prevDayData.cmv,
-                previousShipping: prevDayData.shipping,
-            });
+                revenue: current.byDay[currentDayKey]?.revenue || 0,
+                discounts: current.byDay[currentDayKey]?.discounts || 0,
+                cmv: current.byDay[currentDayKey]?.cmv || 0,
+                shipping: current.byDay[currentDayKey]?.shipping || 0,
+            };
+
+            if (previous) {
+                const dayDiff = differenceInDays(end, start);
+                const prevDay = subDays(currentDay, dayDiff + 1);
+                const prevDayKey = format(prevDay, 'yyyy-MM-dd');
+                const prevDayData = previous.byDay[prevDayKey];
+                Object.assign(dayData, {
+                    previousRevenue: prevDayData?.revenue || 0,
+                    previousDiscounts: prevDayData?.discounts || 0,
+                    previousCmv: prevDayData?.cmv || 0,
+                    previousShipping: prevDayData?.shipping || 0,
+                });
+            }
+            chartData.push(dayData);
         }
     }
-
 
     return {
         kpis,
         chartData,
-        channelData: mergeBreakdownData(current.byChannel, previous.byChannel),
-        originData: mergeBreakdownData(current.byOrigin, previous.byOrigin),
+        channelData: mergeBreakdownData(current.byChannel, previous?.byChannel),
+        originData: mergeBreakdownData(current.byOrigin, previous?.byOrigin),
     };
 };
 
@@ -237,6 +241,7 @@ export default function FinanceiroPage() {
     from: startOfMonth(new Date()),
     to: new Date(),
   });
+  const [compareDate, setCompareDate] = React.useState<DateRange | undefined>(undefined);
   
   React.useEffect(() => {
     let unsub: () => void;
@@ -252,29 +257,9 @@ export default function FinanceiroPage() {
     })();
     return () => unsub && unsub();
   }, []);
-  
-  const [compareDate, setCompareDate] = React.useState<DateRange | undefined>(() => {
-      if (!date?.from) return undefined;
-      const diff = differenceInDays(date.to ?? new Date(), date.from);
-      return {
-          from: subDays(date.from, diff + 1),
-          to: subDays(date.to ?? new Date(), diff + 1),
-      }
-  });
-  
-  React.useEffect(() => {
-    if (date?.from && date?.to) {
-        const diff = differenceInDays(date.to, date.from);
-        setCompareDate({
-            from: subDays(date.from, diff + 1),
-            to: subDays(date.to, diff + 1),
-        })
-    }
-  }, [date])
-
 
   const { filteredData, comparisonData } = React.useMemo(() => {
-    const filterByDate = (data: VendaDetalhada[], dateRange: DateRange | undefined) => {
+    const filterByDate = (data: VendaDetalhada[], dateRange?: DateRange) => {
       if (!dateRange?.from) return [];
       return data.filter((item) => {
         const itemDate = toDate(item.data);
@@ -326,6 +311,9 @@ export default function FinanceiroPage() {
               <Calendar locale={ptBR} initialFocus mode="range" defaultMonth={compareDate?.from} selected={compareDate} onSelect={setCompareDate} numberOfMonths={2} />
             </PopoverContent>
           </Popover>
+          {hasComparison && (
+            <Button variant="ghost" onClick={() => setCompareDate(undefined)}>Limpar Comparação</Button>
+          )}
         </CardContent>
       </Card>
       

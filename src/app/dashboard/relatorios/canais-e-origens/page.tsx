@@ -202,16 +202,6 @@ export default function CanaisEOrigensPage() {
     }, []);
 
     React.useEffect(() => {
-        if (date?.from && date?.to) {
-            const diff = differenceInDays(date.to, date.from);
-            setCompareDate({
-                from: subDays(date.from, diff + 1),
-                to: subDays(date.to, diff + 1),
-            })
-        }
-    }, [date])
-
-    React.useEffect(() => {
         let unsub: () => void;
         (async () => {
             const db = await getDbClient();
@@ -226,7 +216,7 @@ export default function CanaisEOrigensPage() {
     }, []);
 
     const { filteredData, comparisonData } = React.useMemo(() => {
-        const filterByDate = (data: VendaDetalhada[], dateRange: DateRange | undefined) => {
+        const filterByDate = (data: VendaDetalhada[], dateRange?: DateRange) => {
             if (!dateRange?.from) return [];
             return data.filter((item) => {
                 const itemDate = toDate(item.data);
@@ -241,36 +231,37 @@ export default function CanaisEOrigensPage() {
     
     const { deliveryKpis, storeKpis, originsChart, logisticsChart, matrix, compareMatrix } = React.useMemo(() => {
         const currentMetrics = calculateChannelMetrics(filteredData);
-        const previousMetrics = calculateChannelMetrics(comparisonData);
+        const previousMetrics = comparisonData.length > 0 ? calculateChannelMetrics(comparisonData) : null;
 
-        const calcChange = (current: number, previous: number) => {
+        const calcChange = (current: number, previous?: number) => {
+            if (previous === undefined || previous === null) return 0;
             if (previous === 0) return current > 0 ? Infinity : 0;
             return ((current - previous) / previous) * 100;
         };
 
         const createKpis = (channel: 'Delivery' | 'Loja') => {
             const current = currentMetrics.channels[channel];
-            const previous = previousMetrics.channels[channel];
+            const previous = previousMetrics?.channels[channel];
             return {
-                revenue: { value: current.revenue, change: calcChange(current.revenue, previous.revenue) },
-                ticket: { value: current.orders > 0 ? current.revenue / current.orders : 0, change: calcChange(current.orders > 0 ? current.revenue / current.orders : 0, previous.orders > 0 ? previous.revenue / previous.orders : 0) },
-                avgPrice: { value: current.items > 0 ? current.revenue / current.items : 0, change: calcChange(current.items > 0 ? current.revenue / current.items : 0, previous.items > 0 ? previous.revenue / previous.items : 0) },
-                avgItems: { value: current.orders > 0 ? current.items / current.orders : 0, change: calcChange(current.orders > 0 ? current.items / current.orders : 0, previous.orders > 0 ? previous.items / previous.orders : 0) },
+                revenue: { value: current.revenue, change: calcChange(current.revenue, previous?.revenue) },
+                ticket: { value: current.orders > 0 ? current.revenue / current.orders : 0, change: calcChange(current.orders > 0 ? current.revenue / current.orders : 0, (previous?.orders || 0) > 0 ? previous!.revenue / previous!.orders : 0) },
+                avgPrice: { value: current.items > 0 ? current.revenue / current.items : 0, change: calcChange(current.items > 0 ? current.revenue / current.items : 0, (previous?.items || 0) > 0 ? previous!.revenue / previous!.items : 0) },
+                avgItems: { value: current.orders > 0 ? current.items / current.orders : 0, change: calcChange(current.orders > 0 ? current.items / current.orders : 0, (previous?.orders || 0) > 0 ? previous!.items / previous!.orders : 0) },
             };
         };
 
-        const allOriginsKeys = new Set([...Object.keys(currentMetrics.origins), ...Object.keys(previousMetrics.origins)]);
+        const allOriginsKeys = new Set([...Object.keys(currentMetrics.origins), ...Object.keys(previousMetrics?.origins || {})]);
         const originsChartData = Array.from(allOriginsKeys).map(key => ({
             name: key,
             current: currentMetrics.origins[key] || 0,
-            previous: previousMetrics.origins[key] || 0,
+            previous: previousMetrics?.origins[key] || 0,
         }));
 
-        const allLogisticsKeys = new Set([...Object.keys(currentMetrics.logistics), ...Object.keys(previousMetrics.logistics)]);
+        const allLogisticsKeys = new Set([...Object.keys(currentMetrics.logistics), ...Object.keys(previousMetrics?.logistics || {})]);
         const logisticsChartData = Array.from(allLogisticsKeys).map(key => ({
             name: key,
             current: currentMetrics.logistics[key] || 0,
-            previous: previousMetrics.logistics[key] || 0,
+            previous: previousMetrics?.logistics[key] || 0,
         }));
 
         return {
@@ -279,7 +270,7 @@ export default function CanaisEOrigensPage() {
             originsChart: originsChartData,
             logisticsChart: logisticsChartData,
             matrix: currentMetrics.matrix,
-            compareMatrix: previousMetrics.matrix,
+            compareMatrix: previousMetrics?.matrix || {},
         }
 
     }, [filteredData, comparisonData]);
@@ -335,6 +326,9 @@ export default function CanaisEOrigensPage() {
               <Calendar locale={ptBR} initialFocus mode="range" defaultMonth={compareDate?.from} selected={compareDate} onSelect={setCompareDate} numberOfMonths={2} />
             </PopoverContent>
           </Popover>
+           {hasComparison && (
+            <Button variant="ghost" onClick={() => setCompareDate(undefined)}>Limpar Comparação</Button>
+          )}
         </CardContent>
       </Card>
       

@@ -67,6 +67,7 @@ const calculateMetrics = (data: VendaDetalhada[]) => {
 
     for (const sale of data) {
       const code = normCode(sale.codigo);
+      if (!code) continue;
       if (!salesGroups.has(code)) {
         salesGroups.set(code, []);
       }
@@ -125,24 +126,12 @@ export default function VisaoGeralPage() {
   const [compareDate, setCompareDate] = React.useState<DateRange | undefined>(undefined);
 
   React.useEffect(() => {
-    // cria "hoje" no meio-dia local pra evitar virar o dia por timezone
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12, 0, 0, 0);
     const from = startOfMonth(today);
     setDate({ from, to: today });
     setMounted(true);
   }, []);
-
-  React.useEffect(() => {
-    if (date?.from && date?.to) {
-        const diff = differenceInDays(date.to, date.from);
-        setCompareDate({
-            from: subDays(date.from, diff + 1),
-            to: subDays(date.to, diff + 1),
-        })
-    }
-  }, [date])
-
 
   React.useEffect(() => {
     const unsubs: (() => void)[] = [];
@@ -181,7 +170,7 @@ export default function VisaoGeralPage() {
   }, [allSales, logisticaData]);
 
   const { filteredData, comparisonData } = React.useMemo(() => {
-    const filterByDate = (data: VendaDetalhada[], dateRange: DateRange | undefined) => {
+    const filterByDate = (data: VendaDetalhada[], dateRange?: DateRange) => {
       if (!dateRange?.from) return [];
       const fromDate = dateRange.from;
       const toDateVal = dateRange.to ? endOfDay(dateRange.to) : endOfDay(fromDate);
@@ -198,9 +187,10 @@ export default function VisaoGeralPage() {
 
   const { kpis, logisticsChartData, originChartData, citySalesData } = React.useMemo(() => {
     const currentMetrics = calculateMetrics(filteredData);
-    const previousMetrics = calculateMetrics(comparisonData);
+    const previousMetrics = comparisonData.length > 0 ? calculateMetrics(comparisonData) : null;
 
-    const calcChange = (current: number, previous: number) => {
+    const calcChange = (current: number, previous?: number) => {
+        if (previous === undefined || previous === null) return 0;
         if (previous === 0) return current > 0 ? Infinity : 0;
         return ((current - previous) / previous) * 100;
     };
@@ -208,40 +198,40 @@ export default function VisaoGeralPage() {
     const kpisResult = {
         totalRevenue: {
           value: currentMetrics.totalRevenue,
-          change: calcChange(currentMetrics.totalRevenue, previousMetrics.totalRevenue),
+          change: calcChange(currentMetrics.totalRevenue, previousMetrics?.totalRevenue),
         },
         averageTicket: {
           value: currentMetrics.averageTicket,
-          change: calcChange(currentMetrics.averageTicket, previousMetrics.averageTicket),
+          change: calcChange(currentMetrics.averageTicket, previousMetrics?.averageTicket),
         },
         averagePrice: {
           value: currentMetrics.averagePrice,
-          change: calcChange(currentMetrics.averagePrice, previousMetrics.averagePrice),
+          change: calcChange(currentMetrics.averagePrice, previousMetrics?.averagePrice),
         },
         averageItems: {
           value: currentMetrics.averageItems,
-          change: calcChange(currentMetrics.averageItems, previousMetrics.averageItems),
+          change: calcChange(currentMetrics.averageItems, previousMetrics?.averageItems),
         },
     };
     
-    const allLogisticsKeys = new Set([...Object.keys(currentMetrics.logistics), ...Object.keys(previousMetrics.logistics)]);
+    const allLogisticsKeys = new Set([...Object.keys(currentMetrics.logistics), ...Object.keys(previousMetrics?.logistics || {})]);
     const logisticsChartData = Array.from(allLogisticsKeys).map(key => ({
         name: key,
         current: currentMetrics.logistics[key] || 0,
-        previous: previousMetrics.logistics[key] || 0,
+        previous: previousMetrics?.logistics[key] || 0,
     }));
 
-    const allOriginsKeys = new Set([...Object.keys(currentMetrics.origins), ...Object.keys(previousMetrics.origins)]);
+    const allOriginsKeys = new Set([...Object.keys(currentMetrics.origins), ...Object.keys(previousMetrics?.origins || {})]);
     const originChartData = Array.from(allOriginsKeys).map(key => ({
         name: key,
         current: currentMetrics.origins[key] || 0,
-        previous: previousMetrics.origins[key] || 0,
+        previous: previousMetrics?.origins[key] || 0,
     }));
 
-    const allCitiesKeys = new Set([...Object.keys(currentMetrics.cities), ...Object.keys(previousMetrics.cities)]);
+    const allCitiesKeys = new Set([...Object.keys(currentMetrics.cities), ...Object.keys(previousMetrics?.cities || {})]);
     const citySalesData = Array.from(allCitiesKeys).map(name => {
         const revenue = currentMetrics.cities[name] || 0;
-        const previousRevenue = previousMetrics.cities[name] || 0;
+        const previousRevenue = previousMetrics?.cities[name] || 0;
         return {
             name,
             revenue,
@@ -303,6 +293,9 @@ export default function VisaoGeralPage() {
               <Calendar locale={ptBR} initialFocus mode="range" defaultMonth={compareDate?.from} selected={compareDate} onSelect={setCompareDate} numberOfMonths={2} />
             </PopoverContent>
           </Popover>
+          {hasComparison && (
+            <Button variant="ghost" onClick={() => setCompareDate(undefined)}>Limpar Comparação</Button>
+          )}
         </CardContent>
       </Card>
 

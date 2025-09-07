@@ -167,16 +167,6 @@ export default function VendedoresPage() {
     }, []);
 
     React.useEffect(() => {
-        if (date?.from && date?.to) {
-            const diff = differenceInDays(date.to, date.from);
-            setCompareDate({
-                from: subDays(date.from, diff + 1),
-                to: subDays(date.to, diff + 1),
-            })
-        }
-    }, [date])
-
-    React.useEffect(() => {
         let unsub: () => void;
         (async () => {
             const db = await getDbClient();
@@ -191,7 +181,7 @@ export default function VendedoresPage() {
     }, []);
     
     const { filteredData, comparisonData } = React.useMemo(() => {
-        const filterByDate = (data: VendaDetalhada[], dateRange: DateRange | undefined) => {
+        const filterByDate = (data: VendaDetalhada[], dateRange?: DateRange) => {
             if (!dateRange?.from) return [];
             return data.filter((item) => {
                 const itemDate = toDate(item.data);
@@ -206,15 +196,15 @@ export default function VendedoresPage() {
     
     const { tableData, chartData, allVendorNames } = React.useMemo(() => {
         const { vendors: currentVendors } = calculateVendorMetrics(filteredData);
-        const { vendors: previousVendors } = calculateVendorMetrics(comparisonData);
+        const { vendors: previousVendors } = comparisonData.length > 0 ? calculateVendorMetrics(comparisonData) : { vendors: {} };
 
         const allVendors = Array.from(new Set([...Object.keys(currentVendors), ...Object.keys(previousVendors)]));
 
         const totalRevenueAllVendors = Object.values(currentVendors).reduce((sum, v) => sum + v.revenue, 0);
 
         const combinedTableData = allVendors.map(name => {
-            const current = currentVendors[name] || { revenue: 0, orders: 0, itemsSold: 0 };
-            const previous = previousVendors[name] || { revenue: 0, orders: 0, itemsSold: 0 };
+            const current = currentVendors[name] || { revenue: 0, orders: 0, itemsSold: 0, dailySales: {} };
+            const previous = previousVendors[name] || { revenue: 0, orders: 0, itemsSold: 0, dailySales: {} };
 
             return {
                 name,
@@ -234,7 +224,7 @@ export default function VendedoresPage() {
             setSelectedVendors(combinedTableData.slice(0, 5).map(v => v.name));
         }
 
-        let finalChartData = [];
+        let finalChartData: any[] = [];
         if (date?.from && selectedVendors.length > 0) {
             const days = eachDayOfInterval({start: date.from, end: date.to || date.from});
             finalChartData = days.map(day => {
@@ -244,15 +234,18 @@ export default function VendedoresPage() {
                 selectedVendors.forEach(vendor => {
                     dailyEntry[`${vendor}-current`] = currentVendors[vendor]?.dailySales[dateKey] || 0;
                     
-                    const prevDateKey = format(subDays(day, differenceInDays(date.to || date.from!, date.from!) + 1), 'yyyy-MM-dd');
-                    dailyEntry[`${vendor}-previous`] = previousVendors[vendor]?.dailySales[prevDateKey] || 0;
+                    if (compareDate?.from) {
+                        const dayDiff = differenceInDays(date.to || date.from!, date.from!)
+                        const prevDateKey = format(subDays(day, dayDiff + 1), 'yyyy-MM-dd');
+                        dailyEntry[`${vendor}-previous`] = previousVendors[vendor]?.dailySales[prevDateKey] || 0;
+                    }
                 });
                 return dailyEntry;
             });
         }
         
         return { tableData: combinedTableData, chartData: finalChartData, allVendorNames: allVendors };
-    }, [filteredData, comparisonData, date, selectedVendors]);
+    }, [filteredData, comparisonData, date, selectedVendors, compareDate]);
     
     const hasComparison = !!compareDate;
 
@@ -305,6 +298,9 @@ export default function VendedoresPage() {
                 <Calendar locale={ptBR} initialFocus mode="range" defaultMonth={compareDate?.from} selected={compareDate} onSelect={setCompareDate} numberOfMonths={2} />
                 </PopoverContent>
             </Popover>
+            {hasComparison && (
+              <Button variant="ghost" onClick={() => setCompareDate(undefined)}>Limpar Comparação</Button>
+            )}
         </CardContent>
       </Card>
       
