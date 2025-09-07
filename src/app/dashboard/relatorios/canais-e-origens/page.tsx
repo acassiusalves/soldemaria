@@ -201,10 +201,17 @@ const calculateChannelMetrics = (data: VendaDetalhada[]) => {
 
 export default function CanaisEOrigensPage() {
     const [allSales, setAllSales] = React.useState<VendaDetalhada[]>([]);
-    const [date, setDate] = React.useState<DateRange | undefined>({
-        from: startOfMonth(new Date()),
-        to: new Date(),
-    });
+    const [mounted, setMounted] = React.useState(false);
+    const [date, setDate] = React.useState<DateRange | undefined>(undefined);
+
+    React.useEffect(() => {
+      // cria "hoje" no meio-dia local pra evitar virar o dia por timezone
+      const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12, 0, 0, 0);
+      const from = startOfMonth(today);
+      setDate({ from, to: today });
+      setMounted(true);
+    }, []);
 
     React.useEffect(() => {
         let unsub: () => void;
@@ -247,6 +254,19 @@ export default function CanaisEOrigensPage() {
         avgItems: channels.Loja.orders > 0 ? channels.Loja.items / channels.Loja.orders : 0,
     };
     
+    if (!mounted || !date) {
+      return (
+        <div className="flex flex-col gap-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Análise de Canais &amp; Origens</CardTitle>
+              <CardDescription>Carregando…</CardDescription>
+            </CardHeader>
+          </Card>
+        </div>
+      );
+    }
+
   return (
     <div className="flex flex-col gap-6">
       <Card>
@@ -261,11 +281,15 @@ export default function CanaisEOrigensPage() {
             <PopoverTrigger asChild>
               <Button id="date" variant={"outline"} className={cn("w-[300px] justify-start text-left font-normal",!date && "text-muted-foreground")}>
                 <CalendarIcon className="mr-2 h-4 w-4" />
-                {date?.from ? (date.to ? (<>{format(date.from, "dd/MM/y", { locale: ptBR })} - {format(date.to, "dd/MM/y", { locale: ptBR })}</>) : (format(date.from, "dd/MM/y", { locale: ptBR }))) : (<span>Selecione uma data</span>)}
+                <span suppressHydrationWarning>
+                  {date.to
+                    ? `${format(date.from!, "dd/MM/y", { locale: ptBR })} - ${format(date.to!, "dd/MM/y", { locale: ptBR })}`
+                    : format(date.from!, "dd/MM/y", { locale: ptBR })}
+                </span>
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-auto p-0" align="start">
-              <Calendar locale={ptBR} initialFocus mode="range" defaultMonth={date?.from} selected={date} onSelect={setDate} numberOfMonths={2} />
+              <Calendar locale={ptBR} initialFocus mode="range" defaultMonth={date.from} selected={date} onSelect={setDate} numberOfMonths={2} />
             </PopoverContent>
           </Popover>
         </CardContent>
