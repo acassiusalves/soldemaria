@@ -13,10 +13,10 @@ import {
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { ArrowDownRight, ArrowUpRight, ArrowUpDown } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, ArrowUpDown, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight } from "lucide-react";
 import { Button } from "./ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 
-const ITEMS_PER_PAGE = 15;
 
 type ProductMetric = {
   name: string;
@@ -53,6 +53,7 @@ export default function ProductPerformanceTable({ data, hasComparison }: Product
   const [sortKey, setSortKey] = useState<SortKey>('revenue');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -72,13 +73,12 @@ export default function ProductPerformanceTable({ data, hasComparison }: Product
     })
   }, [data, sortKey, sortDirection]);
 
+  const totalPages = Math.ceil(sortedData.length / itemsPerPage);
+
   const paginatedData = useMemo(() => {
-    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-    return sortedData.slice(startIndex, startIndex + ITEMS_PER_PAGE);
-  }, [sortedData, currentPage]);
-
-  const totalPages = Math.ceil(sortedData.length / ITEMS_PER_PAGE);
-
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    return sortedData.slice(startIndex, startIndex + itemsPerPage);
+  }, [sortedData, currentPage, itemsPerPage]);
 
   if (!data || data.length === 0) {
     return (
@@ -117,7 +117,7 @@ export default function ProductPerformanceTable({ data, hasComparison }: Product
                 </TableHeader>
                 <TableBody>
                 {paginatedData.map((product, index) => {
-                    const absoluteIndex = (currentPage - 1) * ITEMS_PER_PAGE + index;
+                    const absoluteIndex = (currentPage - 1) * itemsPerPage + index;
                     const revenueChange = (product.previousRevenue && product.previousRevenue > 0)
                         ? ((product.revenue - product.previousRevenue) / product.previousRevenue) * 100
                         : product.revenue > 0 ? Infinity : 0;
@@ -155,26 +155,74 @@ export default function ProductPerformanceTable({ data, hasComparison }: Product
                 </TableBody>
             </Table>
         </div>
-        <div className="flex items-center justify-end space-x-2 py-4">
-            <span className="text-sm text-muted-foreground">
-                Página {currentPage} de {totalPages}
-            </span>
-            <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-                disabled={currentPage === 1}
-            >
-                Anterior
-            </Button>
-            <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
-                disabled={currentPage === totalPages}
-            >
-                Próxima
-            </Button>
+        <div className="flex items-center justify-between py-4">
+            <div className="text-sm text-muted-foreground">
+                Total de {data.length} produtos.
+            </div>
+            <div className="flex items-center space-x-6 lg:space-x-8">
+                 <div className="flex items-center space-x-2">
+                    <p className="text-sm font-medium">Itens por página</p>
+                    <Select
+                        value={`${itemsPerPage}`}
+                        onValueChange={(value) => {
+                            setItemsPerPage(Number(value))
+                            setCurrentPage(1)
+                        }}
+                    >
+                        <SelectTrigger className="h-8 w-[70px]">
+                            <SelectValue placeholder={itemsPerPage} />
+                        </SelectTrigger>
+                        <SelectContent side="top">
+                            {[10, 20, 30, 40, 50].map((pageSize) => (
+                            <SelectItem key={pageSize} value={`${pageSize}`}>
+                                {pageSize}
+                            </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                </div>
+                <div className="flex w-[100px] items-center justify-center text-sm font-medium">
+                    Página {currentPage} de {totalPages}
+                </div>
+                <div className="flex items-center space-x-2">
+                    <Button
+                        variant="outline"
+                        className="hidden h-8 w-8 p-0 lg:flex"
+                        onClick={() => setCurrentPage(1)}
+                        disabled={currentPage === 1}
+                    >
+                        <span className="sr-only">Primeira página</span>
+                        <ChevronsLeft className="h-4 w-4" />
+                    </Button>
+                    <Button
+                        variant="outline"
+                        className="h-8 w-8 p-0"
+                        onClick={() => setCurrentPage(currentPage - 1)}
+                        disabled={currentPage === 1}
+                    >
+                        <span className="sr-only">Página anterior</span>
+                        <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                    <Button
+                        variant="outline"
+                        className="h-8 w-8 p-0"
+                        onClick={() => setCurrentPage(currentPage + 1)}
+                        disabled={currentPage === totalPages}
+                    >
+                        <span className="sr-only">Próxima página</span>
+                        <ChevronRight className="h-4 w-4" />
+                    </Button>
+                     <Button
+                        variant="outline"
+                        className="hidden h-8 w-8 p-0 lg:flex"
+                        onClick={() => setCurrentPage(totalPages)}
+                        disabled={currentPage === totalPages}
+                    >
+                        <span className="sr-only">Última página</span>
+                        <ChevronsRight className="h-4 w-4" />
+                    </Button>
+                </div>
+            </div>
         </div>
     </div>
   );
