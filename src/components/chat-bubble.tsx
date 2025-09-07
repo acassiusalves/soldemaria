@@ -21,6 +21,11 @@ type Message = {
   content: string;
 };
 
+const GREETING_MESSAGE: Message = {
+    role: "model",
+    content: "Olá, eu sou a Maria, a inteligência artificial da Sol de Maria.\n\nPosso te ajudar a encontrar informações sobre as vendas, clientes, produtos e por ai vai...",
+};
+
 export default function ChatBubble({ salesData }: ChatBubbleProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -30,6 +35,12 @@ export default function ChatBubble({ salesData }: ChatBubbleProps) {
   const { toast } = useToast();
 
   const handleToggle = () => setIsOpen(!isOpen);
+
+  useEffect(() => {
+    if (isOpen && messages.length === 0) {
+      setMessages([GREETING_MESSAGE]);
+    }
+  }, [isOpen, messages.length]);
 
   useEffect(() => {
     if (scrollAreaRef.current) {
@@ -124,7 +135,7 @@ export default function ChatBubble({ salesData }: ChatBubbleProps) {
                           </Avatar>
                         )}
                         <div
-                          className={`rounded-lg px-3 py-2 text-sm max-w-[80%] ${
+                          className={`rounded-lg px-3 py-2 text-sm max-w-[80%] whitespace-pre-wrap ${
                             message.role === "user"
                               ? "bg-primary text-primary-foreground"
                               : "bg-muted"
