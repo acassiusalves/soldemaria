@@ -113,19 +113,25 @@ export default function AbcCurveChart({ data }: AbcCurveChartProps) {
             tickFormatter={(value) => `${value}%`}
           />
           <Tooltip
-            content={<ChartTooltipContent 
-                formatter={(value, name, props) => {
-                    if (name === "revenue") {
-                        return `${props.payload.name}: ${typeof value === 'number' ? value.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'}) : value}`
-                    }
-                    if (name === "cumulativePercentage") {
-                        return `% Acumulado: ${typeof value === 'number' ? value.toFixed(2) : value}%`
-                    }
-                    return String(value)
+            content={<ChartTooltipContent
+                formatter={(value, name, item) => {
+                  if (name === "revenue") {
+                    return (
+                        <div className="flex flex-col">
+                            <span className="font-bold">{item.payload.name}</span>
+                            <span>Faturamento: {typeof value === 'number' ? value.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'}) : value}</span>
+                        </div>
+                    )
+                  }
+                  if (name === "cumulativePercentage") {
+                    return `Acumulado: ${typeof value === 'number' ? value.toFixed(2) : value}%`
+                  }
+                  return String(value)
                 }}
                 labelFormatter={(label, payload) => {
-                    const rank = data.findIndex(d => d.name === payload[0]?.payload.name)
-                    return `Rank: ${rank+1}`
+                    if (!payload || payload.length === 0) return label;
+                    const rank = data.findIndex(d => d.name === payload[0]?.payload.name);
+                    return `Rank: ${rank >= 0 ? rank + 1 : 'N/A'}`;
                 }}
              />}
           />
@@ -133,7 +139,7 @@ export default function AbcCurveChart({ data }: AbcCurveChartProps) {
           <Bar
             yAxisId="left"
             dataKey="revenue"
-            name="Faturamento"
+            name="revenue"
           >
              {data.map((entry, index) => (
                 <Cell key={`cell-${index}`} fill={chartConfig[entry.class].color} />
@@ -143,7 +149,7 @@ export default function AbcCurveChart({ data }: AbcCurveChartProps) {
             yAxisId="right"
             type="monotone"
             dataKey="cumulativePercentage"
-            name="% Acumulada"
+            name="cumulativePercentage"
             stroke="var(--color-cumulative)"
             strokeWidth={2}
             dot={false}
