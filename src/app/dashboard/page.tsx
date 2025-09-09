@@ -26,6 +26,7 @@ import {
   ChevronsUpDown,
   Scale,
   Ticket,
+  Package,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { User } from "firebase/auth";
@@ -233,6 +234,7 @@ export default function DashboardPage() {
       descontos: 0,
       custoTotal: 0,
       frete: 0,
+      totalItems: 0,
     };
 
     const deliveryMetrics = {
@@ -294,6 +296,7 @@ export default function DashboardPage() {
       summary.descontos += totalDescontos;
       summary.custoTotal += custoTotal;
       summary.frete += custoFrete;
+      summary.totalItems += totalItems;
 
       // 1) "Tipo" do pedido (prioriza cabeçalho; se vazio, usa a primeira linha do grupo que tiver)
       let tipoPedido = extractTipo(mainSale);
@@ -388,8 +391,16 @@ export default function DashboardPage() {
         ticketMedio: storeMetrics.orders > 0 ? storeMetrics.revenue / storeMetrics.orders : 0,
         margemBruta: storeMetrics.revenue - storeMetrics.cost,
     };
+
+    const numOrders = salesGroups.size;
+    const finalSummaryData = {
+        ...summary,
+        ticketMedio: numOrders > 0 ? summary.faturamento / numOrders : 0,
+        margemBruta: summary.faturamento - summary.custoTotal,
+        qtdMedia: numOrders > 0 ? summary.totalItems / numOrders : 0,
+    };
         
-    return { summaryData: summary, topProductsChartData, vendorPerformanceData, deliverySummary, storeSummary, topCustomersData };
+    return { summaryData: finalSummaryData, topProductsChartData, vendorPerformanceData, deliverySummary, storeSummary, topCustomersData };
   }, [filteredData]);
   
   const handleLogout = async () => {
@@ -542,27 +553,54 @@ export default function DashboardPage() {
           </div>
         </header>
         <main className="flex flex-1 flex-col gap-4 p-4 md:gap-8 md:p-8">
-          <div className="grid gap-4 md:grid-cols-4">
+          <div className="grid gap-4 md:grid-cols-5">
             <SummaryCard 
                 title="Faturamento" 
                 value={summaryData.faturamento} 
                 icon={<DollarSign className="text-primary" />}
+                isCurrency
             />
             <SummaryCard 
                 title="Descontos" 
                 value={summaryData.descontos} 
                 icon={<Tag className="text-primary" />}
+                isCurrency
             />
             <SummaryCard 
-                title="Custo Total" 
+                title="Custo Total (CMV)" 
                 value={summaryData.custoTotal}
                 icon={<Archive className="text-primary" />}
+                isCurrency
             />
             <SummaryCard 
                 title="Frete" 
                 value={summaryData.frete}
                 icon={<Truck className="text-primary" />}
+                isCurrency
             />
+             <SummaryCard 
+                title="Margem Bruta" 
+                value={summaryData.margemBruta}
+                icon={<Scale className="text-primary" />}
+                isCurrency
+            />
+          </div>
+           <div className="grid gap-4 md:grid-cols-5">
+             <div className="md:col-start-4">
+                <SummaryCard 
+                    title="Ticket Médio" 
+                    value={summaryData.ticketMedio}
+                    icon={<Ticket className="text-primary" />}
+                    isCurrency
+                />
+            </div>
+            <div className="md:col-start-5">
+                <SummaryCard 
+                    title="Qtd. Média Itens/Pedido" 
+                    value={summaryData.qtdMedia}
+                    icon={<Package className="text-primary" />}
+                />
+            </div>
           </div>
           <div className="grid gap-4 md:gap-8 lg:grid-cols-2 xl:grid-cols-3">
              <Card className="xl:col-span-2">
@@ -601,16 +639,19 @@ export default function DashboardPage() {
                         title="Faturamento Delivery" 
                         value={deliverySummary.faturamento} 
                         icon={<DollarSign className="text-primary" />}
+                        isCurrency
                     />
                     <SummaryCard 
                         title="Ticket Médio Delivery" 
                         value={deliverySummary.ticketMedio} 
                         icon={<Ticket className="text-primary" />}
+                        isCurrency
                     />
                      <SummaryCard 
                         title="Margem Bruta Delivery" 
                         value={deliverySummary.margemBruta}
                         icon={<Scale className="text-primary" />}
+                        isCurrency
                     />
                 </CardContent>
             </Card>
@@ -626,16 +667,19 @@ export default function DashboardPage() {
                         title="Faturamento Loja" 
                         value={storeSummary.faturamento} 
                         icon={<DollarSign className="text-primary" />}
+                        isCurrency
                     />
                     <SummaryCard 
                         title="Ticket Médio Loja" 
                         value={storeSummary.ticketMedio} 
                         icon={<Ticket className="text-primary" />}
+                        isCurrency
                     />
                      <SummaryCard 
                         title="Margem Bruta Loja" 
                         value={storeSummary.margemBruta}
                         icon={<Scale className="text-primary" />}
+                        isCurrency
                     />
                 </CardContent>
             </Card>

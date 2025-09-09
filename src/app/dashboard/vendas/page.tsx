@@ -1044,8 +1044,8 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
 
             acc.faturamento += valorFinal - valorDescontos + custoFrete;
             acc.descontos += valorDescontos;
-            acc.frete += custoFrete;
             acc.custoTotal += Number(row.custoTotal) || 0;
+            acc.frete += custoFrete;
             acc.valorFinalTotal += valorFinal;
             acc.totalItems += Number(row.quantidadeTotal) || 0;
             
@@ -1589,26 +1589,6 @@ React.useEffect(() => {
             icon={<Truck className="text-primary" />}
             isCurrency
           />
-        </div>
-
-        <div className="grid gap-4 md:grid-cols-3">
-             <SummaryCard 
-                title="Margem Bruta" 
-                value={finalSummary.margemBruta}
-                icon={<Scale className="text-primary" />}
-                isCurrency
-            />
-            <SummaryCard 
-                title="Ticket Médio" 
-                value={finalSummary.ticketMedio}
-                icon={<Ticket className="text-primary" />}
-                isCurrency
-            />
-            <SummaryCard 
-                title="Qtd. Média Itens/Pedido" 
-                value={finalSummary.qtdMedia}
-                icon={<Package className="text-primary" />}
-            />
         </div>
 
 
