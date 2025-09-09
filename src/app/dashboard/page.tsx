@@ -69,7 +69,6 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
-import LogisticsChart from "@/components/logistics-chart";
 import OriginChart from "@/components/origin-chart";
 import VendorPerformanceList from "@/components/vendor-performance-list";
 
@@ -94,6 +93,65 @@ const normCode = (v: any) => {
   s = s.replace(/^0+/, "");
   return s;
 };
+
+// Converte "R$ 1.234,56" -> 1234.56
+const toNumberBR = (v: any): number => {
+  if (typeof v === 'number' && isFinite(v)) return v;
+  if (v === null || v === undefined) return 0;
+  const s = String(v)
+    .replace(/\s+/g, '')
+    .replace(/[R$r$\u00A0]/gi, '')
+    .replace(/\./g, '')
+    .replace(/,/g, '.');
+  const n = parseFloat(s);
+  return isFinite(n) ? n : 0;
+};
+
+// Pega o primeiro campo existente na ordem de prioridade
+const getField = (row: any, keys: string[]): any => {
+  if (!row) return undefined;
+  for (const k of keys) {
+    const val = row?.[k];
+    if (val !== undefined && val !== null && val !== '') return val;
+  }
+  return undefined;
+};
+
+// Normaliza o "Tipo" (ou canal/origem/logística) para checar Delivery
+const extractTipo = (row: any): string => {
+  const raw = String(
+    getField(row, [
+      'tipo', 'Tipo',
+      'canal', 'canal_venda', 'canalVenda',
+      'origem', 'origem_venda', 'origemVenda',
+      'logistica'
+    ]) ?? ''
+  ).toLowerCase();
+
+  if (!raw) return '';
+
+  // sinônimos que contam como delivery
+  if (
+    raw.includes('delivery') || raw.includes('entrega') ||
+    raw.includes('ifood') || raw.includes('i-food') ||
+    raw.includes('uber') || raw.includes('uber eats') ||
+    raw.includes('99') || raw.includes('99food') ||
+    raw.includes('rappi')
+  ) return 'delivery';
+
+  return raw;
+};
+
+// Pega o "Valor Final" de um cabeçalho (com fallbacks de nomes)
+const extractValorFinalPedido = (row: any): number => {
+  const v = getField(row, [
+    'valorFinal', 'Valor Final', 'valor_final',
+    'final', 'valorTotal', 'valor_total',
+    'totalFinal', 'total'
+  ]);
+  return toNumberBR(v);
+};
+
 
 const isDetailRow = (row: Record<string, any>) =>
   row.item || row.descricao;
@@ -222,10 +280,35 @@ export default function DashboardPage() {
       summary.custoTotal += custoTotal;
       summary.frete += custoFrete;
 
-      if (mainSale.tipo?.toLowerCase() === 'delivery') {
-        deliveryMetrics.revenue += faturamentoLiquido;
-        deliveryMetrics.cost += custoTotal;
+      // 1) "Tipo" do pedido (prioriza cabeçalho; se vazio, usa a primeira linha do grupo que tiver)
+      let tipoPedido = extractTipo(mainSale);
+      if (!tipoPedido || tipoPedido === '') {
+        const linhaComTipo = sales.find(s => !!extractTipo(s));
+        tipoPedido = extractTipo(linhaComTipo);
+      }
+      
+      // 2) É delivery?
+      const isDelivery = tipoPedido === 'delivery';
+
+      // 3) "Valor Final" do pedido — somatório pedido a pedido
+      //    - pega do cabeçalho (coluna "Valor Final" do seu Vendas)
+      //    - se não vier, usa seu cálculo por itens (totalFinal já calculado acima)
+      let valorFinalPedido = extractValorFinalPedido(mainSale);
+      if (!valorFinalPedido || valorFinalPedido === 0) {
+        valorFinalPedido = totalFinal; // fallback: soma por itens
+      }
+      
+      // 4) custo do pedido já está em 'custoTotal' (soma custos dos itens)
+      if (isDelivery) {
+        // ATENÇÃO: aqui é exatamente como você definiu:
+        // Faturamento Delivery = somatório da coluna Valor Final (ou fallback)
+        deliveryMetrics.revenue += valorFinalPedido;
+
+        // Ticket Médio = baseado nesses pedidos (conta 1 pedido)
         deliveryMetrics.orders += 1;
+
+        // Margem Bruta = Faturamento Delivery - Custo (dos itens)
+        deliveryMetrics.cost += custoTotal;
       }
       
       // tenta tirar a origem do cabeçalho; se vazio, pega a primeira não-vazia do grupo
