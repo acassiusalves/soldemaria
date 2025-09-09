@@ -377,8 +377,8 @@ export default function DashboardPage() {
         .sort((a,b) => b.revenue - a.revenue);
 
     const topCustomersData = Object.entries(customers)
-        .map(([name, data]) => ({ name, revenue: data.revenue, orders: data.orders.size }))
-        .sort((a, b) => b.revenue - a.revenue);
+        .map(([name, data]) => ({ name, value: data.orders.size }))
+        .sort((a, b) => b.value - a.value);
 
     const deliverySummary = {
         faturamento: deliveryMetrics.revenue,

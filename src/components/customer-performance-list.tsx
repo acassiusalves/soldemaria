@@ -6,18 +6,18 @@ import { Badge } from "@/components/ui/badge";
 
 type CustomerData = {
   name: string;
-  revenue: number;
+  value: number;
 };
 
 interface CustomerPerformanceListProps {
   data: CustomerData[];
 }
 
-const formatCurrency = (value?: number) => {
+const formatValue = (value?: number) => {
   if (value === undefined || value === null || isNaN(value)) {
-    return "R$ 0,00";
+    return "0 pedidos";
   }
-  return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  return `${value} pedido${value > 1 ? 's' : ''}`;
 };
 
 export default function CustomerPerformanceList({ data }: CustomerPerformanceListProps) {
@@ -44,7 +44,7 @@ export default function CustomerPerformanceList({ data }: CustomerPerformanceLis
                 <span className="font-medium text-sm truncate" title={customer.name}>{customer.name}</span>
             </div>
             <span className="font-semibold tabular-nums text-sm">
-              {formatCurrency(customer.revenue)}
+              {formatValue(customer.value)}
             </span>
           </div>
         ))}
