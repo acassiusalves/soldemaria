@@ -30,6 +30,7 @@ import {
   Archive,
   FileText,
   Tag,
+  Receipt,
 } from "lucide-react";
 import {
   collection,
@@ -1040,10 +1041,11 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
             acc.descontos += valorDescontos;
             acc.frete += custoFrete;
             acc.custoTotal += Number(row.custoTotal) || 0;
+            acc.valorFinalTotal += valorFinal;
             
             return acc;
         },
-        { faturamento: 0, descontos: 0, custoTotal: 0, frete: 0 }
+        { faturamento: 0, descontos: 0, custoTotal: 0, frete: 0, valorFinalTotal: 0 }
     );
   }, [groupedForView]);
 
@@ -1532,7 +1534,12 @@ React.useEffect(() => {
           )}
         </Card>
         
-        <div className="grid gap-4 md:grid-cols-4">
+        <div className="grid gap-4 md:grid-cols-5">
+          <SummaryCard 
+            title="Valor Final Total" 
+            value={summaryData.valorFinalTotal} 
+            icon={<Receipt className="text-primary" />}
+          />
           <SummaryCard 
             title="Faturamento" 
             value={summaryData.faturamento} 
@@ -1590,3 +1597,4 @@ React.useEffect(() => {
     </>
   );
 }
+
