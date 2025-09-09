@@ -1037,10 +1037,11 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
         (acc, row) => {
             const valorFinal = Number(row.final) || 0;
             const valorDescontos = Number(row.valorDescontos) || 0;
+            const custoFrete = Number(row.custoFrete) || 0;
 
-            acc.faturamento += valorFinal - valorDescontos;
+            acc.faturamento += valorFinal - valorDescontos + custoFrete;
             acc.descontos += valorDescontos;
-            acc.frete += Number(row.custoFrete) || 0;
+            acc.frete += custoFrete;
             acc.custoTotal += Number(row.custoTotal) || 0;
             
             return acc;
