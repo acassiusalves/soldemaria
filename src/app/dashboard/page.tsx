@@ -24,6 +24,8 @@ import {
   FileText,
   Check,
   ChevronsUpDown,
+  Scale,
+  Ticket,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { User } from "firebase/auth";
@@ -160,10 +162,10 @@ export default function DashboardPage() {
 
   const {
     summaryData,
-    logisticsChartData,
     originChartData,
     topProductsChartData,
     vendorPerformanceData,
+    deliverySummary,
   } = React.useMemo(() => {
     const summary = {
       faturamento: 0,
@@ -172,7 +174,12 @@ export default function DashboardPage() {
       frete: 0,
     };
 
-    const logistics: Record<string, number> = {};
+    const deliveryMetrics = {
+        revenue: 0,
+        cost: 0,
+        orders: 0,
+    };
+
     const origins: Record<string, number> = {};
     const products: Record<string, number> = {};
     const vendors: Record<string, { revenue: number }> = {};
@@ -215,9 +222,12 @@ export default function DashboardPage() {
       summary.custoTotal += custoTotal;
       summary.frete += custoFrete;
 
-      if (mainSale.logistica) {
-          logistics[mainSale.logistica] = (logistics[mainSale.logistica] || 0) + faturamentoLiquido;
+      if (mainSale.logistica?.toLowerCase() === 'delivery') {
+          deliveryMetrics.revenue += faturamentoLiquido;
+          deliveryMetrics.cost += custoTotal;
+          deliveryMetrics.orders += 1;
       }
+      
       if (mainSale.origem) {
           origins[mainSale.origem] = (origins[mainSale.origem] || 0) + faturamentoLiquido;
       }
@@ -236,7 +246,6 @@ export default function DashboardPage() {
       });
     }
 
-    const logisticsChartData = Object.entries(logistics).map(([name, value]) => ({ name, current: value }));
     const originChartData = Object.entries(origins).map(([name, value]) => ({ name, current: value }));
     const topProductsChartData = Object.entries(products)
         .map(([name, quantity]) => ({ name, quantity }))
@@ -246,8 +255,14 @@ export default function DashboardPage() {
     const vendorPerformanceData = Object.entries(vendors)
         .map(([name, data]) => ({ name, revenue: data.revenue }))
         .sort((a,b) => b.revenue - a.revenue);
+
+    const deliverySummary = {
+        faturamento: deliveryMetrics.revenue,
+        ticketMedio: deliveryMetrics.orders > 0 ? deliveryMetrics.revenue / deliveryMetrics.orders : 0,
+        margemBruta: deliveryMetrics.revenue - deliveryMetrics.cost,
+    };
         
-    return { summaryData: summary, logisticsChartData, originChartData, topProductsChartData, vendorPerformanceData };
+    return { summaryData: summary, originChartData, topProductsChartData, vendorPerformanceData, deliverySummary };
   }, [filteredData]);
   
   const handleLogout = async () => {
@@ -448,15 +463,29 @@ export default function DashboardPage() {
           </div>
           <div className="grid gap-4 md:gap-8 lg:grid-cols-2 xl:grid-cols-3">
              <Card>
-              <CardHeader>
-                <CardTitle>Receita por Logística</CardTitle>
-                <CardDescription>
-                  Compare a receita gerada por cada canal de logística.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                 <LogisticsChart data={logisticsChartData} hasComparison={false} />
-              </CardContent>
+                <CardHeader>
+                    <CardTitle>Resumo do Delivery</CardTitle>
+                    <CardDescription>
+                    Principais indicadores do canal de delivery no período.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                     <SummaryCard 
+                        title="Faturamento Delivery" 
+                        value={deliverySummary.faturamento} 
+                        icon={<DollarSign className="text-primary" />}
+                    />
+                    <SummaryCard 
+                        title="Ticket Médio Delivery" 
+                        value={deliverySummary.ticketMedio} 
+                        icon={<Ticket className="text-primary" />}
+                    />
+                     <SummaryCard 
+                        title="Margem Bruta Delivery" 
+                        value={deliverySummary.margemBruta}
+                        icon={<Scale className="text-primary" />}
+                    />
+                </CardContent>
             </Card>
             <Card>
               <CardHeader>
