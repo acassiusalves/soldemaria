@@ -196,9 +196,9 @@ export default function DashboardPage() {
     }
 
     for (const [code, sales] of salesGroups.entries()) {
+      const itemRows = sales.filter(isDetailRow);
       const headerRows = sales.filter(s => !isDetailRow(s));
-      const itemRows = sales.filter(s => isDetailRow(s));
-      const mainSale = headerRows.length > 0 ? headerRows[0] : sales[0];
+      const mainSale = headerRows.length > 0 ? headerRows[0] : (itemRows.length > 0 ? itemRows[0] : sales[0]);
       const effectiveItemRows = itemRows.length > 0 ? itemRows : (headerRows.length > 0 ? headerRows : sales);
         
       let totalFinal = effectiveItemRows.reduce((acc, s) => {
