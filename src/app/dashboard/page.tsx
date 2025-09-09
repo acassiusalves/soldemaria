@@ -75,6 +75,19 @@ const toDate = (value: unknown): Date | null => {
   return null;
 };
 
+// Helper function from vendas/page.tsx to normalize order codes
+const normCode = (v: any) => {
+  let s = String(v ?? "").replace(/\u00A0/g, " ").trim();
+  if (/^\d+(?:\.0+)?$/.test(s)) s = s.replace(/\.0+$/, "");
+  s = s.replace(/[^\d]/g, "");
+  s = s.replace(/^0+/, "");
+  return s;
+};
+
+const isDetailRow = (row: Record<string, any>) =>
+  row.item || row.descricao;
+
+
 export default function DashboardPage() {
   const router = useRouter();
   const [user, setUser] = React.useState<User | null>(null);
@@ -159,7 +172,8 @@ export default function DashboardPage() {
     const salesGroups = new Map<string, VendaDetalhada[]>();
 
     for (const sale of filteredData) {
-        const code = String(sale.codigo);
+        const code = normCode(sale.codigo);
+        if (!code) continue;
         if (!salesGroups.has(code)) {
             salesGroups.set(code, []);
         }
@@ -169,14 +183,25 @@ export default function DashboardPage() {
     kpisResult.totalSales = salesGroups.size;
 
     for(const [code, sales] of salesGroups.entries()) {
-        const mainSale = sales.find(s => !s.item && !s.descricao) || sales[0];
-        const itemSales = sales.filter(s => s.item || s.descricao);
+        const headerRows = sales.filter(s => !isDetailRow(s));
+        const itemRows = sales.filter(s => isDetailRow(s));
+        const mainSale = headerRows.length > 0 ? headerRows[0] : sales[0];
+        const effectiveItemRows = itemRows.length > 0 ? itemRows : (headerRows.length > 0 ? headerRows : sales);
         
-        const totalFinal = itemSales.reduce((acc, s) => acc + ((Number(s.valorUnitario) || 0) * (Number(s.quantidade) || 0)), 0);
+        let totalFinal = effectiveItemRows.reduce((acc, s) => {
+            const itemFinal = Number(s.final) || 0;
+            const itemValorUnitario = Number(s.valorUnitario) || 0;
+            const itemQuantidade = Number(s.quantidade) || 0;
+            
+            if (itemFinal > 0) return acc + itemFinal;
+            return acc + (itemValorUnitario * itemQuantidade);
+        }, 0);
+        
         const totalDescontos = sales.reduce((acc, s) => acc + (Number(s.valorDescontos) || 0), 0);
-        const custoTotal = sales.reduce((acc, s) => acc + ((Number(s.custoUnitario) || 0) * (Number(s.quantidade) || 0)), 0);
-        const custoFrete = Number(mainSale.custoFrete) || 0;
+        const custoTotal = effectiveItemRows.reduce((acc, s) => acc + ((Number(s.custoUnitario) || 0) * (Number(s.quantidade) || 0)), 0);
         
+        const custoFrete = sales.reduce((acc, sale) => acc + (Number(sale.custoFrete) || 0), 0);
+
         const faturamentoLiquido = totalFinal - totalDescontos + custoFrete;
         
         summary.faturamento += faturamentoLiquido;
@@ -185,7 +210,6 @@ export default function DashboardPage() {
         summary.frete += custoFrete;
         
         kpisResult.totalRevenue += faturamentoLiquido;
-
 
         if (mainSale.logistica) {
             logistics[mainSale.logistica] = (logistics[mainSale.logistica] || 0) + faturamentoLiquido;
