@@ -561,21 +561,9 @@ export default function DashboardPage() {
                 isCurrency
             />
             <SummaryCard 
-                title="Descontos" 
-                value={summaryData.descontos} 
-                icon={<Tag className="text-primary" />}
-                isCurrency
-            />
-            <SummaryCard 
                 title="Custo Total (CMV)" 
                 value={summaryData.custoTotal}
                 icon={<Archive className="text-primary" />}
-                isCurrency
-            />
-            <SummaryCard 
-                title="Frete" 
-                value={summaryData.frete}
-                icon={<Truck className="text-primary" />}
                 isCurrency
             />
              <SummaryCard 
@@ -584,23 +572,17 @@ export default function DashboardPage() {
                 icon={<Scale className="text-primary" />}
                 isCurrency
             />
-          </div>
-           <div className="grid gap-4 md:grid-cols-5">
-             <div className="md:col-start-4">
-                <SummaryCard 
-                    title="Ticket Médio" 
-                    value={summaryData.ticketMedio}
-                    icon={<Ticket className="text-primary" />}
-                    isCurrency
-                />
-            </div>
-            <div className="md:col-start-5">
-                <SummaryCard 
-                    title="Qtd. Média Itens/Pedido" 
-                    value={summaryData.qtdMedia}
-                    icon={<Package className="text-primary" />}
-                />
-            </div>
+            <SummaryCard 
+                title="Ticket Médio" 
+                value={summaryData.ticketMedio}
+                icon={<Ticket className="text-primary" />}
+                isCurrency
+            />
+            <SummaryCard 
+                title="Qtd. Média Itens/Pedido" 
+                value={summaryData.qtdMedia}
+                icon={<Package className="text-primary" />}
+            />
           </div>
           <div className="grid gap-4 md:gap-8 lg:grid-cols-2 xl:grid-cols-3">
              <Card className="xl:col-span-2">
