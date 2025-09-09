@@ -70,12 +70,12 @@ export default function VendorPerformanceTable({ data, hasComparison, showGoals 
             <TableHead className="w-12">#</TableHead>
             <TableHead>Vendedor</TableHead>
             <TableHead className="text-right">Faturamento</TableHead>
-            {showGoals && <TableHead className="text-right">M. Faturamento</TableHead>}
+            {showGoals && <TableHead className="text-right text-muted-foreground">M. Faturamento</TableHead>}
             <TableHead className="text-right">Pedidos</TableHead>
             <TableHead className="text-right">Ticket Médio</TableHead>
-            {showGoals && <TableHead className="text-right">M. Ticket</TableHead>}
+            {showGoals && <TableHead className="text-right text-muted-foreground">M. Ticket</TableHead>}
             <TableHead className="text-right">Itens/Pedido</TableHead>
-            {showGoals && <TableHead className="text-right">M. Itens</TableHead>}
+            {showGoals && <TableHead className="text-right text-muted-foreground">M. Itens</TableHead>}
             {hasComparison && <TableHead className="text-right">% Variação Fat.</TableHead>}
             <TableHead className="w-[200px] text-right">Participação</TableHead>
           </TableRow>
