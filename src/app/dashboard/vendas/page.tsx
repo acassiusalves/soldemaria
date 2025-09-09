@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import * as React from "react";
@@ -741,7 +742,7 @@ const syncExistingCustomColumns = React.useCallback(async () => {
     
     if (needsOrderUpdate) {
         setColumnOrder(currentOrder);
-        await saveUserPreference(auth.currentUser.uid, 'vendas_columns_order', finalOrder);
+        await saveUserPreference(auth.currentUser.uid, 'vendas_columns_order', currentOrder);
     }
     
 }, [customCalculations, columnVisibility, columnOrder]);
@@ -1041,7 +1042,9 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
             const valorFinal = Number(row.final) || 0;
             const valorDescontos = Number(row.valorDescontos) || 0;
             const custoFrete = Number(row.custoFrete) || 0;
-
+            
+            const itemRows = row.subRows || [row];
+            
             acc.faturamento += valorFinal - valorDescontos + custoFrete;
             acc.descontos += valorDescontos;
             acc.custoTotal += Number(row.custoTotal) || 0;
@@ -1626,4 +1629,5 @@ React.useEffect(() => {
     </>
   );
 }
+
 
