@@ -14,6 +14,9 @@ import {
     onSnapshot,
     query,
     Timestamp,
+    doc,
+    setDoc,
+    getDoc,
 } from "firebase/firestore";
 import { getDbClient } from "@/lib/firebase";
 import type { VendaDetalhada } from "@/lib/data";
@@ -24,10 +27,16 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Calendar } from "@/components/ui/calendar";
 import { ptBR } from "date-fns/locale";
-import { Calendar as CalendarIcon, Check, ChevronsUpDown } from "lucide-react";
+import { Calendar as CalendarIcon, Check, ChevronsUpDown, Target, Save, Loader2 } from "lucide-react";
 import VendorPerformanceTable from "@/components/vendor-performance-table";
 import VendorSalesChart from "@/components/vendor-sales-chart";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { useToast } from "@/hooks/use-toast";
+import { Progress } from "@/components/ui/progress";
+
 
 const toDate = (value: unknown): Date | null => {
   if (!value) return null;
@@ -150,6 +159,7 @@ const calculateVendorMetrics = (data: VendaDetalhada[]) => {
   return { vendors };
 };
 
+const METAS_DOC_ID = "metas-faturamento-vendedores";
 
 export default function VendedoresPage() {
     const [allSales, setAllSales] = React.useState<VendaDetalhada[]>([]);
@@ -157,7 +167,11 @@ export default function VendedoresPage() {
     const [date, setDate] = React.useState<DateRange | undefined>(undefined);
     const [compareDate, setCompareDate] = React.useState<DateRange | undefined>(undefined);
     const [selectedVendors, setSelectedVendors] = React.useState<string[]>([]);
-    
+    const [vendorGoals, setVendorGoals] = React.useState<Record<string, number>>({});
+    const [isGoalsDialogOpen, setIsGoalsDialogOpen] = React.useState(false);
+    const [isSavingGoals, setIsSavingGoals] = React.useState(false);
+    const { toast } = useToast();
+
     React.useEffect(() => {
       const now = new Date();
       const today = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12, 0, 0, 0);
@@ -167,17 +181,27 @@ export default function VendedoresPage() {
     }, []);
 
     React.useEffect(() => {
-        let unsub: () => void;
+        const unsubs: (()=>void)[] = [];
         (async () => {
             const db = await getDbClient();
             if (!db) return;
             const q = query(collection(db, "vendas"));
-            unsub = onSnapshot(q, (snapshot) => {
+            const unsubSales = onSnapshot(q, (snapshot) => {
                 if (snapshot.metadata.hasPendingWrites) return;
                 setAllSales(snapshot.docs.map((d) => ({ ...d.data(), id: d.id })) as VendaDetalhada[]);
             });
+            unsubs.push(unsubSales);
+            
+            const metasRef = doc(db, "metas-vendedores", METAS_DOC_ID);
+            const unsubMetas = onSnapshot(metasRef, (docSnap) => {
+                if(docSnap.exists()) {
+                    setVendorGoals(docSnap.data() || {});
+                }
+            });
+            unsubs.push(unsubMetas);
+
         })();
-        return () => unsub && unsub();
+        return () => unsubs.forEach(unsub => unsub());
     }, []);
     
     const { filteredData, comparisonData } = React.useMemo(() => {
@@ -198,13 +222,15 @@ export default function VendedoresPage() {
         const { vendors: currentVendors } = calculateVendorMetrics(filteredData);
         const { vendors: previousVendors } = comparisonData.length > 0 ? calculateVendorMetrics(comparisonData) : { vendors: {} };
 
-        const allVendors = Array.from(new Set([...Object.keys(currentVendors), ...Object.keys(previousVendors)]));
+        const allVendors = Array.from(new Set([...Object.keys(currentVendors), ...Object.keys(previousVendors), ...Object.keys(vendorGoals)]));
 
         const totalRevenueAllVendors = Object.values(currentVendors).reduce((sum, v) => sum + v.revenue, 0);
 
         const combinedTableData = allVendors.map(name => {
             const current = currentVendors[name] || { revenue: 0, orders: 0, itemsSold: 0, dailySales: {} };
             const previous = previousVendors[name] || { revenue: 0, orders: 0, itemsSold: 0, dailySales: {} };
+            const goal = vendorGoals[name] || 0;
+            const goalProgress = goal > 0 ? (current.revenue / goal) * 100 : 0;
 
             return {
                 name,
@@ -215,7 +241,9 @@ export default function VendedoresPage() {
                 averagePrice: current.itemsSold > 0 ? current.revenue / current.itemsSold : 0,
                 averageItemsPerOrder: current.orders > 0 ? current.itemsSold / current.orders : 0,
                 share: totalRevenueAllVendors > 0 ? (current.revenue / totalRevenueAllVendors) * 100 : 0,
-                previousRevenue: previous.revenue
+                previousRevenue: previous.revenue,
+                goal: goal,
+                goalProgress: goalProgress,
             };
         }).sort((a, b) => b.revenue - a.revenue);
 
@@ -245,7 +273,38 @@ export default function VendedoresPage() {
         }
         
         return { tableData: combinedTableData, chartData: finalChartData, allVendorNames: allVendors };
-    }, [filteredData, comparisonData, date, selectedVendors, compareDate]);
+    }, [filteredData, comparisonData, date, selectedVendors, compareDate, vendorGoals]);
+
+    const handleSaveGoals = async () => {
+        setIsSavingGoals(true);
+        try {
+            const db = await getDbClient();
+            if (!db) throw new Error("DB not available");
+            
+            const metasRef = doc(db, "metas-vendedores", METAS_DOC_ID);
+            await setDoc(metasRef, vendorGoals);
+            
+            toast({
+                title: "Sucesso!",
+                description: "As metas dos vendedores foram salvas.",
+            });
+            setIsGoalsDialogOpen(false);
+        } catch (error) {
+            console.error("Erro ao salvar metas:", error);
+            toast({
+                title: "Erro",
+                description: "Não foi possível salvar as metas.",
+                variant: "destructive",
+            });
+        } finally {
+            setIsSavingGoals(false);
+        }
+    };
+    
+    const handleGoalChange = (vendorName: string, value: string) => {
+        const numericValue = parseFloat(value) || 0;
+        setVendorGoals(prev => ({ ...prev, [vendorName]: numericValue }));
+    };
     
     const hasComparison = !!compareDate;
 
@@ -271,7 +330,7 @@ export default function VendedoresPage() {
             Selecione o período para analisar a performance de seus vendedores.
           </CardDescription>
         </CardHeader>
-        <CardContent className="flex flex-wrap gap-4">
+        <CardContent className="flex flex-wrap gap-4 items-center">
              <Popover>
                 <PopoverTrigger asChild>
                 <Button id="date" variant={"outline"} className={cn("w-[300px] justify-start text-left font-normal",!date && "text-muted-foreground")}>
@@ -301,6 +360,46 @@ export default function VendedoresPage() {
             {hasComparison && (
               <Button variant="ghost" onClick={() => setCompareDate(undefined)}>Limpar Comparação</Button>
             )}
+             <Dialog open={isGoalsDialogOpen} onOpenChange={setIsGoalsDialogOpen}>
+                <DialogTrigger asChild>
+                    <Button variant="default">
+                        <Target className="mr-2 h-4 w-4" />
+                        Metas
+                    </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>Definir Metas de Faturamento</DialogTitle>
+                        <DialogDescription>
+                            Insira a meta de faturamento mensal para cada vendedor.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="py-4 space-y-4 max-h-[60vh] overflow-y-auto pr-2">
+                        {allVendorNames.map(vendor => (
+                            <div key={vendor} className="grid grid-cols-2 items-center gap-4">
+                                <Label htmlFor={`goal-${vendor}`} className="text-right">
+                                    {vendor}
+                                </Label>
+                                <Input
+                                    id={`goal-${vendor}`}
+                                    type="number"
+                                    placeholder="R$ 0,00"
+                                    value={vendorGoals[vendor] || ''}
+                                    onChange={(e) => handleGoalChange(vendor, e.target.value)}
+                                    className="col-span-1"
+                                />
+                            </div>
+                        ))}
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setIsGoalsDialogOpen(false)}>Cancelar</Button>
+                        <Button onClick={handleSaveGoals} disabled={isSavingGoals}>
+                            {isSavingGoals ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                            Salvar Metas
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </CardContent>
       </Card>
       
@@ -362,3 +461,4 @@ export default function VendedoresPage() {
     </div>
   );
 }
+
