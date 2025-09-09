@@ -21,7 +21,7 @@ import {
 import { getDbClient } from "@/lib/firebase";
 import type { VendaDetalhada } from "@/lib/data";
 import { DateRange } from "react-day-picker";
-import { eachDayOfInterval, endOfDay, format, isValid, parseISO, startOfMonth, differenceInDays, subDays } from "date-fns";
+import { eachDayOfInterval, endOfDay, format, isValid, parseISO, startOfMonth, differenceInDays, subDays, getYear, getMonth, setYear, setMonth } from "date-fns";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -37,6 +37,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 
 const toDate = (value: unknown): Date | null => {
@@ -112,6 +113,8 @@ type VendorGoal = {
     ticketMedio?: number;
     itensPorPedido?: number;
 }
+type MonthlyGoals = Record<string, VendorGoal>;
+
 
 const calculateVendorMetrics = (data: VendaDetalhada[]) => {
   const salesGroups = new Map<string, VendaDetalhada[]>();
@@ -165,7 +168,6 @@ const calculateVendorMetrics = (data: VendaDetalhada[]) => {
   return { vendors };
 };
 
-const METAS_DOC_ID = "metas-faturamento-vendedores";
 
 export default function VendedoresPage() {
     const [allSales, setAllSales] = React.useState<VendaDetalhada[]>([]);
@@ -173,10 +175,14 @@ export default function VendedoresPage() {
     const [date, setDate] = React.useState<DateRange | undefined>(undefined);
     const [compareDate, setCompareDate] = React.useState<DateRange | undefined>(undefined);
     const [selectedVendors, setSelectedVendors] = React.useState<string[]>([]);
-    const [vendorGoals, setVendorGoals] = React.useState<Record<string, VendorGoal>>({});
+    const [monthlyGoals, setMonthlyGoals] = React.useState<Record<string, MonthlyGoals>>({});
     const [isGoalsDialogOpen, setIsGoalsDialogOpen] = React.useState(false);
     const [isSavingGoals, setIsSavingGoals] = React.useState(false);
     const [showGoals, setShowGoals] = React.useState(false);
+    const [goalPeriod, setGoalPeriod] = React.useState<{ month: number; year: number }>({
+        month: getMonth(new Date()),
+        year: getYear(new Date()),
+    });
     const { toast } = useToast();
 
     React.useEffect(() => {
@@ -198,19 +204,43 @@ export default function VendedoresPage() {
                 setAllSales(snapshot.docs.map((d) => ({ ...d.data(), id: d.id })) as VendaDetalhada[]);
             });
             unsubs.push(unsubSales);
-            
-            const metasRef = doc(db, "metas-vendedores", METAS_DOC_ID);
-            const unsubMetas = onSnapshot(metasRef, (docSnap) => {
-                if(docSnap.exists()) {
-                    setVendorGoals(docSnap.data() || {});
-                }
-            });
-            unsubs.push(unsubMetas);
-
         })();
         return () => unsubs.forEach(unsub => unsub());
     }, []);
+
+    // Effect to fetch goals for the selected period
+    React.useEffect(() => {
+        let unsub: () => void;
+        (async () => {
+            if (!date?.from) return;
+            const db = await getDbClient();
+            if (!db) return;
+
+            const periodKey = format(date.from, 'yyyy-MM');
+            const metasRef = doc(db, "metas-vendedores", periodKey);
+            
+            unsub = onSnapshot(metasRef, (docSnap) => {
+                if (docSnap.exists()) {
+                    setMonthlyGoals(prev => ({ ...prev, [periodKey]: docSnap.data() as MonthlyGoals }));
+                } else {
+                    setMonthlyGoals(prev => ({ ...prev, [periodKey]: {} }));
+                }
+            });
+        })();
+        return () => unsub && unsub();
+    }, [date]);
     
+    // Set goal period when dialog opens
+    React.useEffect(() => {
+        if(isGoalsDialogOpen && date?.from) {
+            setGoalPeriod({ month: getMonth(date.from), year: getYear(date.from) });
+        } else if (isGoalsDialogOpen) {
+            const now = new Date();
+            setGoalPeriod({ month: getMonth(now), year: getYear(now) });
+        }
+    }, [isGoalsDialogOpen, date]);
+
+
     const { filteredData, comparisonData } = React.useMemo(() => {
         const filterByDate = (data: VendaDetalhada[], dateRange?: DateRange) => {
             if (!dateRange?.from) return [];
@@ -229,14 +259,17 @@ export default function VendedoresPage() {
         const { vendors: currentVendors } = calculateVendorMetrics(filteredData);
         const { vendors: previousVendors } = comparisonData.length > 0 ? calculateVendorMetrics(comparisonData) : { vendors: {} };
 
-        const allVendors = Array.from(new Set([...Object.keys(currentVendors), ...Object.keys(previousVendors), ...Object.keys(vendorGoals)]));
+        const currentPeriodKey = date?.from ? format(date.from, 'yyyy-MM') : '';
+        const vendorGoalsForPeriod = monthlyGoals[currentPeriodKey] || {};
+        
+        const allVendors = Array.from(new Set([...Object.keys(currentVendors), ...Object.keys(previousVendors), ...Object.keys(vendorGoalsForPeriod)]));
 
         const totalRevenueAllVendors = Object.values(currentVendors).reduce((sum, v) => sum + v.revenue, 0);
 
         const combinedTableData = allVendors.map(name => {
             const current = currentVendors[name] || { revenue: 0, orders: 0, itemsSold: 0, dailySales: {} };
             const previous = previousVendors[name] || { revenue: 0, orders: 0, itemsSold: 0, dailySales: {} };
-            const goals = vendorGoals[name] || {};
+            const goals = vendorGoalsForPeriod[name] || {};
 
             return {
                 name,
@@ -280,20 +313,22 @@ export default function VendedoresPage() {
         }
         
         return { tableData: combinedTableData, chartData: finalChartData, allVendorNames: allVendors };
-    }, [filteredData, comparisonData, date, selectedVendors, compareDate, vendorGoals]);
+    }, [filteredData, comparisonData, date, selectedVendors, compareDate, monthlyGoals]);
 
     const handleSaveGoals = async () => {
         setIsSavingGoals(true);
+        const periodKey = `${goalPeriod.year}-${String(goalPeriod.month + 1).padStart(2, '0')}`;
+        const goalsToSave = monthlyGoals[periodKey] || {};
         try {
             const db = await getDbClient();
             if (!db) throw new Error("DB not available");
             
-            const metasRef = doc(db, "metas-vendedores", METAS_DOC_ID);
-            await setDoc(metasRef, vendorGoals);
+            const metasRef = doc(db, "metas-vendedores", periodKey);
+            await setDoc(metasRef, goalsToSave);
             
             toast({
                 title: "Sucesso!",
-                description: "As metas dos vendedores foram salvas.",
+                description: `As metas de ${format(new Date(goalPeriod.year, goalPeriod.month), "MMMM/yyyy", { locale: ptBR })} foram salvas.`,
             });
             setIsGoalsDialogOpen(false);
         } catch (error) {
@@ -310,17 +345,27 @@ export default function VendedoresPage() {
     
     const handleGoalChange = (vendorName: string, goalType: keyof VendorGoal, value: string) => {
         const numericValue = parseFloat(value) || 0;
-        setVendorGoals(prev => ({ 
-            ...prev, 
-            [vendorName]: {
-                ...(prev[vendorName] || {}),
-                [goalType]: numericValue
+        const periodKey = `${goalPeriod.year}-${String(goalPeriod.month + 1).padStart(2, '0')}`;
+        setMonthlyGoals(prev => ({
+            ...prev,
+            [periodKey]: {
+                ...(prev[periodKey] || {}),
+                [vendorName]: {
+                    ...((prev[periodKey] || {})[vendorName] || {}),
+                    [goalType]: numericValue
+                }
             }
         }));
     };
     
     const hasComparison = !!compareDate;
 
+    const years = Array.from({ length: 5 }, (_, i) => getYear(new Date()) - i);
+    const months = Array.from({ length: 12 }, (_, i) => ({
+      value: i,
+      label: format(new Date(0, i), 'MMMM', { locale: ptBR }),
+    }));
+    
     if (!mounted || !date) {
       return (
         <div className="flex flex-col gap-6">
@@ -383,9 +428,31 @@ export default function VendedoresPage() {
                 <DialogContent className="max-w-xl">
                     <DialogHeader>
                         <DialogTitle>Definir Metas Mensais</DialogTitle>
-                        <DialogDescription>
-                            Insira as metas para cada vendedor em cada indicador.
-                        </DialogDescription>
+                         <div className="flex items-center gap-4 pt-2">
+                             <Label>Período da meta:</Label>
+                             <Select
+                                value={String(goalPeriod.month)}
+                                onValueChange={(value) => setGoalPeriod(prev => ({...prev, month: Number(value)}))}
+                             >
+                                <SelectTrigger className="w-[180px]">
+                                    <SelectValue placeholder="Mês" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {months.map(m => <SelectItem key={m.value} value={String(m.value)}>{m.label}</SelectItem>)}
+                                </SelectContent>
+                             </Select>
+                             <Select
+                                value={String(goalPeriod.year)}
+                                onValueChange={(value) => setGoalPeriod(prev => ({...prev, year: Number(value)}))}
+                            >
+                                <SelectTrigger className="w-[120px]">
+                                    <SelectValue placeholder="Ano" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {years.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
+                                </SelectContent>
+                             </Select>
+                        </div>
                     </DialogHeader>
                     <Tabs defaultValue="faturamento">
                         <TabsList className="grid w-full grid-cols-3">
@@ -393,7 +460,7 @@ export default function VendedoresPage() {
                             <TabsTrigger value="ticketMedio">Ticket Médio</TabsTrigger>
                             <TabsTrigger value="itensPorPedido">Itens/Pedido</TabsTrigger>
                         </TabsList>
-                        <div className="py-4 space-y-4 max-h-[60vh] overflow-y-auto pr-2">
+                        <div className="py-4 space-y-4 max-h-[50vh] overflow-y-auto pr-2">
                              <TabsContent value="faturamento">
                                 {allVendorNames.map(vendor => (
                                     <div key={vendor} className="grid grid-cols-2 items-center gap-4">
@@ -404,7 +471,7 @@ export default function VendedoresPage() {
                                             id={`goal-${vendor}-faturamento`}
                                             type="number"
                                             placeholder="R$ 0,00"
-                                            value={vendorGoals[vendor]?.faturamento || ''}
+                                            value={monthlyGoals[`${goalPeriod.year}-${String(goalPeriod.month + 1).padStart(2, '0')}`]?.[vendor]?.faturamento || ''}
                                             onChange={(e) => handleGoalChange(vendor, 'faturamento', e.target.value)}
                                             className="col-span-1"
                                         />
@@ -421,7 +488,7 @@ export default function VendedoresPage() {
                                             id={`goal-${vendor}-ticket`}
                                             type="number"
                                             placeholder="R$ 0,00"
-                                            value={vendorGoals[vendor]?.ticketMedio || ''}
+                                            value={monthlyGoals[`${goalPeriod.year}-${String(goalPeriod.month + 1).padStart(2, '0')}`]?.[vendor]?.ticketMedio || ''}
                                             onChange={(e) => handleGoalChange(vendor, 'ticketMedio', e.target.value)}
                                             className="col-span-1"
                                         />
@@ -438,7 +505,7 @@ export default function VendedoresPage() {
                                             id={`goal-${vendor}-itens`}
                                             type="number"
                                             placeholder="0.00"
-                                            value={vendorGoals[vendor]?.itensPorPedido || ''}
+                                            value={monthlyGoals[`${goalPeriod.year}-${String(goalPeriod.month + 1).padStart(2, '0')}`]?.[vendor]?.itensPorPedido || ''}
                                             onChange={(e) => handleGoalChange(vendor, 'itensPorPedido', e.target.value)}
                                             className="col-span-1"
                                         />
@@ -529,3 +596,6 @@ export default function VendedoresPage() {
     </div>
   );
 }
+
+
+    
