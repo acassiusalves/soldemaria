@@ -98,6 +98,28 @@ const normCode = (v: any) => {
 const isDetailRow = (row: Record<string, any>) =>
   row.item || row.descricao;
 
+// Normaliza canal/origem/logística e mapeia sinônimos para "delivery"
+const getChannel = (row: any): string => {
+  const raw = `${row?.origem ?? row?.canal ?? row?.logistica ?? ''}`
+    .toLowerCase()
+    .trim();
+
+  if (!raw) return '';
+
+  // sinônimos comuns
+  if (
+    raw.includes('delivery') ||
+    raw.includes('entrega') ||
+    raw.includes('ifood') ||
+    raw.includes('uber') ||
+    raw.includes('99')
+  ) {
+    return 'delivery';
+  }
+
+  return raw; // mantém outros canais (loja, whatsapp, instagram, etc.)
+};
+
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -222,14 +244,22 @@ export default function DashboardPage() {
       summary.custoTotal += custoTotal;
       summary.frete += custoFrete;
 
-      if (mainSale.logistica?.toLowerCase() === 'delivery') {
-          deliveryMetrics.revenue += faturamentoLiquido;
-          deliveryMetrics.cost += custoTotal;
-          deliveryMetrics.orders += 1;
+      // considera delivery se QUALQUER linha do grupo sinalizar delivery
+      const isDelivery = sales.some((r) => getChannel(r) === 'delivery');
+      
+      if (isDelivery) {
+        deliveryMetrics.revenue += faturamentoLiquido;
+        deliveryMetrics.cost += custoTotal;
+        deliveryMetrics.orders += 1;
       }
       
-      if (mainSale.origem) {
-          origins[mainSale.origem] = (origins[mainSale.origem] || 0) + faturamentoLiquido;
+      // tenta tirar a origem do cabeçalho; se vazio, pega a primeira não-vazia do grupo
+      const groupOrigin =
+        (mainSale?.origem ?? '').trim() ||
+        (sales.find((r) => (r?.origem ?? '').trim())?.origem ?? '').trim();
+
+      if (groupOrigin) {
+        origins[groupOrigin] = (origins[groupOrigin] || 0) + faturamentoLiquido;
       }
         
       const vendorName = mainSale.vendedor || "Sem Vendedor";
