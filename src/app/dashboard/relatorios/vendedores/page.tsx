@@ -36,6 +36,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Switch } from "@/components/ui/switch";
 
 
 const toDate = (value: unknown): Date | null => {
@@ -175,6 +176,7 @@ export default function VendedoresPage() {
     const [vendorGoals, setVendorGoals] = React.useState<Record<string, VendorGoal>>({});
     const [isGoalsDialogOpen, setIsGoalsDialogOpen] = React.useState(false);
     const [isSavingGoals, setIsSavingGoals] = React.useState(false);
+    const [showGoals, setShowGoals] = React.useState(false);
     const { toast } = useToast();
 
     React.useEffect(() => {
@@ -459,10 +461,22 @@ export default function VendedoresPage() {
       
       <Card>
         <CardHeader>
-            <CardTitle>Performance por Vendedor</CardTitle>
+            <div className="flex justify-between items-center">
+                <CardTitle>Performance por Vendedor</CardTitle>
+                <div className="flex items-center space-x-2">
+                    <Label htmlFor="show-goals" className="text-sm font-normal">
+                        Mostrar Metas
+                    </Label>
+                    <Switch
+                        id="show-goals"
+                        checked={showGoals}
+                        onCheckedChange={setShowGoals}
+                    />
+                </div>
+            </div>
         </CardHeader>
         <CardContent>
-            <VendorPerformanceTable data={tableData} hasComparison={hasComparison}/>
+            <VendorPerformanceTable data={tableData} hasComparison={hasComparison} showGoals={showGoals}/>
         </CardContent>
       </Card>
 

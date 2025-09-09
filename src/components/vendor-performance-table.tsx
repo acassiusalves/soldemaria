@@ -32,6 +32,7 @@ type VendorMetric = {
 interface VendorPerformanceTableProps {
   data: VendorMetric[];
   hasComparison: boolean;
+  showGoals: boolean;
 }
 
 const formatCurrency = (value?: number) => {
@@ -49,7 +50,7 @@ const formatNumber = (value?: number) => {
 }
 
 
-export default function VendorPerformanceTable({ data, hasComparison }: VendorPerformanceTableProps) {
+export default function VendorPerformanceTable({ data, hasComparison, showGoals }: VendorPerformanceTableProps) {
   if (!data || data.length === 0) {
     return (
       <div className="flex h-48 w-full items-center justify-center rounded-lg border-2 border-dashed">
@@ -72,8 +73,8 @@ export default function VendorPerformanceTable({ data, hasComparison }: VendorPe
             <TableHead className="text-right">Pedidos</TableHead>
             <TableHead className="text-right">Ticket Médio</TableHead>
             <TableHead className="text-right">Itens/Pedido</TableHead>
-            <TableHead className="w-[150px] text-right">Meta</TableHead>
-            <TableHead className="w-[150px] text-right">Atingimento</TableHead>
+            {showGoals && <TableHead className="w-[150px] text-right">Meta</TableHead>}
+            {showGoals && <TableHead className="w-[150px] text-right">Atingimento</TableHead>}
             <TableHead className="w-[200px] text-right">Participação</TableHead>
           </TableRow>
         </TableHeader>
@@ -104,13 +105,13 @@ export default function VendorPerformanceTable({ data, hasComparison }: VendorPe
                 <TableCell className="text-right">{vendor.orders}</TableCell>
                 <TableCell className="text-right">{formatCurrency(vendor.averageTicket)}</TableCell>
                 <TableCell className="text-right">{formatNumber(vendor.averageItemsPerOrder)}</TableCell>
-                <TableCell className="text-right">{formatCurrency(vendor.goal)}</TableCell>
-                <TableCell className="text-right">
+                {showGoals && <TableCell className="text-right">{formatCurrency(vendor.goal)}</TableCell>}
+                {showGoals && <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-2">
                         <span className="text-sm text-muted-foreground">{(vendor.goalProgress || 0).toFixed(1)}%</span>
                         <Progress value={vendor.goalProgress} className="w-20 h-1.5" />
                     </div>
-                </TableCell>
+                </TableCell>}
                 <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-4">
                     <span className="w-16 text-right">{vendor.share.toFixed(2)}%</span>
