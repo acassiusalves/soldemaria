@@ -35,7 +35,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Progress } from "@/components/ui/progress";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 
 const toDate = (value: unknown): Date | null => {
@@ -106,6 +106,11 @@ const UNIT_KEYS  = ["valorUnitario","valor unitario","preco_unitario","preço un
 const QTY_KEYS   = ["quantidade","qtd","qtde","qte","itens","itens_total"];
 const VENDOR_KEYS = ["vendedor", "Vendedor"];
 
+type VendorGoal = {
+    faturamento?: number;
+    ticketMedio?: number;
+    itensPorPedido?: number;
+}
 
 const calculateVendorMetrics = (data: VendaDetalhada[]) => {
   const salesGroups = new Map<string, VendaDetalhada[]>();
@@ -167,7 +172,7 @@ export default function VendedoresPage() {
     const [date, setDate] = React.useState<DateRange | undefined>(undefined);
     const [compareDate, setCompareDate] = React.useState<DateRange | undefined>(undefined);
     const [selectedVendors, setSelectedVendors] = React.useState<string[]>([]);
-    const [vendorGoals, setVendorGoals] = React.useState<Record<string, number>>({});
+    const [vendorGoals, setVendorGoals] = React.useState<Record<string, VendorGoal>>({});
     const [isGoalsDialogOpen, setIsGoalsDialogOpen] = React.useState(false);
     const [isSavingGoals, setIsSavingGoals] = React.useState(false);
     const { toast } = useToast();
@@ -229,7 +234,7 @@ export default function VendedoresPage() {
         const combinedTableData = allVendors.map(name => {
             const current = currentVendors[name] || { revenue: 0, orders: 0, itemsSold: 0, dailySales: {} };
             const previous = previousVendors[name] || { revenue: 0, orders: 0, itemsSold: 0, dailySales: {} };
-            const goal = vendorGoals[name] || 0;
+            const goal = vendorGoals[name]?.faturamento || 0;
             const goalProgress = goal > 0 ? (current.revenue / goal) * 100 : 0;
 
             return {
@@ -301,9 +306,15 @@ export default function VendedoresPage() {
         }
     };
     
-    const handleGoalChange = (vendorName: string, value: string) => {
+    const handleGoalChange = (vendorName: string, goalType: keyof VendorGoal, value: string) => {
         const numericValue = parseFloat(value) || 0;
-        setVendorGoals(prev => ({ ...prev, [vendorName]: numericValue }));
+        setVendorGoals(prev => ({ 
+            ...prev, 
+            [vendorName]: {
+                ...(prev[vendorName] || {}),
+                [goalType]: numericValue
+            }
+        }));
     };
     
     const hasComparison = !!compareDate;
@@ -367,30 +378,73 @@ export default function VendedoresPage() {
                         Metas
                     </Button>
                 </DialogTrigger>
-                <DialogContent className="max-w-md">
+                <DialogContent className="max-w-xl">
                     <DialogHeader>
-                        <DialogTitle>Definir Metas de Faturamento</DialogTitle>
+                        <DialogTitle>Definir Metas Mensais</DialogTitle>
                         <DialogDescription>
-                            Insira a meta de faturamento mensal para cada vendedor.
+                            Insira as metas para cada vendedor em cada indicador.
                         </DialogDescription>
                     </DialogHeader>
-                    <div className="py-4 space-y-4 max-h-[60vh] overflow-y-auto pr-2">
-                        {allVendorNames.map(vendor => (
-                            <div key={vendor} className="grid grid-cols-2 items-center gap-4">
-                                <Label htmlFor={`goal-${vendor}`} className="text-right">
-                                    {vendor}
-                                </Label>
-                                <Input
-                                    id={`goal-${vendor}`}
-                                    type="number"
-                                    placeholder="R$ 0,00"
-                                    value={vendorGoals[vendor] || ''}
-                                    onChange={(e) => handleGoalChange(vendor, e.target.value)}
-                                    className="col-span-1"
-                                />
-                            </div>
-                        ))}
-                    </div>
+                    <Tabs defaultValue="faturamento">
+                        <TabsList className="grid w-full grid-cols-3">
+                            <TabsTrigger value="faturamento">Faturamento</TabsTrigger>
+                            <TabsTrigger value="ticketMedio">Ticket Médio</TabsTrigger>
+                            <TabsTrigger value="itensPorPedido">Itens/Pedido</TabsTrigger>
+                        </TabsList>
+                        <div className="py-4 space-y-4 max-h-[60vh] overflow-y-auto pr-2">
+                             <TabsContent value="faturamento">
+                                {allVendorNames.map(vendor => (
+                                    <div key={vendor} className="grid grid-cols-2 items-center gap-4">
+                                        <Label htmlFor={`goal-${vendor}-faturamento`} className="text-right truncate">
+                                            {vendor}
+                                        </Label>
+                                        <Input
+                                            id={`goal-${vendor}-faturamento`}
+                                            type="number"
+                                            placeholder="R$ 0,00"
+                                            value={vendorGoals[vendor]?.faturamento || ''}
+                                            onChange={(e) => handleGoalChange(vendor, 'faturamento', e.target.value)}
+                                            className="col-span-1"
+                                        />
+                                    </div>
+                                ))}
+                            </TabsContent>
+                            <TabsContent value="ticketMedio">
+                                {allVendorNames.map(vendor => (
+                                    <div key={vendor} className="grid grid-cols-2 items-center gap-4">
+                                        <Label htmlFor={`goal-${vendor}-ticket`} className="text-right truncate">
+                                            {vendor}
+                                        </Label>
+                                        <Input
+                                            id={`goal-${vendor}-ticket`}
+                                            type="number"
+                                            placeholder="R$ 0,00"
+                                            value={vendorGoals[vendor]?.ticketMedio || ''}
+                                            onChange={(e) => handleGoalChange(vendor, 'ticketMedio', e.target.value)}
+                                            className="col-span-1"
+                                        />
+                                    </div>
+                                ))}
+                            </TabsContent>
+                            <TabsContent value="itensPorPedido">
+                                {allVendorNames.map(vendor => (
+                                    <div key={vendor} className="grid grid-cols-2 items-center gap-4">
+                                        <Label htmlFor={`goal-${vendor}-itens`} className="text-right truncate">
+                                            {vendor}
+                                        </Label>
+                                        <Input
+                                            id={`goal-${vendor}-itens`}
+                                            type="number"
+                                            placeholder="0.00"
+                                            value={vendorGoals[vendor]?.itensPorPedido || ''}
+                                            onChange={(e) => handleGoalChange(vendor, 'itensPorPedido', e.target.value)}
+                                            className="col-span-1"
+                                        />
+                                    </div>
+                                ))}
+                            </TabsContent>
+                        </div>
+                    </Tabs>
                     <DialogFooter>
                         <Button variant="outline" onClick={() => setIsGoalsDialogOpen(false)}>Cancelar</Button>
                         <Button onClick={handleSaveGoals} disabled={isSavingGoals}>
@@ -461,4 +515,3 @@ export default function VendedoresPage() {
     </div>
   );
 }
-
