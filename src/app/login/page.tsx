@@ -25,7 +25,6 @@ export default function LoginPage() {
   const [password, setPassword] = React.useState("");
   const [isLoading, setIsLoading] = React.useState(true);
   const [isLoggingIn, setIsLoggingIn] = React.useState(false);
-  const [imageError, setImageError] = React.useState(false);
   const router = useRouter();
   const { toast } = useToast();
 
@@ -96,7 +95,6 @@ export default function LoginPage() {
         <div className="mx-auto grid w-[350px] gap-6">
           <div className="grid gap-4 text-center">
             <div className="flex justify-center">
-              {!imageError ? (
                 <Image
                   src="/Design sem nome-4.png"
                   alt="Logo Sol de Maria"
@@ -104,19 +102,7 @@ export default function LoginPage() {
                   height={120}
                   className="rounded-full mx-auto"
                   priority
-                  onError={() => setImageError(true)}
                 />
-              ) : (
-                // Fallback melhorado com tema "Sol de Maria"
-                <div className="w-[120px] h-[120px] bg-gradient-to-br from-yellow-400 via-orange-400 to-red-500 rounded-full flex flex-col items-center justify-center mx-auto shadow-lg border-4 border-white relative overflow-hidden">
-                  <div className="absolute inset-0 bg-gradient-to-br from-yellow-300/30 to-transparent"></div>
-                  <Sun className="h-8 w-8 text-white mb-1" />
-                  <div className="text-white font-bold text-xs leading-tight">
-                    <div>SOL</div>
-                    <div className="text-[10px] font-medium">de Maria</div>
-                  </div>
-                </div>
-              )}
             </div>
             <h1 className="text-3xl font-bold font-headline">Visão de Vendas</h1>
             <p className="text-balance text-muted-foreground">
