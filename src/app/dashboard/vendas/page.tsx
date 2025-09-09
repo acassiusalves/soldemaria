@@ -31,6 +31,9 @@ import {
   FileText,
   Tag,
   Receipt,
+  Scale,
+  Ticket,
+  Package,
 } from "lucide-react";
 import {
   collection,
@@ -1031,6 +1034,7 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
   }, [filteredData, applyCustomCalculations, custosEmbalagem, taxasOperadoras]);
 
   const summaryData = React.useMemo(() => {
+    const numOrders = groupedForView.length;
     return groupedForView.reduce(
         (acc, row) => {
             const valorFinal = Number(row.final) || 0;
@@ -1042,12 +1046,36 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
             acc.frete += custoFrete;
             acc.custoTotal += Number(row.custoTotal) || 0;
             acc.valorFinalTotal += valorFinal;
+            acc.totalItems += Number(row.quantidadeTotal) || 0;
             
             return acc;
         },
-        { faturamento: 0, descontos: 0, custoTotal: 0, frete: 0, valorFinalTotal: 0 }
+        { 
+            faturamento: 0, 
+            descontos: 0, 
+            custoTotal: 0, 
+            frete: 0, 
+            valorFinalTotal: 0,
+            totalItems: 0,
+            ticketMedio: 0,
+            qtdMedia: 0,
+            margemBruta: 0,
+        }
     );
   }, [groupedForView]);
+
+  const finalSummary = React.useMemo(() => {
+      const numOrders = groupedForView.length;
+      const ticketMedio = numOrders > 0 ? summaryData.faturamento / numOrders : 0;
+      const qtdMedia = numOrders > 0 ? summaryData.totalItems / numOrders : 0;
+      const margemBruta = summaryData.faturamento - summaryData.custoTotal;
+      return {
+          ...summaryData,
+          ticketMedio,
+          qtdMedia,
+          margemBruta
+      }
+  }, [summaryData, groupedForView.length]);
 
 
 React.useEffect(() => {
@@ -1537,29 +1565,54 @@ React.useEffect(() => {
         <div className="grid gap-4 md:grid-cols-5">
           <SummaryCard 
             title="Valor Final Total" 
-            value={summaryData.valorFinalTotal} 
+            value={finalSummary.valorFinalTotal} 
             icon={<Receipt className="text-primary" />}
+            isCurrency
           />
           <SummaryCard 
             title="Faturamento" 
-            value={summaryData.faturamento} 
+            value={finalSummary.faturamento} 
             icon={<DollarSign className="text-primary" />}
+            isCurrency
           />
            <SummaryCard 
             title="Descontos" 
-            value={summaryData.descontos} 
+            value={finalSummary.descontos} 
             icon={<Tag className="text-primary" />}
+            isCurrency
           />
           <SummaryCard 
-            title="Custo Total" 
-            value={summaryData.custoTotal}
+            title="CMV (Custo)" 
+            value={finalSummary.custoTotal}
             icon={<Archive className="text-primary" />}
+            isCurrency
            />
           <SummaryCard 
             title="Frete" 
-            value={summaryData.frete}
+            value={finalSummary.frete}
             icon={<Truck className="text-primary" />}
+            isCurrency
           />
+        </div>
+
+         <div className="grid gap-4 md:grid-cols-4">
+            <SummaryCard 
+                title="Margem Bruta" 
+                value={finalSummary.margemBruta}
+                icon={<Scale className="text-primary" />}
+                isCurrency
+            />
+            <SummaryCard 
+                title="Ticket Médio" 
+                value={finalSummary.ticketMedio}
+                icon={<Ticket className="text-primary" />}
+                isCurrency
+            />
+            <SummaryCard 
+                title="Qtd. Média Itens/Pedido" 
+                value={finalSummary.qtdMedia}
+                icon={<Package className="text-primary" />}
+            />
         </div>
 
 
@@ -1597,4 +1650,3 @@ React.useEffect(() => {
     </>
   );
 }
-
