@@ -69,8 +69,8 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
-import OriginChart from "@/components/origin-chart";
 import VendorPerformanceList from "@/components/vendor-performance-list";
+import CustomerPerformanceList from "@/components/customer-performance-list";
 
 
 const toDate = (value: unknown): Date | null => {
@@ -222,11 +222,11 @@ export default function DashboardPage() {
 
   const {
     summaryData,
-    originChartData,
     topProductsChartData,
     vendorPerformanceData,
     deliverySummary,
     storeSummary,
+    topCustomersData,
   } = React.useMemo(() => {
     const summary = {
       faturamento: 0,
@@ -247,9 +247,9 @@ export default function DashboardPage() {
         orders: 0,
     };
 
-    const origins: Record<string, number> = {};
     const products: Record<string, number> = {};
     const vendors: Record<string, { revenue: number }> = {};
+    const customers: Record<string, { revenue: number, orders: Set<string> }> = {};
 
     const salesGroups = new Map<string, VendaDetalhada[]>();
 
@@ -323,22 +323,19 @@ export default function DashboardPage() {
         storeMetrics.orders += 1;
         storeMetrics.cost += custoTotal;
       }
-      
-      // tenta tirar a origem do cabeçalho; se vazio, pega a primeira não-vazia do grupo
-      const groupOrigin =
-        (mainSale?.origem ?? '').trim() ||
-        (sales.find((r) => (r?.origem ?? '').trim())?.origem ?? '').trim();
-
-      if (groupOrigin) {
-        origins[groupOrigin] = (origins[groupOrigin] || 0) + faturamentoLiquido;
-      }
         
       const vendorName = mainSale.vendedor || "Sem Vendedor";
-
       if (!vendors[vendorName]) {
         vendors[vendorName] = { revenue: 0 };
       }
       vendors[vendorName].revenue += faturamentoLiquido;
+      
+      const customerName = mainSale.nomeCliente || "Cliente não identificado";
+      if (!customers[customerName]) {
+          customers[customerName] = { revenue: 0, orders: new Set() };
+      }
+      customers[customerName].revenue += faturamentoLiquido;
+      customers[customerName].orders.add(code);
       
       sales.forEach(item => {
           if(item.descricao) {
@@ -347,7 +344,6 @@ export default function DashboardPage() {
       });
     }
 
-    const originChartData = Object.entries(origins).map(([name, value]) => ({ name, current: value }));
     const topProductsChartData = Object.entries(products)
         .map(([name, quantity]) => ({ name, quantity }))
         .sort((a, b) => b.quantity - a.quantity)
@@ -356,6 +352,10 @@ export default function DashboardPage() {
     const vendorPerformanceData = Object.entries(vendors)
         .map(([name, data]) => ({ name, revenue: data.revenue }))
         .sort((a,b) => b.revenue - a.revenue);
+
+    const topCustomersData = Object.entries(customers)
+        .map(([name, data]) => ({ name, revenue: data.revenue, orders: data.orders.size }))
+        .sort((a, b) => b.revenue - a.revenue);
 
     const deliverySummary = {
         faturamento: deliveryMetrics.revenue,
@@ -369,7 +369,7 @@ export default function DashboardPage() {
         margemBruta: storeMetrics.revenue - storeMetrics.cost,
     };
         
-    return { summaryData: summary, originChartData, topProductsChartData, vendorPerformanceData, deliverySummary, storeSummary };
+    return { summaryData: summary, topProductsChartData, vendorPerformanceData, deliverySummary, storeSummary, topCustomersData };
   }, [filteredData]);
   
   const handleLogout = async () => {
@@ -621,16 +621,13 @@ export default function DashboardPage() {
             </Card>
              <Card className="flex flex-col">
               <CardHeader>
-                <CardTitle>Insights Rápidos</CardTitle>
+                <CardTitle>Top Clientes</CardTitle>
                 <CardDescription>
-                  Sugestões e alertas gerados por IA para otimizar suas vendas.
+                  O ranking dos clientes que mais compraram no período.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="flex-grow flex flex-col justify-center items-center text-center p-6">
-                  <p className="text-muted-foreground">
-                    Nenhum insight para exibir no momento.
-                  </p>
-                  <Button variant="link" className="mt-2">Gerar Insights</Button>
+              <CardContent className="flex-grow p-0">
+                  <CustomerPerformanceList data={topCustomersData} />
               </CardContent>
             </Card>
           </div>
@@ -638,5 +635,3 @@ export default function DashboardPage() {
       </div>
   );
 }
-
-    
