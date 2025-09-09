@@ -177,7 +177,7 @@ export default function DashboardPage() {
         const custoTotal = sales.reduce((acc, s) => acc + ((Number(s.custoUnitario) || 0) * (Number(s.quantidade) || 0)), 0);
         const custoFrete = Number(mainSale.custoFrete) || 0;
         
-        const faturamentoLiquido = totalFinal - totalDescontos;
+        const faturamentoLiquido = totalFinal - totalDescontos + custoFrete;
         
         summary.faturamento += faturamentoLiquido;
         summary.descontos += totalDescontos;
