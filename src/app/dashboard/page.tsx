@@ -138,6 +138,8 @@ const extractTipo = (row: any): string => {
     raw.includes('99') || raw.includes('99food') ||
     raw.includes('rappi')
   ) return 'delivery';
+  
+  if (raw.includes('loja')) return 'loja';
 
   return raw;
 };
@@ -224,6 +226,7 @@ export default function DashboardPage() {
     topProductsChartData,
     vendorPerformanceData,
     deliverySummary,
+    storeSummary,
   } = React.useMemo(() => {
     const summary = {
       faturamento: 0,
@@ -233,6 +236,12 @@ export default function DashboardPage() {
     };
 
     const deliveryMetrics = {
+        revenue: 0,
+        cost: 0,
+        orders: 0,
+    };
+    
+    const storeMetrics = {
         revenue: 0,
         cost: 0,
         orders: 0,
@@ -309,6 +318,10 @@ export default function DashboardPage() {
 
         // Margem Bruta = Faturamento Delivery - Custo (dos itens)
         deliveryMetrics.cost += custoTotal;
+      } else {
+        storeMetrics.revenue += valorFinalPedido;
+        storeMetrics.orders += 1;
+        storeMetrics.cost += custoTotal;
       }
       
       // tenta tirar a origem do cabeçalho; se vazio, pega a primeira não-vazia do grupo
@@ -349,8 +362,14 @@ export default function DashboardPage() {
         ticketMedio: deliveryMetrics.orders > 0 ? deliveryMetrics.revenue / deliveryMetrics.orders : 0,
         margemBruta: deliveryMetrics.revenue - deliveryMetrics.cost,
     };
+    
+    const storeSummary = {
+        faturamento: storeMetrics.revenue,
+        ticketMedio: storeMetrics.orders > 0 ? storeMetrics.revenue / storeMetrics.orders : 0,
+        margemBruta: storeMetrics.revenue - storeMetrics.cost,
+    };
         
-    return { summaryData: summary, originChartData, topProductsChartData, vendorPerformanceData, deliverySummary };
+    return { summaryData: summary, originChartData, topProductsChartData, vendorPerformanceData, deliverySummary, storeSummary };
   }, [filteredData]);
   
   const handleLogout = async () => {
@@ -576,15 +595,29 @@ export default function DashboardPage() {
                 </CardContent>
             </Card>
             <Card>
-              <CardHeader>
-                <CardTitle>Receita por Origem</CardTitle>
-                <CardDescription>
-                  Visualize a contribuição de cada canal de aquisição.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <OriginChart data={originChartData} hasComparison={false} />
-              </CardContent>
+                <CardHeader>
+                    <CardTitle>Resumo da Loja</CardTitle>
+                    <CardDescription>
+                    Principais indicadores do canal de loja física no período.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                     <SummaryCard 
+                        title="Faturamento Loja" 
+                        value={storeSummary.faturamento} 
+                        icon={<DollarSign className="text-primary" />}
+                    />
+                    <SummaryCard 
+                        title="Ticket Médio Loja" 
+                        value={storeSummary.ticketMedio} 
+                        icon={<Ticket className="text-primary" />}
+                    />
+                     <SummaryCard 
+                        title="Margem Bruta Loja" 
+                        value={storeSummary.margemBruta}
+                        icon={<Scale className="text-primary" />}
+                    />
+                </CardContent>
             </Card>
              <Card className="flex flex-col">
               <CardHeader>
