@@ -3,7 +3,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { format, subDays, startOfMonth, endOfMonth, isValid, parseISO, endOfDay } from "date-fns";
+import { format, subDays, startOfMonth, endOfMonth, isValid, parseISO, endOfDay, eachDayOfInterval, differenceInDays } from "date-fns";
 import { ptBR } from 'date-fns/locale';
 import type { DateRange } from "react-day-picker";
 import {
@@ -22,6 +22,8 @@ import {
   Truck,
   Archive,
   FileText,
+  Check,
+  ChevronsUpDown,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { User } from "firebase/auth";
@@ -53,14 +55,19 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import KpiCard from "@/components/kpi-card";
-import SalesChart from "@/components/sales-chart";
-import LogisticsChart from "@/components/logistics-chart";
-import OriginChart from "@/components/origin-chart";
 import TopProductsChart from "@/components/top-products-chart";
-import type { Venda, VendaDetalhada } from "@/lib/data";
+import type { VendaDetalhada } from "@/lib/data";
 import { Logo } from "@/components/icons";
 import SummaryCard from "@/components/summary-card";
-import ChatBubble from "@/components/chat-bubble";
+import VendorSalesChart from "@/components/vendor-sales-chart";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 
 
 const toDate = (value: unknown): Date | null => {
@@ -149,90 +156,88 @@ export default function DashboardPage() {
     });
   }, [date, allSales]);
 
-  const { kpis, summaryData, logisticsChartData, originChartData, topProductsChartData, salesChartData } = React.useMemo(() => {
-    const kpisResult = {
-        totalRevenue: 0,
-        totalSales: 0,
-        newCustomers: 0,
-    };
-    
+  const {
+    summaryData,
+    logisticsChartData,
+    originChartData,
+    topProductsChartData,
+    vendorChartData,
+    allVendorNames,
+  } = React.useMemo(() => {
     const summary = {
       faturamento: 0,
       descontos: 0,
       custoTotal: 0,
       frete: 0,
-    }
+    };
 
     const logistics: Record<string, number> = {};
     const origins: Record<string, number> = {};
     const products: Record<string, number> = {};
-    const salesByDate: Record<string, number> = {};
-    const customerSet = new Set<string>();
+    const vendors: Record<string, { revenue: number, dailySales: Record<string, number> }> = {};
 
     const salesGroups = new Map<string, VendaDetalhada[]>();
 
     for (const sale of filteredData) {
-        const code = normCode(sale.codigo);
-        if (!code) continue;
-        if (!salesGroups.has(code)) {
-            salesGroups.set(code, []);
-        }
-        salesGroups.get(code)!.push(sale);
+      const code = normCode(sale.codigo);
+      if (!code) continue;
+      if (!salesGroups.has(code)) {
+        salesGroups.set(code, []);
+      }
+      salesGroups.get(code)!.push(sale);
     }
-    
-    kpisResult.totalSales = salesGroups.size;
 
-    for(const [code, sales] of salesGroups.entries()) {
-        const headerRows = sales.filter(s => !isDetailRow(s));
-        const itemRows = sales.filter(s => isDetailRow(s));
-        const mainSale = headerRows.length > 0 ? headerRows[0] : sales[0];
-        const effectiveItemRows = itemRows.length > 0 ? itemRows : (headerRows.length > 0 ? headerRows : sales);
+    for (const [code, sales] of salesGroups.entries()) {
+      const headerRows = sales.filter(s => !isDetailRow(s));
+      const itemRows = sales.filter(s => isDetailRow(s));
+      const mainSale = headerRows.length > 0 ? headerRows[0] : sales[0];
+      const effectiveItemRows = itemRows.length > 0 ? itemRows : (headerRows.length > 0 ? headerRows : sales);
         
-        let totalFinal = effectiveItemRows.reduce((acc, s) => {
-            const itemFinal = Number(s.final) || 0;
-            const itemValorUnitario = Number(s.valorUnitario) || 0;
-            const itemQuantidade = Number(s.quantidade) || 0;
+      let totalFinal = effectiveItemRows.reduce((acc, s) => {
+          const itemFinal = Number(s.final) || 0;
+          const itemValorUnitario = Number(s.valorUnitario) || 0;
+          const itemQuantidade = Number(s.quantidade) || 0;
             
-            if (itemFinal > 0) return acc + itemFinal;
-            return acc + (itemValorUnitario * itemQuantidade);
-        }, 0);
+          if (itemFinal > 0) return acc + itemFinal;
+          return acc + (itemValorUnitario * itemQuantidade);
+      }, 0);
         
-        const totalDescontos = sales.reduce((acc, s) => acc + (Number(s.valorDescontos) || 0), 0);
-        const custoTotal = effectiveItemRows.reduce((acc, s) => acc + ((Number(s.custoUnitario) || 0) * (Number(s.quantidade) || 0)), 0);
-        
-        const custoFrete = sales.reduce((acc, sale) => acc + (Number(sale.custoFrete) || 0), 0);
+      const totalDescontos = sales.reduce((acc, s) => acc + (Number(s.valorDescontos) || 0), 0);
+      const custoTotal = effectiveItemRows.reduce((acc, s) => acc + ((Number(s.custoUnitario) || 0) * (Number(s.quantidade) || 0)), 0);
+      const custoFrete = sales.reduce((acc, sale) => acc + (Number(sale.custoFrete) || 0), 0);
 
-        const faturamentoLiquido = totalFinal - totalDescontos + custoFrete;
+      const faturamentoLiquido = totalFinal - totalDescontos + custoFrete;
         
-        summary.faturamento += faturamentoLiquido;
-        summary.descontos += totalDescontos;
-        summary.custoTotal += custoTotal;
-        summary.frete += custoFrete;
-        
-        kpisResult.totalRevenue += faturamentoLiquido;
+      summary.faturamento += faturamentoLiquido;
+      summary.descontos += totalDescontos;
+      summary.custoTotal += custoTotal;
+      summary.frete += custoFrete;
 
-        if (mainSale.logistica) {
-            logistics[mainSale.logistica] = (logistics[mainSale.logistica] || 0) + faturamentoLiquido;
-        }
-        if (mainSale.origem) {
-            origins[mainSale.origem] = (origins[mainSale.origem] || 0) + faturamentoLiquido;
-        }
-        if (mainSale.nomeCliente && !customerSet.has(mainSale.nomeCliente)) {
-            customerSet.add(mainSale.nomeCliente);
-            kpisResult.newCustomers++;
-        }
+      if (mainSale.logistica) {
+          logistics[mainSale.logistica] = (logistics[mainSale.logistica] || 0) + faturamentoLiquido;
+      }
+      if (mainSale.origem) {
+          origins[mainSale.origem] = (origins[mainSale.origem] || 0) + faturamentoLiquido;
+      }
         
-        const saleDate = toDate(mainSale.data);
-        if (saleDate) {
-            const dateKey = format(saleDate, "yyyy-MM-dd");
-            salesByDate[dateKey] = (salesByDate[dateKey] || 0) + faturamentoLiquido;
-        }
+      const saleDate = toDate(mainSale.data);
+      const vendorName = mainSale.vendedor || "Sem Vendedor";
 
-        sales.forEach(item => {
-            if(item.descricao) {
-                products[item.descricao] = (products[item.descricao] || 0) + (Number(item.quantidade) || 0);
-            }
-        });
+      if (!vendors[vendorName]) {
+        vendors[vendorName] = { revenue: 0, dailySales: {} };
+      }
+      vendors[vendorName].revenue += faturamentoLiquido;
+      
+      if (saleDate) {
+          const dateKey = format(saleDate, "yyyy-MM-dd");
+          vendors[vendorName].dailySales[dateKey] = (vendors[vendorName].dailySales[dateKey] || 0) + faturamentoLiquido;
+      }
+
+      sales.forEach(item => {
+          if(item.descricao) {
+              products[item.descricao] = (products[item.descricao] || 0) + (Number(item.quantidade) || 0);
+          }
+      });
     }
 
     const logisticsChartData = Object.entries(logistics).map(([name, value]) => ({ name, current: value }));
@@ -241,18 +246,33 @@ export default function DashboardPage() {
         .map(([name, quantity]) => ({ name, quantity }))
         .sort((a, b) => b.quantity - a.quantity)
         .slice(0, 5);
-        
-    const salesChartData: Venda[] = Object.entries(salesByDate).map(([date, revenue]) => ({
-      id: date,
-      data: date,
-      receita: revenue,
-      categoria: "Casual", 
-      produto: "",
-      unidadesVendidas: 0,
-    }));
 
-    return { kpis: kpisResult, summaryData: summary, logisticsChartData, originChartData, topProductsChartData, salesChartData };
-  }, [filteredData]);
+    const allVendorNames = Object.keys(vendors).sort((a, b) => vendors[b].revenue - vendors[a].revenue);
+
+    let vendorChartData: any[] = [];
+    if (date?.from) {
+        const days = eachDayOfInterval({start: date.from, end: date.to || date.from});
+        vendorChartData = days.map(day => {
+            const dateKey = format(day, 'yyyy-MM-dd');
+            const dailyEntry: Record<string, any> = { date: format(day, 'dd/MM') };
+                
+            allVendorNames.forEach(vendor => {
+                dailyEntry[`${vendor}-current`] = vendors[vendor]?.dailySales[dateKey] || 0;
+            });
+            return dailyEntry;
+        });
+    }
+        
+    return { summaryData: summary, logisticsChartData, originChartData, topProductsChartData, vendorChartData, allVendorNames };
+  }, [filteredData, date]);
+  
+  const [selectedVendors, setSelectedVendors] = React.useState<string[]>([]);
+  
+  React.useEffect(() => {
+    if (allVendorNames.length > 0) {
+      setSelectedVendors(allVendorNames.slice(0, 5));
+    }
+  }, [allVendorNames]);
 
 
   const handleLogout = async () => {
@@ -428,17 +448,54 @@ export default function DashboardPage() {
             />
           </div>
           <div className="grid gap-4 md:gap-8 lg:grid-cols-2 xl:grid-cols-3">
-            <Card className="xl:col-span-2">
-              <CardHeader>
-                <CardTitle>Visão Geral das Vendas Mensais</CardTitle>
-                <CardDescription>
-                  Acompanhe a performance de suas vendas ao longo do tempo.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <SalesChart data={salesChartData} />
-              </CardContent>
-            </Card>
+             <Card className="xl:col-span-2">
+               <CardHeader>
+                  <CardTitle>Performance por Vendedor</CardTitle>
+                   <CardDescription>
+                      Acompanhe o faturamento diário dos vendedores selecionados.
+                  </CardDescription>
+               </CardHeader>
+               <CardContent className="space-y-4">
+                    <Popover>
+                        <PopoverTrigger asChild>
+                            <Button
+                                variant="outline"
+                                role="combobox"
+                                className="w-[250px] justify-between"
+                            >
+                                {selectedVendors.length > 0 ? `${selectedVendors.length} vendedor(es) selecionado(s)` : "Selecione vendedores..."}
+                                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                            </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-[250px] p-0">
+                            <Command>
+                                <CommandInput placeholder="Pesquisar vendedor..." />
+                                <CommandList>
+                                    <CommandEmpty>Nenhum vendedor encontrado.</CommandEmpty>
+                                    <CommandGroup>
+                                        {allVendorNames.map((vendor) => (
+                                            <CommandItem
+                                                key={vendor}
+                                                onSelect={() => {
+                                                    setSelectedVendors(current => 
+                                                        current.includes(vendor)
+                                                            ? current.filter(v => v !== vendor)
+                                                            : [...current, vendor]
+                                                    )
+                                                }}
+                                            >
+                                                <Check className={cn("mr-2 h-4 w-4", selectedVendors.includes(vendor) ? "opacity-100" : "opacity-0")} />
+                                                {vendor}
+                                            </CommandItem>
+                                        ))}
+                                    </CommandGroup>
+                                </CommandList>
+                            </Command>
+                        </PopoverContent>
+                    </Popover>
+                    <VendorSalesChart data={vendorChartData} vendors={selectedVendors} hasComparison={false} />
+                </CardContent>
+             </Card>
             <Card>
               <CardHeader>
                 <CardTitle>Produtos Mais Vendidos</CardTitle>
