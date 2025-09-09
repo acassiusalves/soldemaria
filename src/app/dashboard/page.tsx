@@ -205,7 +205,8 @@ export default function DashboardPage() {
         
       const totalDescontos = sales.reduce((acc, s) => acc + (Number(s.valorDescontos) || 0), 0);
       const custoTotal = effectiveItemRows.reduce((acc, s) => acc + ((Number(s.custoUnitario) || 0) * (Number(s.quantidade) || 0)), 0);
-      const custoFrete = sales.reduce((acc, sale) => acc + (Number(sale.custoFrete) || 0), 0);
+      
+      const custoFrete = sales.length > 0 ? Number(sales[0].custoFrete) || 0 : 0;
 
       const faturamentoLiquido = totalFinal - totalDescontos + custoFrete;
         
@@ -246,7 +247,7 @@ export default function DashboardPage() {
         .map(([name, data]) => ({ name, revenue: data.revenue }))
         .sort((a,b) => b.revenue - a.revenue);
         
-    return { summaryData, logisticsChartData, originChartData, topProductsChartData, vendorPerformanceData };
+    return { summaryData: summary, logisticsChartData, originChartData, topProductsChartData, vendorPerformanceData };
   }, [filteredData]);
   
   const handleLogout = async () => {
