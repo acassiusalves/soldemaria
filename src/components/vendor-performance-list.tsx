@@ -3,10 +3,23 @@
 
 import React from "react";
 import { Badge } from "@/components/ui/badge";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Progress } from "./ui/progress";
+
 
 type VendorData = {
   name: string;
   revenue: number;
+  averageTicket: number;
+  averageItemsPerOrder: number;
+  share: number;
 };
 
 interface VendorPerformanceListProps {
@@ -20,6 +33,13 @@ const formatCurrency = (value?: number) => {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 };
 
+const formatNumber = (value?: number) => {
+    if (value === undefined || value === null || isNaN(value)) {
+        return "0.00";
+    }
+    return value.toFixed(2);
+}
+
 export default function VendorPerformanceList({ data }: VendorPerformanceListProps) {
   if (!data || data.length === 0) {
     return (
@@ -30,35 +50,38 @@ export default function VendorPerformanceList({ data }: VendorPerformanceListPro
   }
 
   return (
-    <div className="w-full space-y-2">
-      {/* Header */}
-      <div className="flex justify-between px-3 py-2 text-sm text-muted-foreground">
-        <div className="flex items-center gap-6">
-            <span>#</span>
-            <span>Vendedor</span>
-        </div>
-        <span>Faturamento</span>
-      </div>
-
-      {/* List */}
-      <div className="space-y-1">
-        {data.slice(0, 5).map((vendor, index) => (
-          <div
-            key={vendor.name}
-            className="flex items-center justify-between rounded-md p-3 hover:bg-muted/50"
-          >
-            <div className="flex items-center gap-4">
-                <Badge variant={index < 3 ? "default" : "secondary"} className="w-6 h-6 flex items-center justify-center rounded-full">
-                    {index + 1}
-                </Badge>
-                <span className="font-medium">{vendor.name}</span>
-            </div>
-            <span className="font-semibold tabular-nums">
-              {formatCurrency(vendor.revenue)}
-            </span>
-          </div>
-        ))}
-      </div>
+    <div className="w-full">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead className="w-12">#</TableHead>
+            <TableHead>Vendedor</TableHead>
+            <TableHead className="text-right">Faturamento</TableHead>
+            <TableHead className="text-right">Ticket Médio</TableHead>
+            <TableHead className="text-right">Itens/Pedido</TableHead>
+            <TableHead className="w-[150px] text-right">Share</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+            {data.slice(0, 5).map((vendor, index) => (
+            <TableRow key={vendor.name}>
+                <TableCell>
+                    <Badge variant={index < 3 ? "default" : "secondary"}>{index + 1}</Badge>
+                </TableCell>
+                <TableCell className="font-medium">{vendor.name}</TableCell>
+                <TableCell className="text-right font-semibold">{formatCurrency(vendor.revenue)}</TableCell>
+                <TableCell className="text-right">{formatCurrency(vendor.averageTicket)}</TableCell>
+                <TableCell className="text-right">{formatNumber(vendor.averageItemsPerOrder)}</TableCell>
+                <TableCell className="text-right">
+                    <div className="flex items-center justify-end gap-2">
+                        <span className="text-sm text-muted-foreground">{vendor.share.toFixed(1)}%</span>
+                        <Progress value={vendor.share} className="w-20 h-1.5" />
+                    </div>
+                </TableCell>
+            </TableRow>
+            ))}
+        </TableBody>
+      </Table>
     </div>
   );
 }

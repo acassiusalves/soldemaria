@@ -248,7 +248,7 @@ export default function DashboardPage() {
     };
 
     const products: Record<string, number> = {};
-    const vendors: Record<string, { revenue: number }> = {};
+    const vendors: Record<string, { revenue: number, orders: Set<string>, items: number }> = {};
     const customers: Record<string, { revenue: number, orders: Set<string> }> = {};
 
     const salesGroups = new Map<string, VendaDetalhada[]>();
@@ -279,6 +279,7 @@ export default function DashboardPage() {
         
       const totalDescontos = sales.reduce((acc, s) => acc + (Number(s.valorDescontos) || 0), 0);
       const custoTotal = effectiveItemRows.reduce((acc, s) => acc + ((Number(s.custoUnitario) || 0) * (Number(s.quantidade) || 0)), 0);
+      const totalItems = effectiveItemRows.reduce((acc, s) => acc + (Number(s.quantidade) || 0), 0);
       
       const custoFrete = mainSale.custoFrete ? Number(mainSale.custoFrete) || 0 : 0;
 
@@ -326,9 +327,12 @@ export default function DashboardPage() {
         
       const vendorName = mainSale.vendedor || "Sem Vendedor";
       if (!vendors[vendorName]) {
-        vendors[vendorName] = { revenue: 0 };
+        vendors[vendorName] = { revenue: 0, orders: new Set(), items: 0 };
       }
       vendors[vendorName].revenue += faturamentoLiquido;
+      vendors[vendorName].orders.add(code);
+      vendors[vendorName].items += totalItems;
+
       
       const customerName = mainSale.nomeCliente || "Cliente não identificado";
       if (!customers[customerName]) {
@@ -344,13 +348,24 @@ export default function DashboardPage() {
       });
     }
 
+    const totalFaturamento = summary.faturamento;
+
     const topProductsChartData = Object.entries(products)
         .map(([name, quantity]) => ({ name, quantity }))
         .sort((a, b) => b.quantity - a.quantity)
         .slice(0, 5);
 
     const vendorPerformanceData = Object.entries(vendors)
-        .map(([name, data]) => ({ name, revenue: data.revenue }))
+        .map(([name, data]) => {
+          const ordersCount = data.orders.size;
+          return {
+            name,
+            revenue: data.revenue,
+            averageTicket: ordersCount > 0 ? data.revenue / ordersCount : 0,
+            averageItemsPerOrder: ordersCount > 0 ? data.items / ordersCount : 0,
+            share: totalFaturamento > 0 ? (data.revenue / totalFaturamento) * 100 : 0
+          }
+        })
         .sort((a,b) => b.revenue - a.revenue);
 
     const topCustomersData = Object.entries(customers)
