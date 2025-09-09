@@ -59,7 +59,6 @@ import TopProductsChart from "@/components/top-products-chart";
 import type { VendaDetalhada } from "@/lib/data";
 import { Logo } from "@/components/icons";
 import SummaryCard from "@/components/summary-card";
-import VendorSalesChart from "@/components/vendor-sales-chart";
 import {
   Command,
   CommandEmpty,
@@ -70,6 +69,7 @@ import {
 } from "@/components/ui/command";
 import LogisticsChart from "@/components/logistics-chart";
 import OriginChart from "@/components/origin-chart";
+import VendorPerformanceList from "@/components/vendor-performance-list";
 
 
 const toDate = (value: unknown): Date | null => {
@@ -163,8 +163,7 @@ export default function DashboardPage() {
     logisticsChartData,
     originChartData,
     topProductsChartData,
-    vendorChartData,
-    allVendorNames,
+    vendorPerformanceData,
   } = React.useMemo(() => {
     const summary = {
       faturamento: 0,
@@ -176,7 +175,7 @@ export default function DashboardPage() {
     const logistics: Record<string, number> = {};
     const origins: Record<string, number> = {};
     const products: Record<string, number> = {};
-    const vendors: Record<string, { revenue: number, dailySales: Record<string, number> }> = {};
+    const vendors: Record<string, { revenue: number }> = {};
 
     const salesGroups = new Map<string, VendaDetalhada[]>();
 
@@ -222,19 +221,13 @@ export default function DashboardPage() {
           origins[mainSale.origem] = (origins[mainSale.origem] || 0) + faturamentoLiquido;
       }
         
-      const saleDate = toDate(mainSale.data);
       const vendorName = mainSale.vendedor || "Sem Vendedor";
 
       if (!vendors[vendorName]) {
-        vendors[vendorName] = { revenue: 0, dailySales: {} };
+        vendors[vendorName] = { revenue: 0 };
       }
       vendors[vendorName].revenue += faturamentoLiquido;
       
-      if (saleDate) {
-          const dateKey = format(saleDate, "yyyy-MM-dd");
-          vendors[vendorName].dailySales[dateKey] = (vendors[vendorName].dailySales[dateKey] || 0) + faturamentoLiquido;
-      }
-
       sales.forEach(item => {
           if(item.descricao) {
               products[item.descricao] = (products[item.descricao] || 0) + (Number(item.quantidade) || 0);
@@ -249,34 +242,13 @@ export default function DashboardPage() {
         .sort((a, b) => b.quantity - a.quantity)
         .slice(0, 5);
 
-    const allVendorNames = Object.keys(vendors).sort((a, b) => vendors[b].revenue - vendors[a].revenue);
-
-    let vendorChartData: any[] = [];
-    if (date?.from) {
-        const days = eachDayOfInterval({start: date.from, end: date.to || date.from});
-        vendorChartData = days.map(day => {
-            const dateKey = format(day, 'yyyy-MM-dd');
-            const dailyEntry: Record<string, any> = { date: format(day, 'dd/MM') };
-                
-            allVendorNames.forEach(vendor => {
-                dailyEntry[`${vendor}-current`] = vendors[vendor]?.dailySales[dateKey] || 0;
-            });
-            return dailyEntry;
-        });
-    }
+    const vendorPerformanceData = Object.entries(vendors)
+        .map(([name, data]) => ({ name, revenue: data.revenue }))
+        .sort((a,b) => b.revenue - a.revenue);
         
-    return { summaryData: summary, logisticsChartData, originChartData, topProductsChartData, vendorChartData, allVendorNames };
-  }, [filteredData, date]);
+    return { summaryData, logisticsChartData, originChartData, topProductsChartData, vendorPerformanceData };
+  }, [filteredData]);
   
-  const [selectedVendors, setSelectedVendors] = React.useState<string[]>([]);
-  
-  React.useEffect(() => {
-    if (allVendorNames.length > 0) {
-      setSelectedVendors(allVendorNames.slice(0, 5));
-    }
-  }, [allVendorNames]);
-
-
   const handleLogout = async () => {
     const auth = await getAuthClient();
     if(auth) {
@@ -454,48 +426,11 @@ export default function DashboardPage() {
                <CardHeader>
                   <CardTitle>Performance por Vendedor</CardTitle>
                    <CardDescription>
-                      Acompanhe o faturamento diário dos vendedores selecionados.
+                      Ranking de faturamento dos vendedores no período selecionado.
                   </CardDescription>
                </CardHeader>
-               <CardContent className="space-y-4">
-                    <Popover>
-                        <PopoverTrigger asChild>
-                            <Button
-                                variant="outline"
-                                role="combobox"
-                                className="w-[250px] justify-between"
-                            >
-                                {selectedVendors.length > 0 ? `${selectedVendors.length} vendedor(es) selecionado(s)` : "Selecione vendedores..."}
-                                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                            </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-[250px] p-0">
-                            <Command>
-                                <CommandInput placeholder="Pesquisar vendedor..." />
-                                <CommandList>
-                                    <CommandEmpty>Nenhum vendedor encontrado.</CommandEmpty>
-                                    <CommandGroup>
-                                        {allVendorNames.map((vendor) => (
-                                            <CommandItem
-                                                key={vendor}
-                                                onSelect={() => {
-                                                    setSelectedVendors(current => 
-                                                        current.includes(vendor)
-                                                            ? current.filter(v => v !== vendor)
-                                                            : [...current, vendor]
-                                                    )
-                                                }}
-                                            >
-                                                <Check className={cn("mr-2 h-4 w-4", selectedVendors.includes(vendor) ? "opacity-100" : "opacity-0")} />
-                                                {vendor}
-                                            </CommandItem>
-                                        ))}
-                                    </CommandGroup>
-                                </CommandList>
-                            </Command>
-                        </PopoverContent>
-                    </Popover>
-                    <VendorSalesChart data={vendorChartData} vendors={selectedVendors} hasComparison={false} />
+               <CardContent>
+                    <VendorPerformanceList data={vendorPerformanceData} />
                 </CardContent>
              </Card>
             <Card>
