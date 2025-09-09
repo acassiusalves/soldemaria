@@ -741,7 +741,7 @@ const syncExistingCustomColumns = React.useCallback(async () => {
     
     if (needsOrderUpdate) {
         setColumnOrder(currentOrder);
-        await saveUserPreference(auth.currentUser.uid, 'vendas_columns_order', currentOrder);
+        await saveUserPreference(auth.currentUser.uid, 'vendas_columns_order', finalOrder);
     }
     
 }, [customCalculations, columnVisibility, columnOrder]);
@@ -1033,9 +1033,10 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
     return applyCustomCalculations(aggregatedData);
   }, [filteredData, applyCustomCalculations, custosEmbalagem, taxasOperadoras]);
 
-  const summaryData = React.useMemo(() => {
+  const finalSummary = React.useMemo(() => {
     const numOrders = groupedForView.length;
-    return groupedForView.reduce(
+    
+    const totals = groupedForView.reduce(
         (acc, row) => {
             const valorFinal = Number(row.final) || 0;
             const valorDescontos = Number(row.valorDescontos) || 0;
@@ -1057,25 +1058,20 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
             frete: 0, 
             valorFinalTotal: 0,
             totalItems: 0,
-            ticketMedio: 0,
-            qtdMedia: 0,
-            margemBruta: 0,
         }
     );
-  }, [groupedForView]);
 
-  const finalSummary = React.useMemo(() => {
-      const numOrders = groupedForView.length;
-      const ticketMedio = numOrders > 0 ? summaryData.faturamento / numOrders : 0;
-      const qtdMedia = numOrders > 0 ? summaryData.totalItems / numOrders : 0;
-      const margemBruta = summaryData.faturamento - summaryData.custoTotal;
+      const ticketMedio = numOrders > 0 ? totals.faturamento / numOrders : 0;
+      const qtdMedia = numOrders > 0 ? totals.totalItems / numOrders : 0;
+      const margemBruta = totals.faturamento - totals.custoTotal;
+
       return {
-          ...summaryData,
+          ...totals,
           ticketMedio,
           qtdMedia,
           margemBruta
       }
-  }, [summaryData, groupedForView.length]);
+  }, [groupedForView]);
 
 
 React.useEffect(() => {
@@ -1595,8 +1591,8 @@ React.useEffect(() => {
           />
         </div>
 
-         <div className="grid gap-4 md:grid-cols-4">
-            <SummaryCard 
+        <div className="grid gap-4 md:grid-cols-3">
+             <SummaryCard 
                 title="Margem Bruta" 
                 value={finalSummary.margemBruta}
                 icon={<Scale className="text-primary" />}
@@ -1650,3 +1646,4 @@ React.useEffect(() => {
     </>
   );
 }
+
