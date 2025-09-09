@@ -906,23 +906,20 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
         }
 
         // Sum 'final' from all rows belonging to the group
-        headerRow.final = rows.reduce((acc, row) => {
-            const itemFinal = Number(row.final) || 0;
-            const itemQuantidade = Number(row.quantidade) || 0;
-            const itemValorUnitario = Number(row.valorUnitario) || 0;
-            
-            if (isDetailRow(row)) { // Only sum detail rows to avoid double counting
-                if(itemFinal > 0) return acc + itemFinal;
-                if(itemQuantidade > 0 && itemValorUnitario > 0) return acc + (itemQuantidade * itemValorUnitario);
-            }
-            
-            return acc;
-        }, 0);
-        
-        if (headerRow.final === 0) { // Fallback for single-line orders
-            headerRow.final = Number(rows[0].final) || 0;
+        if(subRows.length > 0) {
+            headerRow.final = subRows.reduce((acc, row) => {
+                const itemFinal = Number(row.final) || 0;
+                const itemQuantidade = Number(row.quantidade) || 0;
+                const itemValorUnitario = Number(row.valorUnitario) || 0;
+                
+                if (itemFinal > 0) return acc + itemFinal;
+                if (itemQuantidade > 0 && itemValorUnitario > 0) return acc + (itemQuantidade * itemValorUnitario);
+                return acc;
+            }, 0);
+        } else if (rows.length > 0) {
+             headerRow.final = Number(rows[0].final) || 0;
         }
-
+        
         headerRow.costs = rows.flatMap(r => r.costs || []).filter((cost, index, self) => 
             index === self.findIndex(c => (
                 c.id === cost.id && c.valor === cost.valor

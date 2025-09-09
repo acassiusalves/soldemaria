@@ -268,15 +268,20 @@ export default function DashboardPage() {
       const mainSale = headerRows.length > 0 ? headerRows[0] : (itemRows.length > 0 ? itemRows[0] : sales[0]);
       const effectiveItemRows = itemRows.length > 0 ? itemRows : (headerRows.length > 0 ? headerRows : sales);
         
-      let totalFinal = effectiveItemRows.reduce((acc, s) => {
-          const itemFinal = Number(s.final) || 0;
-          const itemValorUnitario = Number(s.valorUnitario) || 0;
-          const itemQuantidade = Number(s.quantidade) || 0;
-            
-          if (itemFinal > 0) return acc + itemFinal;
-          return acc + (itemValorUnitario * itemQuantidade);
-      }, 0);
-        
+      let totalFinal = 0;
+      if (itemRows.length > 0) {
+        totalFinal = itemRows.reduce((acc, s) => {
+            const itemFinal = Number(s.final) || 0;
+            const itemValorUnitario = Number(s.valorUnitario) || 0;
+            const itemQuantidade = Number(s.quantidade) || 0;
+                
+            if (itemFinal > 0) return acc + itemFinal;
+            return acc + (itemValorUnitario * itemQuantidade);
+        }, 0);
+      } else if (sales.length > 0) {
+          totalFinal = Number(sales[0].final) || 0;
+      }
+
       const totalDescontos = sales.reduce((acc, s) => acc + (Number(s.valorDescontos) || 0), 0);
       const custoTotal = effectiveItemRows.reduce((acc, s) => acc + ((Number(s.custoUnitario) || 0) * (Number(s.quantidade) || 0)), 0);
       const totalItems = effectiveItemRows.reduce((acc, s) => acc + (Number(s.quantidade) || 0), 0);
