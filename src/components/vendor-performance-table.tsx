@@ -25,8 +25,9 @@ type VendorMetric = {
   averageItemsPerOrder: number;
   share: number;
   previousRevenue?: number;
-  goal?: number;
-  goalProgress?: number;
+  goalFaturamento?: number;
+  goalTicketMedio?: number;
+  goalItensPorPedido?: number;
 };
 
 interface VendorPerformanceTableProps {
@@ -37,14 +38,14 @@ interface VendorPerformanceTableProps {
 
 const formatCurrency = (value?: number) => {
   if (value === undefined || value === null || isNaN(value)) {
-    return "N/A";
+    return "R$ 0,00";
   }
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 };
 
 const formatNumber = (value?: number) => {
     if (value === undefined || value === null || isNaN(value)) {
-      return "N/A";
+      return "0.00";
     }
     return value.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
@@ -69,12 +70,13 @@ export default function VendorPerformanceTable({ data, hasComparison, showGoals 
             <TableHead className="w-12">#</TableHead>
             <TableHead>Vendedor</TableHead>
             <TableHead className="text-right">Faturamento</TableHead>
-            {hasComparison && <TableHead className="text-right">% Variação</TableHead>}
+            {showGoals && <TableHead className="text-right">M. Faturamento</TableHead>}
             <TableHead className="text-right">Pedidos</TableHead>
             <TableHead className="text-right">Ticket Médio</TableHead>
+            {showGoals && <TableHead className="text-right">M. Ticket</TableHead>}
             <TableHead className="text-right">Itens/Pedido</TableHead>
-            {showGoals && <TableHead className="w-[150px] text-right">Meta</TableHead>}
-            {showGoals && <TableHead className="w-[150px] text-right">Atingimento</TableHead>}
+            {showGoals && <TableHead className="text-right">M. Itens</TableHead>}
+            {hasComparison && <TableHead className="text-right">% Variação Fat.</TableHead>}
             <TableHead className="w-[200px] text-right">Participação</TableHead>
           </TableRow>
         </TableHeader>
@@ -90,6 +92,12 @@ export default function VendorPerformanceTable({ data, hasComparison, showGoals 
                 </TableCell>
                 <TableCell className="font-medium">{vendor.name}</TableCell>
                 <TableCell className="text-right font-semibold">{formatCurrency(vendor.revenue)}</TableCell>
+                 {showGoals && <TableCell className="text-right text-muted-foreground">{formatCurrency(vendor.goalFaturamento)}</TableCell>}
+                <TableCell className="text-right">{vendor.orders}</TableCell>
+                <TableCell className="text-right">{formatCurrency(vendor.averageTicket)}</TableCell>
+                {showGoals && <TableCell className="text-right text-muted-foreground">{formatCurrency(vendor.goalTicketMedio)}</TableCell>}
+                <TableCell className="text-right">{formatNumber(vendor.averageItemsPerOrder)}</TableCell>
+                {showGoals && <TableCell className="text-right text-muted-foreground">{formatNumber(vendor.goalItensPorPedido)}</TableCell>}
                 {hasComparison && (
                     <TableCell className="text-right">
                         <div className={cn("flex items-center justify-end text-xs", revenueChange >= 0 ? "text-green-600" : "text-red-600")}>
@@ -102,16 +110,6 @@ export default function VendorPerformanceTable({ data, hasComparison, showGoals 
                         </div>
                     </TableCell>
                 )}
-                <TableCell className="text-right">{vendor.orders}</TableCell>
-                <TableCell className="text-right">{formatCurrency(vendor.averageTicket)}</TableCell>
-                <TableCell className="text-right">{formatNumber(vendor.averageItemsPerOrder)}</TableCell>
-                {showGoals && <TableCell className="text-right">{formatCurrency(vendor.goal)}</TableCell>}
-                {showGoals && <TableCell className="text-right">
-                    <div className="flex items-center justify-end gap-2">
-                        <span className="text-sm text-muted-foreground">{(vendor.goalProgress || 0).toFixed(1)}%</span>
-                        <Progress value={vendor.goalProgress} className="w-20 h-1.5" />
-                    </div>
-                </TableCell>}
                 <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-4">
                     <span className="w-16 text-right">{vendor.share.toFixed(2)}%</span>

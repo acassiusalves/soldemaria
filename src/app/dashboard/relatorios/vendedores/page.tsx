@@ -236,8 +236,7 @@ export default function VendedoresPage() {
         const combinedTableData = allVendors.map(name => {
             const current = currentVendors[name] || { revenue: 0, orders: 0, itemsSold: 0, dailySales: {} };
             const previous = previousVendors[name] || { revenue: 0, orders: 0, itemsSold: 0, dailySales: {} };
-            const goal = vendorGoals[name]?.faturamento || 0;
-            const goalProgress = goal > 0 ? (current.revenue / goal) * 100 : 0;
+            const goals = vendorGoals[name] || {};
 
             return {
                 name,
@@ -249,8 +248,9 @@ export default function VendedoresPage() {
                 averageItemsPerOrder: current.orders > 0 ? current.itemsSold / current.orders : 0,
                 share: totalRevenueAllVendors > 0 ? (current.revenue / totalRevenueAllVendors) * 100 : 0,
                 previousRevenue: previous.revenue,
-                goal: goal,
-                goalProgress: goalProgress,
+                goalFaturamento: goals.faturamento,
+                goalTicketMedio: goals.ticketMedio,
+                goalItensPorPedido: goals.itensPorPedido,
             };
         }).sort((a, b) => b.revenue - a.revenue);
 
