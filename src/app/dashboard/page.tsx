@@ -98,28 +98,6 @@ const normCode = (v: any) => {
 const isDetailRow = (row: Record<string, any>) =>
   row.item || row.descricao;
 
-// Normaliza canal/origem/logística e mapeia sinônimos para "delivery"
-const getChannel = (row: any): string => {
-  const raw = `${row?.origem ?? row?.canal ?? row?.logistica ?? ''}`
-    .toLowerCase()
-    .trim();
-
-  if (!raw) return '';
-
-  // sinônimos comuns
-  if (
-    raw.includes('delivery') ||
-    raw.includes('entrega') ||
-    raw.includes('ifood') ||
-    raw.includes('uber') ||
-    raw.includes('99')
-  ) {
-    return 'delivery';
-  }
-
-  return raw; // mantém outros canais (loja, whatsapp, instagram, etc.)
-};
-
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -244,10 +222,7 @@ export default function DashboardPage() {
       summary.custoTotal += custoTotal;
       summary.frete += custoFrete;
 
-      // considera delivery se QUALQUER linha do grupo sinalizar delivery
-      const isDelivery = sales.some((r) => getChannel(r) === 'delivery');
-      
-      if (isDelivery) {
+      if (mainSale.tipo?.toLowerCase() === 'delivery') {
         deliveryMetrics.revenue += faturamentoLiquido;
         deliveryMetrics.cost += custoTotal;
         deliveryMetrics.orders += 1;
