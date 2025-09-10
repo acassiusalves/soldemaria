@@ -59,7 +59,7 @@ import {
 } from "@/components/ui/popover";
 import KpiCard from "@/components/kpi-card";
 import TopProductsChart from "@/components/top-products-chart";
-import type { VendaDetalhada } from "@/lib/data";
+import type { VendaDetalhada, Operadora, Embalagem } from "@/lib/data";
 import { Logo } from "@/components/icons";
 import SummaryCard from "@/components/summary-card";
 import {
@@ -155,6 +155,13 @@ const extractValorFinalPedido = (row: any): number => {
   return toNumberBR(v);
 };
 
+const normalizeText = (s: unknown) =>
+  String(s ?? "")
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+
 
 const isDetailRow = (row: Record<string, any>) =>
   row.item || row.descricao;
@@ -170,6 +177,9 @@ export default function DashboardPage() {
 
   const [allSales, setAllSales] = React.useState<VendaDetalhada[]>([]);
   const [allLogistics, setAllLogistics] = React.useState<VendaDetalhada[]>([]);
+  const [taxasOperadoras, setTaxasOperadoras] = React.useState<Operadora[]>([]);
+  const [custosData, setCustosData] = React.useState<VendaDetalhada[]>([]);
+  const [custosEmbalagem, setCustosEmbalagem] = React.useState<Embalagem[]>([]);
   
   React.useEffect(() => {
     (async () => {
@@ -205,6 +215,24 @@ export default function DashboardPage() {
         setAllLogistics(logistics);
       });
       unsubs.push(unsubLogistics);
+      
+      const taxasUnsub = onSnapshot(collection(db, "taxas"), (snapshot) => {
+        const data = snapshot.docs.map(d => ({ ...d.data(), id: d.id })) as Operadora[];
+        setTaxasOperadoras(data);
+      });
+      unsubs.push(taxasUnsub);
+
+      const custosUnsub = onSnapshot(collection(db, "custos"), (snapshot) => {
+        const data = snapshot.docs.map(d => ({ ...d.data(), id: d.id })) as VendaDetalhada[];
+        setCustosData(data);
+      });
+      unsubs.push(custosUnsub);
+      
+      const embalagemUnsub = onSnapshot(collection(db, "custos-embalagem"), (snapshot) => {
+          const data = snapshot.docs.map(d => ({ ...d.data(), id: d.id })) as Embalagem[];
+          setCustosEmbalagem(data);
+      });
+      unsubs.push(embalagemUnsub);
 
     })();
     return () => unsubs.forEach(unsub => unsub());
@@ -235,6 +263,8 @@ export default function DashboardPage() {
       custoTotal: 0,
       frete: 0,
       totalItems: 0,
+      taxaCartao: 0,
+      custoEmbalagem: 0,
     };
 
     const deliveryMetrics = {
@@ -254,6 +284,12 @@ export default function DashboardPage() {
     const customers: Record<string, { revenue: number, orders: Set<string> }> = {};
 
     const salesGroups = new Map<string, VendaDetalhada[]>();
+    const custosByCode = new Map<string, VendaDetalhada[]>();
+    custosData.forEach(c => {
+        const code = normCode(c.codigo);
+        if(!custosByCode.has(code)) custosByCode.set(code, []);
+        custosByCode.get(code)!.push(c);
+    });
 
     for (const sale of filteredData) {
       const code = normCode(sale.codigo);
@@ -297,6 +333,64 @@ export default function DashboardPage() {
       summary.custoTotal += custoTotal;
       summary.frete += custoFrete;
       summary.totalItems += totalItems;
+
+      const custosDoPedido = custosByCode.get(code) || [];
+      const taxaTotalCartao = custosDoPedido.reduce((sum, cost) => {
+          const valor = Number(cost.valor) || 0;
+          const modo = (cost.modo_de_pagamento || '').toLowerCase();
+          const tipo = (cost.tipo_pagamento || '').toLowerCase();
+          const instituicao = (cost.instituicao_financeira || '').toLowerCase();
+          const parcela = Number(cost.parcela) || 1;
+          let taxaPercentual = 0;
+          const operadora = taxasOperadoras.find(op => op.nome.toLowerCase() === instituicao);
+          if (operadora) {
+              if (modo.includes('cartão') && tipo.includes('débito')) {
+                  taxaPercentual = operadora.taxaDebito || 0;
+              } else if (modo.includes('cartão') && tipo.includes('crédito')) {
+                  const taxaCredito = operadora.taxasCredito.find(t => t.numero === parcela);
+                  taxaPercentual = taxaCredito?.taxa || 0;
+              }
+          }
+          return sum + (valor * (taxaPercentual / 100));
+      }, 0);
+      summary.taxaCartao += taxaTotalCartao;
+      
+      const qTotal = Number(totalItems) || 0;
+      if (qTotal > 0 && Array.isArray(custosEmbalagem) && custosEmbalagem.length > 0) {
+        const logStr = String(mainSale.logistica ?? 'Não especificado');
+        const modalidade = /loja/i.test(logStr) ? 'Loja' : 'Delivery';
+
+        let packagingCost = 0;
+
+        const toNum = (x: any) => {
+          if (typeof x === 'number') return x;
+          if (typeof x === 'string') {
+            const n = Number(x.replace(/\./g, '').replace(',', '.'));
+            return Number.isFinite(n) ? n : 0;
+          }
+          return 0;
+        };
+        const findBy = (re: RegExp) => custosEmbalagem.find(e => re.test(normalizeText(e.nome)));
+
+        if (modalidade === 'Delivery') {
+          const plastico = findBy(/(sacola|saco).*(plastico|plastica)/);
+          if (plastico) packagingCost += toNum(plastico.custo);
+          const tnt = findBy(/((sacola|saco).*)?tnt\b/);
+          if (tnt) packagingCost += toNum(tnt.custo) * qTotal;
+
+        } else {
+          const qty = Math.ceil(qTotal / 2);
+          const sacolaLoja =
+            findBy(/(sacola|saco).*(loja)/) ||
+            custosEmbalagem.find(e =>
+              Array.isArray(e.modalidades) &&
+              e.modalidades.some((m: any) => /loja|todos/i.test(String(m)))
+            );
+
+          if (sacolaLoja) packagingCost += toNum(sacolaLoja.custo) * qty;
+        }
+        summary.custoEmbalagem += packagingCost;
+      }
 
       // 1) "Tipo" do pedido (prioriza cabeçalho; se vazio, usa a primeira linha do grupo que tiver)
       let tipoPedido = extractTipo(mainSale);
@@ -390,15 +484,20 @@ export default function DashboardPage() {
     };
 
     const numOrders = salesGroups.size;
+    
+    const margemContribuicao = summary.faturamento - summary.custoTotal - summary.frete - summary.taxaCartao - summary.custoEmbalagem;
+
     const finalSummaryData = {
         ...summary,
         ticketMedio: numOrders > 0 ? summary.faturamento / numOrders : 0,
         margemBruta: summary.faturamento - summary.custoTotal,
+        margemContribuicao: margemContribuicao,
+        margemContribuicaoPercent: summary.faturamento > 0 ? (margemContribuicao / summary.faturamento) * 100 : 0,
         qtdMedia: numOrders > 0 ? summary.totalItems / numOrders : 0,
     };
         
     return { summaryData: finalSummaryData, topProductsChartData, vendorPerformanceData, deliverySummary, storeSummary, topCustomersData };
-  }, [filteredData]);
+  }, [filteredData, taxasOperadoras, custosData, custosEmbalagem]);
   
   const handleLogout = async () => {
     const auth = await getAuthClient();
@@ -564,10 +663,11 @@ export default function DashboardPage() {
                 isCurrency
             />
              <SummaryCard 
-                title="Margem Bruta" 
-                value={summaryData.margemBruta}
+                title="M. de Contribuição" 
+                value={summaryData.margemContribuicao}
                 icon={<Scale className="text-primary" />}
                 isCurrency
+                secondaryValue={`(${summaryData.margemContribuicaoPercent.toFixed(2)}%)`}
             />
             <SummaryCard 
                 title="Ticket Médio" 
@@ -678,5 +778,3 @@ export default function DashboardPage() {
       </div>
   );
 }
-
-    

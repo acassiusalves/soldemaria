@@ -1,4 +1,3 @@
-
 "use client";
 
 import React from "react";
@@ -9,6 +8,7 @@ interface SummaryCardProps {
   value: number;
   icon: React.ReactNode;
   isCurrency?: boolean;
+  secondaryValue?: string;
 }
 
 const formatValue = (value: number, isCurrency: boolean) => {
@@ -23,7 +23,7 @@ const formatValue = (value: number, isCurrency: boolean) => {
     return value.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
-export default function SummaryCard({ title, value, icon, isCurrency = false }: SummaryCardProps) {
+export default function SummaryCard({ title, value, icon, isCurrency = false, secondaryValue }: SummaryCardProps) {
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -31,7 +31,10 @@ export default function SummaryCard({ title, value, icon, isCurrency = false }: 
         {icon}
       </CardHeader>
       <CardContent>
-        <div className="text-2xl font-bold font-headline">{formatValue(value, isCurrency)}</div>
+        <div className="flex items-end gap-2">
+          <div className="text-2xl font-bold font-headline">{formatValue(value, isCurrency)}</div>
+          {secondaryValue && <div className="text-sm font-medium text-muted-foreground pb-1">{secondaryValue}</div>}
+        </div>
       </CardContent>
     </Card>
   );
