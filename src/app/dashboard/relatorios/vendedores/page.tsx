@@ -174,7 +174,11 @@ export default function VendedoresPage() {
     const [mounted, setMounted] = React.useState(false);
     const [date, setDate] = React.useState<DateRange | undefined>(undefined);
     const [compareDate, setCompareDate] = React.useState<DateRange | undefined>(undefined);
-    const [selectedVendors, setSelectedVendors] = React.useState<string[]>([]);
+    const [selectedVendors, setSelectedVendors] = React.useState<string[]>([
+        "Ana Paula de Farias",
+        "Raissa Dandara (Colaboradora)",
+        "Regiane Alves da Silva (Colaboradora)",
+    ]);
     const [monthlyGoals, setMonthlyGoals] = React.useState<Record<string, MonthlyGoals>>({});
     const [isGoalsDialogOpen, setIsGoalsDialogOpen] = React.useState(false);
     const [isSavingGoals, setIsSavingGoals] = React.useState(false);
@@ -599,5 +603,3 @@ export default function VendedoresPage() {
     </div>
   );
 }
-
-    
