@@ -4,7 +4,7 @@
 import * as React from "react";
 
 interface TopProductsChartProps {
-  data: { name: string; quantity: number }[];
+  data: { name: string; quantity: number, revenue: number }[];
 }
 
 export default function TopProductsChart({ data }: TopProductsChartProps) {
@@ -15,16 +15,23 @@ export default function TopProductsChart({ data }: TopProductsChartProps) {
       </div>
     );
   }
+  
+  const formatCurrency = (value: number) => {
+      return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  }
 
   return (
-    <div className="min-h-[200px] w-full h-[350px]">
+    <div className="min-h-[200px] w-full h-[350px] overflow-y-auto">
       <div className="space-y-4">
         {data.map((product) => (
-          <div key={product.name} className="flex items-center justify-between">
-            <span className="text-sm text-muted-foreground truncate" title={product.name}>
+          <div key={product.name} className="flex items-center justify-between gap-4">
+            <span className="text-sm text-muted-foreground truncate flex-1" title={product.name}>
               {product.name}
             </span>
-            <span className="font-semibold text-sm">{product.quantity}</span>
+            <div className="flex items-center gap-4">
+                <span className="font-semibold text-sm text-right w-24">{formatCurrency(product.revenue)}</span>
+                <span className="font-semibold text-sm text-right w-12">{product.quantity} un</span>
+            </div>
           </div>
         ))}
       </div>

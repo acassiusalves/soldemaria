@@ -279,7 +279,7 @@ export default function DashboardPage() {
         orders: 0,
     };
 
-    const products: Record<string, number> = {};
+    const products: Record<string, { quantity: number, revenue: number }> = {};
     const vendors: Record<string, { revenue: number, orders: Set<string>, items: number }> = {};
     const customers: Record<string, { revenue: number, orders: Set<string> }> = {};
 
@@ -445,15 +445,21 @@ export default function DashboardPage() {
       
       sales.forEach(item => {
           if(item.descricao) {
-              products[item.descricao] = (products[item.descricao] || 0) + (Number(item.quantidade) || 0);
+              if (!products[item.descricao]) {
+                  products[item.descricao] = { quantity: 0, revenue: 0 };
+              }
+              const quantity = Number(item.quantidade) || 0;
+              const revenue = (Number(item.final) || 0) > 0 ? (Number(item.final) || 0) : ((Number(item.valorUnitario) || 0) * quantity);
+              products[item.descricao].quantity += quantity;
+              products[item.descricao].revenue += revenue;
           }
       });
     }
 
     const topProductsChartData = Object.entries(products)
-        .map(([name, quantity]) => ({ name, quantity }))
-        .sort((a, b) => b.quantity - a.quantity)
-        .slice(0, 5);
+        .map(([name, data]) => ({ name, quantity: data.quantity, revenue: data.revenue }))
+        .sort((a, b) => b.revenue - a.revenue)
+        .slice(0, 10);
 
     const vendorPerformanceData = Object.entries(vendors)
         .map(([name, data]) => {
@@ -697,7 +703,7 @@ export default function DashboardPage() {
               <CardHeader>
                 <CardTitle>Produtos Mais Vendidos</CardTitle>
                 <CardDescription>
-                  Os 5 produtos que mais se destacaram em vendas.
+                  Os 10 produtos que mais se destacaram em vendas.
                 </CardDescription>
               </CardHeader>
               <CardContent>
