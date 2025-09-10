@@ -6,19 +6,27 @@ import { Badge } from "@/components/ui/badge";
 
 type CustomerData = {
   name: string;
-  value: number;
+  orders: number;
+  revenue: number;
 };
 
 interface CustomerPerformanceListProps {
   data: CustomerData[];
 }
 
-const formatValue = (value?: number) => {
+const formatOrders = (value?: number) => {
   if (value === undefined || value === null || isNaN(value)) {
     return "0 pedidos";
   }
   return `${value} pedido${value > 1 ? 's' : ''}`;
 };
+
+const formatRevenue = (value?: number) => {
+    if (value === undefined || value === null || isNaN(value)) {
+      return "R$ 0,00";
+    }
+    return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
 
 export default function CustomerPerformanceList({ data }: CustomerPerformanceListProps) {
   if (!data || data.length === 0) {
@@ -43,9 +51,14 @@ export default function CustomerPerformanceList({ data }: CustomerPerformanceLis
                 </Badge>
                 <span className="font-medium text-sm truncate" title={customer.name}>{customer.name}</span>
             </div>
-            <span className="font-semibold tabular-nums text-sm">
-              {formatValue(customer.value)}
-            </span>
+            <div className="flex items-center gap-4">
+                <span className="font-semibold tabular-nums text-sm">
+                    {formatRevenue(customer.revenue)}
+                </span>
+                <span className="font-semibold tabular-nums text-sm text-muted-foreground">
+                    {formatOrders(customer.orders)}
+                </span>
+            </div>
           </div>
         ))}
       </div>

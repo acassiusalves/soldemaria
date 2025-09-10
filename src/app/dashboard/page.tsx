@@ -468,8 +468,8 @@ export default function DashboardPage() {
         .sort((a,b) => b.revenue - a.revenue);
 
     const topCustomersData = Object.entries(customers)
-        .map(([name, data]) => ({ name, value: data.orders.size }))
-        .sort((a, b) => b.value - a.value);
+        .map(([name, data]) => ({ name, orders: data.orders.size, revenue: data.revenue }))
+        .sort((a, b) => b.revenue - a.revenue);
 
     const deliverySummary = {
         faturamento: deliveryMetrics.revenue,
@@ -681,8 +681,8 @@ export default function DashboardPage() {
                 icon={<Package className="text-primary" />}
             />
           </div>
-          <div className="grid gap-4 md:gap-8 lg:grid-cols-5">
-             <Card className="lg:col-span-3">
+          <div className="grid gap-4 md:gap-8 lg:grid-cols-2">
+             <Card className="lg:col-span-1">
                <CardHeader>
                   <CardTitle>Performance por Vendedor</CardTitle>
                    <CardDescription>
@@ -693,7 +693,7 @@ export default function DashboardPage() {
                     <VendorPerformanceList data={vendorPerformanceData} />
                 </CardContent>
              </Card>
-            <Card className="lg:col-span-2">
+            <Card className="lg:col-span-1">
               <CardHeader>
                 <CardTitle>Produtos Mais Vendidos</CardTitle>
                 <CardDescription>
