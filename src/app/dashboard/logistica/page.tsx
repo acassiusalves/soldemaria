@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import * as React from "react";
@@ -89,23 +90,43 @@ const toDate = (value: unknown): Date | null => {
   if (value instanceof Date && isValid(value)) return value;
   if (value instanceof Timestamp) return value.toDate();
 
-  if (typeof value === "number") {
-    if (value > 20000 && value < 60000) {
-      const excelEpoch = new Date(Date.UTC(1899, 11, 30));
-      const d = new Date(excelEpoch.getTime() + value * 86400000);
-      return isValid(d) ? d : null;
+  if (typeof value === 'number') {
+    // Tenta converter de número serial do Excel (dias desde 1900, com bug)
+    // O epoch do Excel é 30/12/1899 para compatibilidade com o bug do ano bissexto de 1900.
+    if (value > 0 && value < 100000) { // um filtro básico para evitar converter outros números
+      try {
+        const excelEpoch = new Date(Date.UTC(1899, 11, 30));
+        const date = new Date(excelEpoch.getTime() + value * 86400000);
+        if (isValid(date)) return date;
+      } catch (e) {
+        // ignora o erro e continua para outras tentativas
+      }
     }
-    return null;
   }
 
   if (typeof value === "string") {
     const s = value.trim();
+    if (!s) return null;
+
+    // Formatos comuns a serem tentados
+    const formats = [
+      "dd/MM/yyyy",
+      "d/MM/yyyy",
+      "dd/M/yyyy",
+      "d/M/yyyy",
+      "dd-MM-yyyy",
+      "yyyy-MM-dd",
+      "MM/dd/yyyy",
+    ];
+
+    for (const fmt of formats) {
+      const d = parse(s, fmt, new Date());
+      if (isValid(d)) return d;
+    }
+
+    // Tenta ISO por último
     const iso = parseISO(s.replace(/\//g, "-"));
     if (isValid(iso)) return iso;
-    const br = parse(s, "dd/MM/yyyy", new Date());
-    if (isValid(br)) return br;
-    const ymdSlash = parse(s, "yyyy/MM/dd", new Date());
-    if (isValid(ymdSlash)) return ymdSlash;
   }
 
   return null;
@@ -864,3 +885,4 @@ export default function LogisticaPage() {
     </div>
   );
 }
+

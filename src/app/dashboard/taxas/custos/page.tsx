@@ -1,8 +1,10 @@
 
+
 "use client";
 
 import * as React from "react";
 import Link from "next/link";
+import { format, parse, parseISO, isValid } from "date-fns";
 import {
   AlertTriangle,
   Box,
@@ -72,7 +74,54 @@ import { Progress } from "@/components/ui/progress";
 import { Logo } from "@/components/icons";
 import { organizeCosts } from "@/ai/flows/organize-costs";
 
-/* ========== helpers de normalização ========== */
+/* ========== helpers de datas e normalização ========== */
+const toDate = (value: unknown): Date | null => {
+  if (!value) return null;
+  if (value instanceof Date && isValid(value)) return value;
+  if (value instanceof Timestamp) return value.toDate();
+
+  if (typeof value === 'number') {
+    // Tenta converter de número serial do Excel (dias desde 1900, com bug)
+    // O epoch do Excel é 30/12/1899 para compatibilidade com o bug do ano bissexto de 1900.
+    if (value > 0 && value < 100000) { // um filtro básico para evitar converter outros números
+      try {
+        const excelEpoch = new Date(Date.UTC(1899, 11, 30));
+        const date = new Date(excelEpoch.getTime() + value * 86400000);
+        if (isValid(date)) return date;
+      } catch (e) {
+        // ignora o erro e continua para outras tentativas
+      }
+    }
+  }
+
+  if (typeof value === "string") {
+    const s = value.trim();
+    if (!s) return null;
+
+    // Formatos comuns a serem tentados
+    const formats = [
+      "dd/MM/yyyy",
+      "d/MM/yyyy",
+      "dd/M/yyyy",
+      "d/M/yyyy",
+      "dd-MM-yyyy",
+      "yyyy-MM-dd",
+      "MM/dd/yyyy",
+    ];
+
+    for (const fmt of formats) {
+      const d = parse(s, fmt, new Date());
+      if (isValid(d)) return d;
+    }
+
+    // Tenta ISO por último
+    const iso = parseISO(s.replace(/\//g, "-"));
+    if (isValid(iso)) return iso;
+  }
+
+  return null;
+};
+
 export const normalizeHeader = (s: string) =>
   String(s)
     .toLowerCase()
@@ -179,6 +228,10 @@ const mapRowToSystem = (row: Record<string, any>) => {
     else out[normalized.replace(/\s+/g, "_")] = val; // fallback snake_case
   }
   if (out.codigo != null) out.codigo = normCode(out.codigo);
+  if (out.data != null) {
+    const d = toDate(out.data);
+    if (d) out.data = d; else delete out.data;
+  }
   return out;
 };
 
@@ -739,3 +792,4 @@ export default function CustosVendasPage() {
     </div>
   );
 }
+
