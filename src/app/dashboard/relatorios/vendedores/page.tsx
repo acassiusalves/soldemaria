@@ -542,6 +542,45 @@ export default function VendedoresPage() {
                     />
                 </div>
             </div>
+            <div className="pt-4">
+              <Popover>
+                  <PopoverTrigger asChild>
+                      <Button
+                          variant="outline"
+                          role="combobox"
+                          className="w-[250px] justify-between"
+                      >
+                          {selectedVendors.length > 0 ? `${selectedVendors.length} vendedor(es) selecionado(s)` : "Filtrar por vendedor..."}
+                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[250px] p-0">
+                      <Command>
+                          <CommandInput placeholder="Pesquisar vendedor..." />
+                          <CommandList>
+                              <CommandEmpty>Nenhum vendedor encontrado.</CommandEmpty>
+                              <CommandGroup>
+                                  {allVendorNames.map((vendor) => (
+                                      <CommandItem
+                                          key={vendor}
+                                          onSelect={() => {
+                                              setSelectedVendors(current => 
+                                                  current.includes(vendor)
+                                                      ? current.filter(v => v !== vendor)
+                                                      : [...current, vendor]
+                                              )
+                                          }}
+                                      >
+                                          <Check className={cn("mr-2 h-4 w-4", selectedVendors.includes(vendor) ? "opacity-100" : "opacity-0")} />
+                                          {vendor}
+                                      </CommandItem>
+                                  ))}
+                              </CommandGroup>
+                          </CommandList>
+                      </Command>
+                  </PopoverContent>
+              </Popover>
+            </div>
         </CardHeader>
         <CardContent>
             <VendorPerformanceTable data={tableData} hasComparison={hasComparison} showGoals={showGoals}/>
@@ -551,49 +590,14 @@ export default function VendedoresPage() {
       <Card>
         <CardHeader>
             <CardTitle>Tendência de Vendas por Vendedor</CardTitle>
-            <CardDescription>Selecione os vendedores para comparar suas vendas diárias no período.</CardDescription>
+            <CardDescription>O gráfico mostrará os vendedores filtrados acima. Se nenhum filtro for aplicado, os 5 primeiros do ranking serão exibidos.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-             <Popover>
-                <PopoverTrigger asChild>
-                    <Button
-                        variant="outline"
-                        role="combobox"
-                        className="w-[250px] justify-between"
-                    >
-                        {selectedVendors.length > 0 ? `${selectedVendors.length} vendedor(es) selecionado(s)` : "Selecione vendedores..."}
-                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                    </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-[250px] p-0">
-                    <Command>
-                        <CommandInput placeholder="Pesquisar vendedor..." />
-                        <CommandList>
-                            <CommandEmpty>Nenhum vendedor encontrado.</CommandEmpty>
-                            <CommandGroup>
-                                {allVendorNames.map((vendor) => (
-                                    <CommandItem
-                                        key={vendor}
-                                        onSelect={() => {
-                                            setSelectedVendors(current => 
-                                                current.includes(vendor)
-                                                    ? current.filter(v => v !== vendor)
-                                                    : [...current, vendor]
-                                            )
-                                        }}
-                                    >
-                                        <Check className={cn("mr-2 h-4 w-4", selectedVendors.includes(vendor) ? "opacity-100" : "opacity-0")} />
-                                        {vendor}
-                                    </CommandItem>
-                                ))}
-                            </CommandGroup>
-                        </CommandList>
-                    </Command>
-                </PopoverContent>
-            </Popover>
             <VendorSalesChart data={chartData} vendors={selectedVendors.length > 0 ? selectedVendors : allVendorNames.slice(0,5)} hasComparison={hasComparison} />
         </CardContent>
       </Card>
     </div>
   );
 }
+
+    
