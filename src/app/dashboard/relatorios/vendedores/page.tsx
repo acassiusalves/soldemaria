@@ -266,7 +266,7 @@ export default function VendedoresPage() {
 
         const totalRevenueAllVendors = Object.values(currentVendors).reduce((sum, v) => sum + v.revenue, 0);
 
-        const combinedTableData = allVendors.map(name => {
+        let combinedTableData = allVendors.map(name => {
             const current = currentVendors[name] || { revenue: 0, orders: 0, itemsSold: 0, dailySales: {} };
             const previous = previousVendors[name] || { revenue: 0, orders: 0, itemsSold: 0, dailySales: {} };
             const goals = vendorGoalsForPeriod[name] || {};
@@ -286,20 +286,21 @@ export default function VendedoresPage() {
                 goalItensPorPedido: goals.itensPorPedido,
             };
         }).sort((a, b) => b.revenue - a.revenue);
-
-        // Select top 5 vendors by default if none are selected
-        if (selectedVendors.length === 0 && combinedTableData.length > 0) {
-            setSelectedVendors(combinedTableData.slice(0, 5).map(v => v.name));
+        
+        if (selectedVendors.length > 0) {
+            combinedTableData = combinedTableData.filter(v => selectedVendors.includes(v.name));
         }
 
         let finalChartData: any[] = [];
-        if (date?.from && selectedVendors.length > 0) {
+        const vendorsForChart = selectedVendors.length > 0 ? selectedVendors : combinedTableData.slice(0,5).map(v => v.name);
+
+        if (date?.from && vendorsForChart.length > 0) {
             const days = eachDayOfInterval({start: date.from, end: date.to || date.from});
             finalChartData = days.map(day => {
                 const dateKey = format(day, 'yyyy-MM-dd');
                 const dailyEntry: Record<string, any> = { date: format(day, 'dd/MM') };
                 
-                selectedVendors.forEach(vendor => {
+                vendorsForChart.forEach(vendor => {
                     dailyEntry[`${vendor}-current`] = currentVendors[vendor]?.dailySales[dateKey] || 0;
                     
                     if (compareDate?.from) {
@@ -590,12 +591,9 @@ export default function VendedoresPage() {
                     </Command>
                 </PopoverContent>
             </Popover>
-            <VendorSalesChart data={chartData} vendors={selectedVendors} hasComparison={hasComparison} />
+            <VendorSalesChart data={chartData} vendors={selectedVendors.length > 0 ? selectedVendors : allVendorNames.slice(0,5)} hasComparison={hasComparison} />
         </CardContent>
       </Card>
     </div>
   );
 }
-
-
-    
