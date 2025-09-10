@@ -19,7 +19,6 @@ type VendorData = {
   revenue: number;
   averageTicket: number;
   averageItemsPerOrder: number;
-  share: number;
 };
 
 interface VendorPerformanceListProps {
@@ -59,7 +58,6 @@ export default function VendorPerformanceList({ data }: VendorPerformanceListPro
             <TableHead className="text-right">Faturamento</TableHead>
             <TableHead className="text-right">Ticket Médio</TableHead>
             <TableHead className="text-right">Itens/Pedido</TableHead>
-            <TableHead className="w-[150px] text-right">Share</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -72,12 +70,6 @@ export default function VendorPerformanceList({ data }: VendorPerformanceListPro
                 <TableCell className="text-right font-semibold">{formatCurrency(vendor.revenue)}</TableCell>
                 <TableCell className="text-right">{formatCurrency(vendor.averageTicket)}</TableCell>
                 <TableCell className="text-right">{formatNumber(vendor.averageItemsPerOrder)}</TableCell>
-                <TableCell className="text-right">
-                    <div className="flex items-center justify-end gap-2">
-                        <span className="text-sm text-muted-foreground">{vendor.share.toFixed(1)}%</span>
-                        <Progress value={vendor.share} className="w-20 h-1.5" />
-                    </div>
-                </TableCell>
             </TableRow>
             ))}
         </TableBody>
@@ -85,3 +77,5 @@ export default function VendorPerformanceList({ data }: VendorPerformanceListPro
     </div>
   );
 }
+
+    

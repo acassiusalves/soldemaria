@@ -356,8 +356,6 @@ export default function DashboardPage() {
       });
     }
 
-    const totalFaturamento = summary.faturamento;
-
     const topProductsChartData = Object.entries(products)
         .map(([name, quantity]) => ({ name, quantity }))
         .sort((a, b) => b.quantity - a.quantity)
@@ -371,7 +369,6 @@ export default function DashboardPage() {
             revenue: data.revenue,
             averageTicket: ordersCount > 0 ? data.revenue / ordersCount : 0,
             averageItemsPerOrder: ordersCount > 0 ? data.items / ordersCount : 0,
-            share: totalFaturamento > 0 ? (data.revenue / totalFaturamento) * 100 : 0
           }
         })
         .sort((a,b) => b.revenue - a.revenue);
@@ -584,8 +581,8 @@ export default function DashboardPage() {
                 icon={<Package className="text-primary" />}
             />
           </div>
-          <div className="grid gap-4 md:gap-8 lg:grid-cols-2 xl:grid-cols-3">
-             <Card className="xl:col-span-2">
+          <div className="grid gap-4 md:gap-8 lg:grid-cols-5">
+             <Card className="lg:col-span-3">
                <CardHeader>
                   <CardTitle>Performance por Vendedor</CardTitle>
                    <CardDescription>
@@ -596,7 +593,7 @@ export default function DashboardPage() {
                     <VendorPerformanceList data={vendorPerformanceData} />
                 </CardContent>
              </Card>
-            <Card>
+            <Card className="lg:col-span-2">
               <CardHeader>
                 <CardTitle>Produtos Mais Vendidos</CardTitle>
                 <CardDescription>
@@ -681,3 +678,5 @@ export default function DashboardPage() {
       </div>
   );
 }
+
+    
