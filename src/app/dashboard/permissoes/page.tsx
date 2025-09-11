@@ -58,15 +58,6 @@ import { saveAppSettings, loadAppSettings, loadUsersWithRoles, updateUserRole } 
 import type { AppUser } from "@/lib/types";
 import { NewUserDialog } from "@/components/new-user-dialog";
 
-const fallbackUsers: AppUser[] = [
-    { id: "1", email: "admin@gmail.com", role: "admin" },
-    { id: "2", email: "socio@gmail.com", role: "socio" },
-    { id: "3", email: "financeiro@gmail.com", role: "financeiro" },
-    { id: "4", email: "vendedor@gmail.com", role: "vendedor" },
-    { id: "5", email: "logistica@gmail.com", role: "logistica" },
-    { id: "6", email: "expedicao@gmail.com", role: "expedicao" },
-];
-
 
 export default function PermissoesPage() {
     const [users, setUsers] = useState<AppUser[]>([]);
@@ -116,18 +107,14 @@ export default function PermissoesPage() {
                     }
                 }
                 
-                if (appUsers && appUsers.length > 0) {
-                    setUsers(appUsers);
-                } else {
-                    setUsers(fallbackUsers);
-                }
+                setUsers(appUsers);
+
             } catch(error) {
                 console.error("Failed to load settings or users:", error);
-                setUsers(fallbackUsers); // Use fallback on error
                 toast({
                     variant: "destructive",
                     title: "Erro ao Carregar Dados",
-                    description: "Não foi possível carregar as configurações. Usando dados de exemplo."
+                    description: "Não foi possível carregar as configurações do Firestore."
                 })
             } finally {
                 setIsLoading(false);
@@ -515,5 +502,3 @@ export default function PermissoesPage() {
     </>
   );
 }
-
-    
