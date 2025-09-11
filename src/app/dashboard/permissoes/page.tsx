@@ -107,7 +107,9 @@ export default function PermissoesPage() {
                     }
                 }
                 
-                setUsers(appUsers);
+                if (appUsers && appUsers.length > 0) {
+                    setUsers(appUsers);
+                }
 
             } catch(error) {
                 console.error("Failed to load settings or users:", error);
@@ -197,8 +199,8 @@ export default function PermissoesPage() {
     }
     
     const handleCreateUser = async (email: string, role: string) => {
-        const functions = await getFunctionsClient();
-        if(!functions) {
+        const functionsClient = await getFunctionsClient();
+        if(!functionsClient) {
              toast({
                 variant: "destructive",
                 title: "Erro de Configuração",
@@ -207,7 +209,7 @@ export default function PermissoesPage() {
              return;
         }
 
-        const inviteUser = httpsCallable(functions, 'inviteUser');
+        const inviteUser = httpsCallable(functionsClient, 'inviteUser');
         try {
             const result = await inviteUser({ email, role });
             toast({
