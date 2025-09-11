@@ -12,6 +12,7 @@ import {
   Save,
   UserCheck,
   UserPlus,
+  ShieldCheck,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
@@ -61,6 +62,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Logo } from "@/components/icons";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 
 // Mock data - replace with your actual user data fetching
 const initialUsers = [
@@ -124,6 +127,25 @@ const initialUsers = [
 
 const roles = ["Admin", "Sócio", "Financeiro", "Vendedor", "Logística", "Expedição"];
 
+const pages = [
+    { id: "painel", path: "/dashboard", name: "Painel" },
+    { id: "vendas", path: "/dashboard/vendas", name: "Vendas" },
+    { id: "logistica", path: "/dashboard/logistica", name: "Logística" },
+    { id: "relatorios", path: "/dashboard/relatorios", name: "Relatórios (Geral)" },
+    { id: "taxas", path: "/dashboard/taxas", name: "Taxas & Custos" },
+    { id: "conexoes", path: "/dashboard/conexoes", name: "Conexões" },
+];
+
+const initialPermissions: Record<string, Record<string, boolean>> = {
+    painel: { Admin: true, Sócio: true, Financeiro: true, Vendedor: true, Logística: true, Expedição: true },
+    vendas: { Admin: true, Sócio: true, Financeiro: false, Vendedor: true, Logística: false, Expedição: false },
+    logistica: { Admin: true, Sócio: true, Financeiro: false, Vendedor: false, Logística: true, Expedição: true },
+    relatorios: { Admin: true, Sócio: true, Financeiro: true, Vendedor: false, Logística: false, Expedição: false },
+    taxas: { Admin: true, Sócio: true, Financeiro: true, Vendedor: false, Logística: false, Expedição: false },
+    conexoes: { Admin: true, Sócio: false, Financeiro: false, Vendedor: false, Logística: false, Expedição: false },
+};
+
+
 const initialNewUserState = {
     name: "",
     email: "",
@@ -134,6 +156,7 @@ const initialNewUserState = {
 export default function PermissoesPage() {
   const [users, setUsers] = React.useState(initialUsers);
   const [newUser, setNewUser] = React.useState(initialNewUserState);
+  const [permissions, setPermissions] = React.useState(initialPermissions);
   const [isNewUserDialogOpen, setIsNewUserDialogOpen] = React.useState(false);
   const router = useRouter();
   const { toast } = useToast();
@@ -164,13 +187,24 @@ export default function PermissoesPage() {
         user.id === userId ? { ...user, role: newRole } : user
       ));
   };
+  
+  const handlePermissionChange = (pageId: string, role: string) => {
+    setPermissions(prev => ({
+        ...prev,
+        [pageId]: {
+            ...prev[pageId],
+            [role]: !prev[pageId][role],
+        }
+    }))
+  };
 
   const handleSaveChanges = () => {
     // Here you would typically save the changes to your backend/database
     console.log("Saving new roles:", users);
+    console.log("Saving new permissions:", permissions);
     toast({
-      title: "Funções Salvas!",
-      description: "As funções dos usuários foram atualizadas com sucesso.",
+      title: "Alterações Salvas!",
+      description: "As permissões e funções dos usuários foram atualizadas com sucesso.",
     });
   };
 
@@ -330,7 +364,7 @@ export default function PermissoesPage() {
           </DropdownMenu>
         </div>
       </header>
-      <main className="flex flex-1 flex-col gap-4 p-4 md:gap-8 md:p-8">
+      <main className="flex flex-1 flex-col gap-8 p-4 md:p-8">
         <Card>
           <CardHeader>
             <CardTitle className="font-headline text-h3 flex items-center gap-2">
@@ -406,7 +440,7 @@ export default function PermissoesPage() {
                 ))}
               </TableBody>
             </Table>
-            <div className="flex justify-between items-center mt-6">
+            <div className="flex justify-start mt-6">
                 <Dialog open={isNewUserDialogOpen} onOpenChange={setIsNewUserDialogOpen}>
                     <DialogTrigger asChild>
                          <Button variant="outline"><UserPlus className="mr-2" /> Adicionar Novo Usuário</Button>
@@ -455,15 +489,62 @@ export default function PermissoesPage() {
                         </DialogFooter>
                     </DialogContent>
                 </Dialog>
-                <Button onClick={handleSaveChanges}>
-                    <Save className="mr-2 h-4 w-4" />
-                    Salvar Alterações
-                </Button>
             </div>
           </CardContent>
         </Card>
+
+        <Card>
+            <CardHeader>
+                <CardTitle className="font-headline text-h3 flex items-center gap-2">
+                    <ShieldCheck className="size-6" />
+                    Permissões por Função
+                </CardTitle>
+                <CardDescription>
+                    Defina o que cada função pode ver no sistema. A função de Administrador sempre tem acesso a tudo.
+                </CardDescription>
+            </CardHeader>
+            <CardContent>
+                <Table>
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead>Página do Sistema</TableHead>
+                            {roles.map(role => (
+                                <TableHead key={role} className="text-center">{role}</TableHead>
+                            ))}
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {pages.map(page => (
+                            <TableRow key={page.id}>
+                                <TableCell>
+                                    <p className="font-medium">{page.name}</p>
+                                    <p className="text-sm text-muted-foreground">{page.path}</p>
+                                </TableCell>
+                                {roles.map(role => (
+                                    <TableCell key={role} className="text-center">
+                                        <Checkbox 
+                                            checked={permissions[page.id]?.[role] ?? false}
+                                            disabled={role === 'Admin'}
+                                            onCheckedChange={() => handlePermissionChange(page.id, role)}
+                                        />
+                                    </TableCell>
+                                ))}
+                            </TableRow>
+                        ))}
+                    </TableBody>
+                </Table>
+            </CardContent>
+        </Card>
+        
+        <div className="flex justify-end">
+             <Button onClick={handleSaveChanges}>
+                <Save className="mr-2 h-4 w-4" />
+                Salvar Alterações
+            </Button>
+        </div>
       </main>
     </div>
   );
 }
 
+    
