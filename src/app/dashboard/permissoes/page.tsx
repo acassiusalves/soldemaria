@@ -13,7 +13,6 @@ import {
   UserCheck,
   UserPlus,
   ShieldCheck,
-  Switch,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
@@ -64,6 +63,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Logo } from "@/components/icons";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 
 const initialUsers = [
   {
