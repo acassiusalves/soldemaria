@@ -28,6 +28,12 @@ export const getDbClient = async () => {
     return getFirestore(app);
 }
 
+export const getFunctionsClient = async () => {
+    if (typeof window === 'undefined') return null;
+    const { getFunctions } = await import('firebase/functions');
+    return getFunctions(app);
+}
+
 export const getAnalyticsClient = async () => {
     if (typeof window === 'undefined') return null;
     const { getAnalytics, isSupported } = await import('firebase/analytics');

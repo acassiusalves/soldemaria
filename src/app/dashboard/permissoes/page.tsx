@@ -1,22 +1,21 @@
 
 "use client";
 
-import * as React from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import {
   ChevronDown,
   FileText,
   LogOut,
-  MoreHorizontal,
-  PlusCircle,
-  Save,
-  UserCheck,
   UserPlus,
-  ShieldCheck,
+  Lock,
+  Users,
+  Loader2,
+  Save,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-
-import { getAuthClient } from "@/lib/firebase";
+import { getAuthClient, getDbClient } from "@/lib/firebase";
+import { httpsCallable } from "firebase/functions";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
@@ -25,16 +24,8 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
+  CardFooter,
 } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -58,235 +49,188 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Logo } from "@/components/icons";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
-
-const initialUsers = [
-  {
-    id: "1",
-    name: "Ana Paula de Farias",
-    email: "ana.paula@example.com",
-    avatar: "https://picsum.photos/seed/1/100/100",
-    role: "Admin",
-  },
-  {
-    id: "2",
-    name: "Raissa Dandara",
-    email: "raissa.dandara@example.com",
-    avatar: "https://picsum.photos/seed/2/100/100",
-    role: "Vendedor",
-  },
-  {
-    id: "3",
-    name: "Regiane Alves",
-    email: "regiane.alves@example.com",
-    avatar: "https://picsum.photos/seed/3/100/100",
-    role: "Logística",
-  },
-  {
-    id: "4",
-    name: "jasciele23ferreira@hotmail.com",
-    email: "jasciele23ferreira@hotmail.com",
-    avatar: "https://picsum.photos/seed/4/100/100",
-    role: "Financeiro",
-  },
-  {
-    id: "5",
-    name: "mariluciadesign@gmail.com",
-    email: "mariluciadesign@gmail.com",
-    avatar: "https://picsum.photos/seed/5/100/100",
-    role: "Sócio",
-  },
-  {
-    id: "6",
-    name: "lojadacristia@gmail.com",
-    email: "lojadacristia@gmail.com",
-    avatar: "https://picsum.photos/seed/6/100/100",
-    role: "Expedição",
-  },
-  {
-    id: "7",
-    name: "matheuswelled@gmail.com",
-    email: "matheuswelled@gmail.com",
-    avatar: "https://picsum.photos/seed/7/100/100",
-    role: "Sócio",
-  },
-  {
-    id: "8",
-    name: "nicollyellen92@gmail.com",
-    email: "nicollyellen92@gmail.com",
-    avatar: "https://picsum.photos/seed/8/100/100",
-    role: "Expedição",
-  },
-];
-
-const roles = [
-  "Admin",
-  "Sócio",
-  "Financeiro",
-  "Vendedor",
-  "Logística",
-  "Expedição",
-];
-
-const pages = [
-  { id: "painel", path: "/dashboard", name: "Painel" },
-  { id: "vendas", path: "/dashboard/vendas", name: "Vendas" },
-  { id: "logistica", path: "/dashboard/logistica", name: "Logística" },
-  { id: "relatorios", path: "/dashboard/relatorios", name: "Relatórios (Geral)" },
-  { id: "taxas", path: "/dashboard/taxas", name: "Taxas & Custos" },
-  { id: "conexoes", path: "/dashboard/conexoes", name: "Conexões" },
-];
-
-const initialPermissions: Record<string, Record<string, boolean>> = {
-  painel: {
-    Admin: true,
-    Sócio: true,
-    Financeiro: true,
-    Vendedor: true,
-    Logística: true,
-    Expedição: true,
-  },
-  vendas: {
-    Admin: true,
-    Sócio: true,
-    Financeiro: false,
-    Vendedor: true,
-    Logística: false,
-    Expedição: false,
-  },
-  logistica: {
-    Admin: true,
-    Sócio: true,
-    Financeiro: false,
-    Vendedor: false,
-    Logística: true,
-    Expedição: true,
-  },
-  relatorios: {
-    Admin: true,
-    Sócio: true,
-    Financeiro: true,
-    Vendedor: false,
-    Logística: false,
-    Expedição: false,
-  },
-  taxas: {
-    Admin: true,
-    Sócio: true,
-    Financeiro: true,
-    Vendedor: false,
-    Logística: false,
-    Expedição: false,
-  },
-  conexoes: {
-    Admin: true,
-    Sócio: false,
-    Financeiro: false,
-    Vendedor: false,
-    Logística: false,
-    Expedição: false,
-  },
-};
-
-const initialNewUserState = {
-  name: "",
-  email: "",
-  password: "",
-  role: roles[3], // Default to "Vendedor"
-};
+import { pagePermissions as defaultPagePermissions, availableRoles } from "@/lib/permissions";
+import { saveAppSettings, loadAppSettings, loadUsersWithRoles, updateUserRole } from "@/services/firestore";
+import type { AppUser } from "@/lib/types";
+import { NewUserDialog } from "@/components/new-user-dialog";
 
 export default function PermissoesPage() {
-  const [users, setUsers] = React.useState(initialUsers);
-  const [newUser, setNewUser] = React.useState(initialNewUserState);
-  const [permissions, setPermissions] = React.useState(initialPermissions);
-  const [isNewUserDialogOpen, setIsNewUserDialogOpen] = React.useState(false);
-  const router = useRouter();
-  const { toast } = useToast();
+    const [users, setUsers] = useState<AppUser[]>([]);
+    const [permissions, setPermissions] = useState(defaultPagePermissions);
+    const [inactivePages, setInactivePages] = useState<string[]>([]);
+    const [isSavingPermissions, setIsSavingPermissions] = useState(false);
+    const [isSavingUsers, setIsSavingUsers] = useState(false);
+    const [isLoading, setIsLoading] = useState(true);
+    const [isNewUserDialogOpen, setIsNewUserDialogOpen] = useState(false);
+    const { toast } = useToast();
+    const router = useRouter();
 
-  React.useEffect(() => {
-    (async () => {
-      const auth = await getAuthClient();
-      if (!auth) return;
-      const unsub = auth.onAuthStateChanged((user) => {
-        if (!user) {
+    useEffect(() => {
+        (async () => {
+          const auth = await getAuthClient();
+          if (!auth) return;
+          const unsub = auth.onAuthStateChanged((user) => {
+            if (!user) {
+              router.push("/login");
+            }
+          });
+          return () => unsub();
+        })();
+      }, [router]);
+
+    useEffect(() => {
+        async function loadData() {
+            setIsLoading(true);
+            try {
+                const [settings, appUsers] = await Promise.all([
+                    loadAppSettings(),
+                    loadUsersWithRoles()
+                ]);
+
+                if (settings) {
+                    if (settings.permissions) {
+                        const mergedPermissions = { ...defaultPagePermissions };
+                        for (const page in mergedPermissions) {
+                            if (settings.permissions[page]) {
+                                mergedPermissions[page] = settings.permissions[page];
+                            }
+                        }
+                        setPermissions(mergedPermissions);
+                    }
+                    if (settings.inactivePages) {
+                        setInactivePages(settings.inactivePages);
+                    }
+                }
+                setUsers(appUsers);
+            } catch(error) {
+                console.error("Failed to load settings or users:", error);
+                toast({
+                    variant: "destructive",
+                    title: "Erro ao Carregar Dados",
+                    description: "Não foi possível carregar as configurações de usuários e permissões."
+                })
+            } finally {
+                setIsLoading(false);
+            }
+        }
+        loadData();
+    }, [toast]);
+
+    const handleLogout = async () => {
+        const auth = await getAuthClient();
+        if (auth) {
+          await auth.signOut();
           router.push("/login");
         }
-      });
-      return () => unsub();
-    })();
-  }, [router]);
+      };
 
-  const handleLogout = async () => {
-    const auth = await getAuthClient();
-    if (auth) {
-      await auth.signOut();
-      router.push("/login");
-    }
-  };
-
-  const handleRoleChange = (userId: string, newRole: string) => {
-    setUsers((currentUsers) =>
-      currentUsers.map((user) =>
-        user.id === userId ? { ...user, role: newRole } : user
-      )
-    );
-  };
-
-  const handlePermissionChange = (pageId: string, role: string) => {
-    setPermissions((prev) => ({
-      ...prev,
-      [pageId]: {
-        ...prev[pageId],
-        [role]: !prev[pageId][role],
-      },
-    }));
-  };
-
-  const handleSaveChanges = () => {
-    // Here you would typically save the changes to your backend/database
-    console.log("Saving new roles:", users);
-    console.log("Saving new permissions:", permissions);
-    toast({
-      title: "Alterações Salvas!",
-      description:
-        "As permissões e funções dos usuários foram atualizadas com sucesso.",
-    });
-  };
-
-  const handleAddNewUser = () => {
-    if (!newUser.name || !newUser.email || !newUser.password) {
-      toast({
-        title: "Campos incompletos",
-        description:
-          "Por favor, preencha todos os campos para adicionar um novo usuário.",
-        variant: "destructive",
-      });
-      return;
-    }
-    const newUserWithId = {
-      ...newUser,
-      id: String(Date.now()),
-      avatar: `https://picsum.photos/seed/${Date.now()}/100/100`,
+    const handleRoleChange = (userId: string, newRole: string) => {
+        setUsers(currentUsers =>
+            currentUsers.map(u => (u.id === userId ? { ...u, role: newRole } : u))
+        );
     };
-    // Don't save password to state
-    const { password, ...userToSave } = newUserWithId;
-    setUsers((prev) => [...prev, userToSave]);
-    console.log("Creating new user (mock):", newUserWithId);
+    
+    const handlePermissionChange = (page: string, role: string, checked: boolean) => {
+        setPermissions(prev => {
+            const newPermissions = { ...prev };
+            const pageRoles = newPermissions[page] || [];
+            if (checked) {
+                if (!pageRoles.includes(role)) {
+                    newPermissions[page] = [...pageRoles, role];
+                }
+            } else {
+                newPermissions[page] = pageRoles.filter(r => r !== role);
+            }
+            return newPermissions;
+        });
+    };
 
-    toast({
-      title: "Usuário Adicionado",
-      description: `${newUser.name} foi adicionado com a função de ${newUser.role}.`,
-    });
-    setNewUser(initialNewUserState);
-    setIsNewUserDialogOpen(false);
-  };
+    const handlePageActiveChange = (page: string, isActive: boolean) => {
+        setInactivePages(prev => {
+            const newInactive = new Set(prev);
+            if (isActive) {
+                newInactive.delete(page);
+            } else {
+                newInactive.add(page);
+            }
+            return Array.from(newInactive);
+        });
+    };
 
+
+    const handleSavePermissions = async () => {
+        setIsSavingPermissions(true);
+        try {
+            await saveAppSettings({ permissions: permissions, inactivePages: inactivePages });
+            toast({
+                title: "Permissões Salvas!",
+                description: "As regras de acesso foram atualizadas. Pode ser necessário que os usuários recarreguem a página para ver as mudanças."
+            })
+        } catch (e) {
+            toast({ variant: "destructive", title: "Erro", description: "Não foi possível salvar as permissões."})
+        } finally {
+            setIsSavingPermissions(false);
+        }
+    };
+    
+    const handleSaveUsers = async () => {
+        setIsSavingUsers(true);
+        try {
+            const updatePromises = users.map(user => updateUserRole(user.id, user.role));
+            await Promise.all(updatePromises);
+            toast({
+                title: "Funções Salvas!",
+                description: "As funções dos usuários foram atualizadas com sucesso."
+            });
+        } catch (e) {
+             toast({ variant: "destructive", title: "Erro", description: "Não foi possível salvar as funções dos usuários."})
+        } finally {
+            setIsSavingUsers(false);
+        }
+    }
+    
+    const handleCreateUser = async (email: string, role: string) => {
+        // This part requires a Firebase Function named 'inviteUser' to be deployed.
+        // For now, it will log to console and simulate success.
+        console.log(`Simulating invitation for ${email} with role ${role}`);
+        
+        toast({
+            title: "Simulação de Convite",
+            description: `Um convite seria enviado para ${email} com a função de ${role}.`,
+        });
+
+        // To make it fully functional, you'd use something like this:
+        /*
+        const functions = getFunctions(app);
+        const inviteUser = httpsCallable(functions, 'inviteUser');
+        try {
+            const result = await inviteUser({ email, role });
+            toast({
+                title: "Sucesso!",
+                description: (result.data as any).result || `Convite para ${email} enviado com sucesso.`,
+            });
+            // Reload user list to show the new member
+            const appUsers = await loadUsersWithRoles();
+            setUsers(appUsers);
+            setIsNewUserDialogOpen(false);
+        } catch (error: any) {
+             console.error("Erro ao convidar usuário:", error);
+             toast({
+                variant: "destructive",
+                title: "Erro ao Enviar Convite",
+                description: error.message || "Ocorreu um erro desconhecido."
+             })
+        }
+        */
+        setIsNewUserDialogOpen(false);
+    }
+    
   return (
+    <>
     <div className="flex min-h-screen w-full flex-col">
       <header className="sticky top-0 flex h-16 items-center gap-4 border-b bg-background px-4 md:px-6">
         <nav className="hidden flex-col gap-6 text-lg font-medium md:flex md:flex-row md:items-center md:gap-5 md:text-sm lg:gap-6">
@@ -391,7 +335,6 @@ export default function PermissoesPage() {
         </nav>
         <div className="flex w-full items-center gap-4 md:ml-auto md:gap-2 lg:gap-4">
           <div className="ml-auto flex-1 sm:flex-initial">
-            {/* This space is intentionally left blank for now */}
           </div>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -421,259 +364,140 @@ export default function PermissoesPage() {
         </div>
       </header>
       <main className="flex flex-1 flex-col gap-8 p-4 md:p-8">
-        <Card>
-          <CardHeader>
-            <CardTitle className="font-headline text-h3 flex items-center gap-2">
-              <UserCheck className="size-6" />
-              Gestão de Usuários
-            </CardTitle>
-            <CardDescription>
-              Atribua funções para controlar o acesso de cada usuário.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Usuário</TableHead>
-                  <TableHead className="w-[200px]">Função (Role)</TableHead>
-                  <TableHead className="w-[80px]"></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {users.map((user) => (
-                  <TableRow key={user.id}>
-                    <TableCell>
-                      <div className="flex items-center gap-3">
-                        <Avatar className="h-9 w-9">
-                          <AvatarImage
-                            src={user.avatar}
-                            data-ai-hint="person"
-                          />
-                          <AvatarFallback>
-                            {user.name.charAt(0)}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div>
-                          <p className="font-medium">{user.name}</p>
-                          <p className="text-sm text-muted-foreground">
-                            {user.email}
-                          </p>
+            {isLoading ? (
+                 <div className="flex items-center justify-center h-[calc(100vh-200px)]"><Loader2 className="animate-spin" /><p className="ml-2">Carregando...</p></div>
+            ) : (
+            <>
+                <div>
+                    <h1 className="text-3xl font-bold font-headline">Configurações do Sistema</h1>
+                    <p className="text-muted-foreground">
+                        Gerencie usuários, funções, permissões e outras configurações globais.
+                    </p>
+                </div>
+            
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2"><Lock /> Permissões por Função</CardTitle>
+                        <CardDescription>Defina o que cada função pode ver e fazer no sistema. A função de Administrador sempre tem acesso a tudo.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="rounded-md border overflow-auto">
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Página do Sistema</TableHead>
+                                        {availableRoles.map(role => (
+                                            <TableHead key={role.key} className="text-center">{role.name}</TableHead>
+                                        ))}
+                                        <TableHead className="text-center">Ativa</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {Object.keys(permissions).filter(p => p !== '/login' && p !== '/perfil').map(page => (
+                                        <TableRow key={page}>
+                                            <TableCell className="font-medium">{page}</TableCell>
+                                            {availableRoles.map(role => (
+                                                <TableCell key={`${page}-${role.key}`} className="text-center">
+                                                    <Checkbox
+                                                        checked={permissions[page]?.includes(role.key)}
+                                                        onCheckedChange={(checked) => handlePermissionChange(page, role.key, !!checked)}
+                                                        disabled={role.key === 'admin'}
+                                                    />
+                                                </TableCell>
+                                            ))}
+                                            <TableCell className="text-center">
+                                                <Switch
+                                                    checked={!inactivePages.includes(page)}
+                                                    onCheckedChange={(checked) => handlePageActiveChange(page, checked)}
+                                                    disabled={page === '/dashboard/permissoes'}
+                                                />
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
                         </div>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Select
-                        value={user.role}
-                        onValueChange={(value) =>
-                          handleRoleChange(user.id, value)
-                        }
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecione a função" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {roles.map((role) => (
-                            <SelectItem key={role} value={role}>
-                              {role}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </TableCell>
-                    <TableCell>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8"
-                          >
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem disabled>
-                            Editar Usuário
-                          </DropdownMenuItem>
-                          <DropdownMenuItem disabled>
-                            Resetar Senha
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            className="text-destructive"
-                            disabled
-                          >
-                            Excluir Usuário
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-            <div className="flex justify-start mt-6">
-              <Dialog
-                open={isNewUserDialogOpen}
-                onOpenChange={setIsNewUserDialogOpen}
-              >
-                <DialogTrigger asChild>
-                  <Button variant="outline">
-                    <UserPlus className="mr-2" /> Adicionar Novo Usuário
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Adicionar Novo Usuário</DialogTitle>
-                    <DialogDescription>
-                      Preencha os dados abaixo para criar um novo acesso ao
-                      sistema.
-                    </DialogDescription>
-                  </DialogHeader>
-                  <div className="grid gap-4 py-4">
-                    <div className="grid grid-cols-4 items-center gap-4">
-                      <Label htmlFor="new-name" className="text-right">
-                        Nome
-                      </Label>
-                      <Input
-                        id="new-name"
-                        value={newUser.name}
-                        onChange={(e) =>
-                          setNewUser((p) => ({ ...p, name: e.target.value }))
-                        }
-                        className="col-span-3"
-                      />
-                    </div>
-                    <div className="grid grid-cols-4 items-center gap-4">
-                      <Label htmlFor="new-email" className="text-right">
-                        Email
-                      </Label>
-                      <Input
-                        id="new-email"
-                        type="email"
-                        value={newUser.email}
-                        onChange={(e) =>
-                          setNewUser((p) => ({ ...p, email: e.target.value }))
-                        }
-                        className="col-span-3"
-                      />
-                    </div>
-                    <div className="grid grid-cols-4 items-center gap-4">
-                      <Label htmlFor="new-password" className="text-right">
-                        Senha
-                      </Label>
-                      <Input
-                        id="new-password"
-                        type="password"
-                        value={newUser.password}
-                        onChange={(e) =>
-                          setNewUser((p) => ({
-                            ...p,
-                            password: e.target.value,
-                          }))
-                        }
-                        className="col-span-3"
-                      />
-                    </div>
-                    <div className="grid grid-cols-4 items-center gap-4">
-                      <Label htmlFor="new-role" className="text-right">
-                        Função
-                      </Label>
-                      <div className="col-span-3">
-                        <Select
-                          value={newUser.role}
-                          onValueChange={(value) =>
-                            setNewUser((p) => ({ ...p, role: value }))
-                          }
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Selecione a função" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {roles.map((role) => (
-                              <SelectItem key={role} value={role}>
-                                {role}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-                  </div>
-                  <DialogFooter>
-                    <Button type="button" onClick={handleAddNewUser}>
-                      <PlusCircle className="mr-2" />
-                      Adicionar
-                    </Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
-            </div>
-          </CardContent>
-        </Card>
+                    </CardContent>
+                    <CardFooter className="justify-end">
+                        <Button onClick={handleSavePermissions} disabled={isSavingPermissions}>
+                            {isSavingPermissions && <Loader2 className="animate-spin mr-2"/>}
+                            <Save className="mr-2" />
+                            Salvar Alterações de Permissão
+                        </Button>
+                    </CardFooter>
+                </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="font-headline text-h3 flex items-center gap-2">
-              <ShieldCheck className="size-6" />
-              Permissões por Função
-            </CardTitle>
-            <CardDescription>
-              Defina o que cada função pode ver no sistema. A função de
-              Administrador sempre tem acesso a tudo.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[200px]">Página do Sistema</TableHead>
-                  <TableHead>Ativa</TableHead>
-                  {roles.map((role) => (
-                    <TableHead key={role} className="text-center">
-                      {role}
-                    </TableHead>
-                  ))}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {pages.map((page) => (
-                  <TableRow key={page.id}>
-                    <TableCell>
-                      <p className="font-medium">{page.name}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {page.path}
-                      </p>
-                    </TableCell>
-                    <TableCell>
-                      <Switch defaultChecked />
-                    </TableCell>
-                    {roles.map((role) => (
-                      <TableCell key={role} className="text-center">
-                        <Checkbox
-                          checked={permissions[page.id]?.[role] ?? false}
-                          disabled={role === "Admin"}
-                          onCheckedChange={() =>
-                            handlePermissionChange(page.id, role)
-                          }
-                        />
-                      </TableCell>
-                    ))}
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-
-        <div className="flex justify-end">
-          <Button onClick={handleSaveChanges}>
-            <Save className="mr-2 h-4 w-4" />
-            Salvar Alterações
-          </Button>
-        </div>
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2"><Users /> Gestão de Usuários</CardTitle>
+                        <CardDescription>
+                            Atribua funções para controlar o acesso de cada usuário. Apenas usuários com função definida no Firestore são listados aqui.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="rounded-md border">
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Email do Usuário</TableHead>
+                                        <TableHead className="w-[180px]">Função (Role)</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {users.length > 0 ? users.map(user => (
+                                        <TableRow key={user.id}>
+                                            <TableCell className="font-medium">{user.email || "Email não disponível"}</TableCell>
+                                            <TableCell>
+                                                <Select
+                                                    value={user.role}
+                                                    onValueChange={(newRole) => handleRoleChange(user.id, newRole)}
+                                                    disabled={user.email?.toLowerCase().includes('admin@')}
+                                                >
+                                                    <SelectTrigger>
+                                                        <SelectValue placeholder="Selecione a função" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        {availableRoles.map(role => (
+                                                            <SelectItem key={role.key} value={role.key}>
+                                                                {role.name}
+                                                            </SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                            </TableCell>
+                                        </TableRow>
+                                    )) : (
+                                        <TableRow>
+                                            <TableCell colSpan={2} className="h-24 text-center">Nenhum usuário encontrado no Firestore.</TableCell>
+                                        </TableRow>
+                                    )}
+                                </TableBody>
+                            </Table>
+                        </div>
+                    </CardContent>
+                    <CardFooter className="justify-between items-center">
+                        <Button variant="outline" onClick={() => setIsNewUserDialogOpen(true)}>
+                            <UserPlus className="mr-2" />
+                            Adicionar Novo Usuário
+                        </Button>
+                        <Button onClick={handleSaveUsers} disabled={isSavingUsers}>
+                            {isSavingUsers && <Loader2 className="animate-spin mr-2"/>}
+                            <Save className="mr-2" />
+                            Salvar Alterações de Usuário
+                        </Button>
+                    </CardFooter>
+                </Card>
+            </>
+        )}
       </main>
     </div>
+
+    <NewUserDialog
+        isOpen={isNewUserDialogOpen}
+        onClose={() => setIsNewUserDialogOpen(false)}
+        onSave={handleCreateUser}
+        availableRoles={availableRoles}
+    />
+    </>
   );
 }
