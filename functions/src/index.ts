@@ -1,11 +1,13 @@
-import {onCall, HttpsError} from "firebase-functions/v2/https";
+import {onCall,HttpsError} from "firebase-functions/v2/https";
+import {onUserCreated} from "firebase-functions/v2/identity";
 import {initializeApp} from "firebase-admin/app";
 import {getAuth} from "firebase-admin/auth";
-import {getFirestore, FieldValue} from "firebase-admin/firestore";
+import {getFirestore,FieldValue} from "firebase-admin/firestore";
 import * as crypto from "node:crypto";
 
 initializeApp();
 
+/* --- JÁ EXISTE NO TEU ARQUIVO (mantém) --- */
 export const inviteUser = onCall(
   {region: "southamerica-east1"},
   async (req) => {
@@ -31,7 +33,7 @@ export const inviteUser = onCall(
         user = await auth.createUser({
           email,
           password: crypto.randomUUID(),
-          emailVerified: false,
+          emailVerified: false
         });
       }
 
@@ -40,7 +42,7 @@ export const inviteUser = onCall(
           email,
           role,
           createdAt: FieldValue.serverTimestamp(),
-          updatedAt: FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp()
         },
         {merge: true}
       );
@@ -58,5 +60,63 @@ export const inviteUser = onCall(
       const msg = err instanceof Error ? err.message : "Falha ao convidar";
       throw new HttpsError("internal", msg);
     }
+  }
+);
+/* --- FIM inviteUser --- */
+
+/* 1) Mirror: Auth -> Firestore (users/{uid}) */
+export const authUserMirror = onUserCreated(
+  {region: "southamerica-east1"},
+  async (event) => {
+    const u = event.data;
+    const email = (u.email || "").toLowerCase();
+    const db = getFirestore();
+    const ref = db.collection("users").doc(u.uid);
+
+    await db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      if (snap.exists) {
+        tx.set(
+          ref,
+          {email,updatedAt: FieldValue.serverTimestamp()},
+          {merge: true}
+        );
+      } else {
+        tx.set(ref, {
+          email,
+          role: "vendedor",
+          createdAt: FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp()
+        });
+      }
+    });
+  }
+);
+
+/* 2) Backfill: sincroniza TODOS do Auth -> Firestore (rodar 1x) */
+export const syncAuthUsers = onCall(
+  {region: "southamerica-east1"},
+  async () => {
+    const auth = getAuth();
+    const db = getFirestore();
+    let token: string|undefined = undefined;
+    let count = 0;
+
+    do {
+      const page = await auth.listUsers(1000, token);
+      for (const ur of page.users) {
+        const email = (ur.email || "").toLowerCase();
+        await db.collection("users").doc(ur.uid).set({
+          email,
+          role: "vendedor",
+          createdAt: FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp()
+        }, {merge: true});
+        count++;
+      }
+      token = page.pageToken;
+    } while (token);
+
+    return {ok: true, synced: count};
   }
 );
