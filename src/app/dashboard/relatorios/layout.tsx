@@ -120,6 +120,12 @@ export default function RelatoriosLayout({
             >
               Conexões
             </Link>
+            <Link
+              href="/dashboard/permissoes"
+              className="text-muted-foreground transition-colors hover:text-foreground"
+            >
+              Permissões
+            </Link>
           </nav>
           <div className="flex w-full items-center gap-4 md:ml-auto md:gap-2 lg:gap-4">
               <div className="ml-auto flex-1 sm:flex-initial">
