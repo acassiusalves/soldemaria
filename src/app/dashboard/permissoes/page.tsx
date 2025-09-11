@@ -200,13 +200,15 @@ export default function PermissoesPage() {
     }
     
     const handleCreateUser = async (email: string, role: string) => {
-        const functions = getFunctions(app);
+        const region = process.env.NEXT_PUBLIC_FIREBASE_FUNCTIONS_REGION || "southamerica-east1";
+        const functions = getFunctions(app, region);
         const inviteUser = httpsCallable(functions, 'inviteUser');
         try {
             const result = await inviteUser({ email, role });
+            const message = (result.data as any)?.message || `Convite para ${email} enviado com sucesso.`;
             toast({
                 title: "Sucesso!",
-                description: (result.data as any).message || `Convite para ${email} enviado com sucesso.`,
+                description: message,
             });
             // Recarregar lista de usuários para mostrar o novo membro
             const appUsers = await loadUsersWithRoles();
@@ -219,7 +221,7 @@ export default function PermissoesPage() {
              toast({
                 variant: "destructive",
                 title: "Erro ao Enviar Convite",
-                description: error.message || "Ocorreu um erro desconhecido."
+                description: `${error?.code || 'internal'} — ${error?.message || 'Ocorreu um erro desconhecido.'}`
              })
         }
     }
