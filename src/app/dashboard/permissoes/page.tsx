@@ -12,6 +12,7 @@ import {
   Users,
   Loader2,
   Save,
+  RefreshCw,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { getAuthClient } from "@/lib/firebase";
@@ -67,6 +68,7 @@ export default function PermissoesPage() {
     const [isSavingPermissions, setIsSavingPermissions] = useState(false);
     const [isSavingUsers, setIsSavingUsers] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
+    const [isSyncing, setIsSyncing] = useState(false);
     const [isNewUserDialogOpen, setIsNewUserDialogOpen] = useState(false);
     const { toast } = useToast();
     const router = useRouter();
@@ -205,7 +207,7 @@ export default function PermissoesPage() {
         const inviteUser = httpsCallable(functions, 'inviteUser');
         try {
             const result = await inviteUser({ email, role });
-            const message = (result.data as any)?.message || `Convite para ${email} enviado com sucesso.`;
+            const message = (result.data as any)?.resetLink ? `Convite para ${email} enviado.` : `Convite para ${email} gerado com sucesso.`;
             toast({
                 title: "Sucesso!",
                 description: message,
@@ -220,6 +222,28 @@ export default function PermissoesPage() {
              })
         }
     }
+    
+    const handleSyncAuthUsers = async () => {
+        setIsSyncing(true);
+        try {
+            const region = process.env.NEXT_PUBLIC_FIREBASE_FUNCTIONS_REGION || "southamerica-east1";
+            const fn = httpsCallable(getFunctions(app, region), "syncAuthUsers");
+            const result: any = await fn();
+            toast({
+                title: "Sincronização Concluída",
+                description: result?.data?.message || "Usuários sincronizados."
+            });
+        } catch (error: any) {
+             console.error("Erro ao sincronizar usuários:", error);
+             toast({
+                variant: "destructive",
+                title: "Erro na Sincronização",
+                description: `${error?.code || 'internal'} — ${error?.message || 'Ocorreu um erro desconhecido.'}`
+             })
+        } finally {
+            setIsSyncing(false);
+        }
+    };
     
   return (
     <>
@@ -468,10 +492,16 @@ export default function PermissoesPage() {
                         </div>
                     </CardContent>
                     <CardFooter className="justify-between items-center">
-                        <Button variant="outline" onClick={() => setIsNewUserDialogOpen(true)}>
-                            <UserPlus className="mr-2" />
-                            Adicionar Novo Usuário
-                        </Button>
+                        <div className="flex gap-2">
+                             <Button variant="outline" onClick={() => setIsNewUserDialogOpen(true)}>
+                                <UserPlus className="mr-2" />
+                                Adicionar Novo Usuário
+                            </Button>
+                             <Button variant="secondary" onClick={handleSyncAuthUsers} disabled={isSyncing}>
+                                {isSyncing ? <Loader2 className="mr-2 animate-spin" /> : <RefreshCw className="mr-2" />}
+                                Sincronizar Usuários do Auth
+                            </Button>
+                        </div>
                         <Button onClick={handleSaveUsers} disabled={isSavingUsers}>
                             {isSavingUsers && <Loader2 className="animate-spin mr-2"/>}
                             <Save className="mr-2" />
