@@ -13,6 +13,7 @@ import {
   UserCheck,
   UserPlus,
   ShieldCheck,
+  Switch,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
@@ -63,9 +64,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Logo } from "@/components/icons";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Switch } from "@/components/ui/switch";
 
-// Mock data - replace with your actual user data fetching
 const initialUsers = [
   {
     id: "1",
@@ -102,14 +101,14 @@ const initialUsers = [
     avatar: "https://picsum.photos/seed/5/100/100",
     role: "Sócio",
   },
-   {
+  {
     id: "6",
     name: "lojadacristia@gmail.com",
     email: "lojadacristia@gmail.com",
     avatar: "https://picsum.photos/seed/6/100/100",
     role: "Expedição",
   },
-   {
+  {
     id: "7",
     name: "matheuswelled@gmail.com",
     email: "matheuswelled@gmail.com",
@@ -125,33 +124,81 @@ const initialUsers = [
   },
 ];
 
-const roles = ["Admin", "Sócio", "Financeiro", "Vendedor", "Logística", "Expedição"];
+const roles = [
+  "Admin",
+  "Sócio",
+  "Financeiro",
+  "Vendedor",
+  "Logística",
+  "Expedição",
+];
 
 const pages = [
-    { id: "painel", path: "/dashboard", name: "Painel" },
-    { id: "vendas", path: "/dashboard/vendas", name: "Vendas" },
-    { id: "logistica", path: "/dashboard/logistica", name: "Logística" },
-    { id: "relatorios", path: "/dashboard/relatorios", name: "Relatórios (Geral)" },
-    { id: "taxas", path: "/dashboard/taxas", name: "Taxas & Custos" },
-    { id: "conexoes", path: "/dashboard/conexoes", name: "Conexões" },
+  { id: "painel", path: "/dashboard", name: "Painel" },
+  { id: "vendas", path: "/dashboard/vendas", name: "Vendas" },
+  { id: "logistica", path: "/dashboard/logistica", name: "Logística" },
+  { id: "relatorios", path: "/dashboard/relatorios", name: "Relatórios (Geral)" },
+  { id: "taxas", path: "/dashboard/taxas", name: "Taxas & Custos" },
+  { id: "conexoes", path: "/dashboard/conexoes", name: "Conexões" },
 ];
 
 const initialPermissions: Record<string, Record<string, boolean>> = {
-    painel: { Admin: true, Sócio: true, Financeiro: true, Vendedor: true, Logística: true, Expedição: true },
-    vendas: { Admin: true, Sócio: true, Financeiro: false, Vendedor: true, Logística: false, Expedição: false },
-    logistica: { Admin: true, Sócio: true, Financeiro: false, Vendedor: false, Logística: true, Expedição: true },
-    relatorios: { Admin: true, Sócio: true, Financeiro: true, Vendedor: false, Logística: false, Expedição: false },
-    taxas: { Admin: true, Sócio: true, Financeiro: true, Vendedor: false, Logística: false, Expedição: false },
-    conexoes: { Admin: true, Sócio: false, Financeiro: false, Vendedor: false, Logística: false, Expedição: false },
+  painel: {
+    Admin: true,
+    Sócio: true,
+    Financeiro: true,
+    Vendedor: true,
+    Logística: true,
+    Expedição: true,
+  },
+  vendas: {
+    Admin: true,
+    Sócio: true,
+    Financeiro: false,
+    Vendedor: true,
+    Logística: false,
+    Expedição: false,
+  },
+  logistica: {
+    Admin: true,
+    Sócio: true,
+    Financeiro: false,
+    Vendedor: false,
+    Logística: true,
+    Expedição: true,
+  },
+  relatorios: {
+    Admin: true,
+    Sócio: true,
+    Financeiro: true,
+    Vendedor: false,
+    Logística: false,
+    Expedição: false,
+  },
+  taxas: {
+    Admin: true,
+    Sócio: true,
+    Financeiro: true,
+    Vendedor: false,
+    Logística: false,
+    Expedição: false,
+  },
+  conexoes: {
+    Admin: true,
+    Sócio: false,
+    Financeiro: false,
+    Vendedor: false,
+    Logística: false,
+    Expedição: false,
+  },
 };
 
-
 const initialNewUserState = {
-    name: "",
-    email: "",
-    password: "",
-    role: roles[3], // Default to "Vendedor"
-}
+  name: "",
+  email: "",
+  password: "",
+  role: roles[3], // Default to "Vendedor"
+};
 
 export default function PermissoesPage() {
   const [users, setUsers] = React.useState(initialUsers);
@@ -183,19 +230,21 @@ export default function PermissoesPage() {
   };
 
   const handleRoleChange = (userId: string, newRole: string) => {
-      setUsers(currentUsers => currentUsers.map(user => 
+    setUsers((currentUsers) =>
+      currentUsers.map((user) =>
         user.id === userId ? { ...user, role: newRole } : user
-      ));
+      )
+    );
   };
-  
+
   const handlePermissionChange = (pageId: string, role: string) => {
-    setPermissions(prev => ({
-        ...prev,
-        [pageId]: {
-            ...prev[pageId],
-            [role]: !prev[pageId][role],
-        }
-    }))
+    setPermissions((prev) => ({
+      ...prev,
+      [pageId]: {
+        ...prev[pageId],
+        [role]: !prev[pageId][role],
+      },
+    }));
   };
 
   const handleSaveChanges = () => {
@@ -204,29 +253,38 @@ export default function PermissoesPage() {
     console.log("Saving new permissions:", permissions);
     toast({
       title: "Alterações Salvas!",
-      description: "As permissões e funções dos usuários foram atualizadas com sucesso.",
+      description:
+        "As permissões e funções dos usuários foram atualizadas com sucesso.",
     });
   };
 
   const handleAddNewUser = () => {
     if (!newUser.name || !newUser.email || !newUser.password) {
-        toast({ title: "Campos incompletos", description: "Por favor, preencha todos os campos para adicionar um novo usuário.", variant: "destructive" });
-        return;
+      toast({
+        title: "Campos incompletos",
+        description:
+          "Por favor, preencha todos os campos para adicionar um novo usuário.",
+        variant: "destructive",
+      });
+      return;
     }
-    const newUserWithId = { 
-        ...newUser, 
-        id: String(Date.now()),
-        avatar: `https://picsum.photos/seed/${Date.now()}/100/100`,
+    const newUserWithId = {
+      ...newUser,
+      id: String(Date.now()),
+      avatar: `https://picsum.photos/seed/${Date.now()}/100/100`,
     };
     // Don't save password to state
     const { password, ...userToSave } = newUserWithId;
-    setUsers(prev => [...prev, userToSave]);
+    setUsers((prev) => [...prev, userToSave]);
     console.log("Creating new user (mock):", newUserWithId);
 
-    toast({ title: "Usuário Adicionado", description: `${newUser.name} foi adicionado com a função de ${newUser.role}.` });
+    toast({
+      title: "Usuário Adicionado",
+      description: `${newUser.name} foi adicionado com a função de ${newUser.role}.`,
+    });
     setNewUser(initialNewUserState);
     setIsNewUserDialogOpen(false);
-  }
+  };
 
   return (
     <div className="flex min-h-screen w-full flex-col">
@@ -271,7 +329,9 @@ export default function PermissoesPage() {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start">
               <DropdownMenuItem asChild>
-                <Link href="/dashboard/relatorios/visao-geral">Visão Geral</Link>
+                <Link href="/dashboard/relatorios/visao-geral">
+                  Visão Geral
+                </Link>
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
                 <Link href="/dashboard/relatorios/financeiro">Financeiro</Link>
@@ -335,11 +395,7 @@ export default function PermissoesPage() {
           </div>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button
-                variant="secondary"
-                size="icon"
-                className="rounded-full"
-              >
+              <Button variant="secondary" size="icon" className="rounded-full">
                 <Avatar className="h-9 w-9">
                   <AvatarImage
                     src="https://picsum.photos/100/100"
@@ -368,11 +424,11 @@ export default function PermissoesPage() {
         <Card>
           <CardHeader>
             <CardTitle className="font-headline text-h3 flex items-center gap-2">
-                <UserCheck className="size-6" />
-                Gestão de Usuários
+              <UserCheck className="size-6" />
+              Gestão de Usuários
             </CardTitle>
             <CardDescription>
-                Atribua funções para controlar o acesso de cada usuário.
+              Atribua funções para controlar o acesso de cada usuário.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -390,7 +446,10 @@ export default function PermissoesPage() {
                     <TableCell>
                       <div className="flex items-center gap-3">
                         <Avatar className="h-9 w-9">
-                          <AvatarImage src={user.avatar} data-ai-hint="person" />
+                          <AvatarImage
+                            src={user.avatar}
+                            data-ai-hint="person"
+                          />
                           <AvatarFallback>
                             {user.name.charAt(0)}
                           </AvatarFallback>
@@ -404,15 +463,22 @@ export default function PermissoesPage() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Select value={user.role} onValueChange={(value) => handleRoleChange(user.id, value)}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Selecione a função" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {roles.map(role => (
-                                <SelectItem key={role} value={role}>{role}</SelectItem>
-                            ))}
-                          </SelectContent>
+                      <Select
+                        value={user.role}
+                        onValueChange={(value) =>
+                          handleRoleChange(user.id, value)
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione a função" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {roles.map((role) => (
+                            <SelectItem key={role} value={role}>
+                              {role}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
                       </Select>
                     </TableCell>
                     <TableCell>
@@ -427,10 +493,17 @@ export default function PermissoesPage() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem disabled>Editar Usuário</DropdownMenuItem>
-                          <DropdownMenuItem disabled>Resetar Senha</DropdownMenuItem>
+                          <DropdownMenuItem disabled>
+                            Editar Usuário
+                          </DropdownMenuItem>
+                          <DropdownMenuItem disabled>
+                            Resetar Senha
+                          </DropdownMenuItem>
                           <DropdownMenuSeparator />
-                          <DropdownMenuItem className="text-destructive" disabled>
+                          <DropdownMenuItem
+                            className="text-destructive"
+                            disabled
+                          >
                             Excluir Usuário
                           </DropdownMenuItem>
                         </DropdownMenuContent>
@@ -441,110 +514,166 @@ export default function PermissoesPage() {
               </TableBody>
             </Table>
             <div className="flex justify-start mt-6">
-                <Dialog open={isNewUserDialogOpen} onOpenChange={setIsNewUserDialogOpen}>
-                    <DialogTrigger asChild>
-                         <Button variant="outline"><UserPlus className="mr-2" /> Adicionar Novo Usuário</Button>
-                    </DialogTrigger>
-                    <DialogContent>
-                        <DialogHeader>
-                            <DialogTitle>Adicionar Novo Usuário</DialogTitle>
-                            <DialogDescription>
-                                Preencha os dados abaixo para criar um novo acesso ao sistema.
-                            </DialogDescription>
-                        </DialogHeader>
-                        <div className="grid gap-4 py-4">
-                            <div className="grid grid-cols-4 items-center gap-4">
-                                <Label htmlFor="new-name" className="text-right">Nome</Label>
-                                <Input id="new-name" value={newUser.name} onChange={(e) => setNewUser(p => ({...p, name: e.target.value}))} className="col-span-3" />
-                            </div>
-                            <div className="grid grid-cols-4 items-center gap-4">
-                                <Label htmlFor="new-email" className="text-right">Email</Label>
-                                <Input id="new-email" type="email" value={newUser.email} onChange={(e) => setNewUser(p => ({...p, email: e.target.value}))} className="col-span-3" />
-                            </div>
-                            <div className="grid grid-cols-4 items-center gap-4">
-                                <Label htmlFor="new-password" className="text-right">Senha</Label>
-                                <Input id="new-password" type="password" value={newUser.password} onChange={(e) => setNewUser(p => ({...p, password: e.target.value}))} className="col-span-3" />
-                            </div>
-                            <div className="grid grid-cols-4 items-center gap-4">
-                                <Label htmlFor="new-role" className="text-right">Função</Label>
-                                <div className="col-span-3">
-                                   <Select value={newUser.role} onValueChange={(value) => setNewUser(p => ({...p, role: value}))}>
-                                        <SelectTrigger>
-                                            <SelectValue placeholder="Selecione a função" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {roles.map(role => (
-                                                <SelectItem key={role} value={role}>{role}</SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                            </div>
-                        </div>
-                        <DialogFooter>
-                            <Button type="button" onClick={handleAddNewUser}>
-                                <PlusCircle className="mr-2" />
-                                Adicionar
-                            </Button>
-                        </DialogFooter>
-                    </DialogContent>
-                </Dialog>
+              <Dialog
+                open={isNewUserDialogOpen}
+                onOpenChange={setIsNewUserDialogOpen}
+              >
+                <DialogTrigger asChild>
+                  <Button variant="outline">
+                    <UserPlus className="mr-2" /> Adicionar Novo Usuário
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Adicionar Novo Usuário</DialogTitle>
+                    <DialogDescription>
+                      Preencha os dados abaixo para criar um novo acesso ao
+                      sistema.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="grid gap-4 py-4">
+                    <div className="grid grid-cols-4 items-center gap-4">
+                      <Label htmlFor="new-name" className="text-right">
+                        Nome
+                      </Label>
+                      <Input
+                        id="new-name"
+                        value={newUser.name}
+                        onChange={(e) =>
+                          setNewUser((p) => ({ ...p, name: e.target.value }))
+                        }
+                        className="col-span-3"
+                      />
+                    </div>
+                    <div className="grid grid-cols-4 items-center gap-4">
+                      <Label htmlFor="new-email" className="text-right">
+                        Email
+                      </Label>
+                      <Input
+                        id="new-email"
+                        type="email"
+                        value={newUser.email}
+                        onChange={(e) =>
+                          setNewUser((p) => ({ ...p, email: e.target.value }))
+                        }
+                        className="col-span-3"
+                      />
+                    </div>
+                    <div className="grid grid-cols-4 items-center gap-4">
+                      <Label htmlFor="new-password" className="text-right">
+                        Senha
+                      </Label>
+                      <Input
+                        id="new-password"
+                        type="password"
+                        value={newUser.password}
+                        onChange={(e) =>
+                          setNewUser((p) => ({
+                            ...p,
+                            password: e.target.value,
+                          }))
+                        }
+                        className="col-span-3"
+                      />
+                    </div>
+                    <div className="grid grid-cols-4 items-center gap-4">
+                      <Label htmlFor="new-role" className="text-right">
+                        Função
+                      </Label>
+                      <div className="col-span-3">
+                        <Select
+                          value={newUser.role}
+                          onValueChange={(value) =>
+                            setNewUser((p) => ({ ...p, role: value }))
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecione a função" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {roles.map((role) => (
+                              <SelectItem key={role} value={role}>
+                                {role}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <Button type="button" onClick={handleAddNewUser}>
+                      <PlusCircle className="mr-2" />
+                      Adicionar
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
             </div>
           </CardContent>
         </Card>
 
         <Card>
-            <CardHeader>
-                <CardTitle className="font-headline text-h3 flex items-center gap-2">
-                    <ShieldCheck className="size-6" />
-                    Permissões por Função
-                </CardTitle>
-                <CardDescription>
-                    Defina o que cada função pode ver no sistema. A função de Administrador sempre tem acesso a tudo.
-                </CardDescription>
-            </CardHeader>
-            <CardContent>
-                <Table>
-                    <TableHeader>
-                        <TableRow>
-                            <TableHead>Página do Sistema</TableHead>
-                            {roles.map(role => (
-                                <TableHead key={role} className="text-center">{role}</TableHead>
-                            ))}
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {pages.map(page => (
-                            <TableRow key={page.id}>
-                                <TableCell>
-                                    <p className="font-medium">{page.name}</p>
-                                    <p className="text-sm text-muted-foreground">{page.path}</p>
-                                </TableCell>
-                                {roles.map(role => (
-                                    <TableCell key={role} className="text-center">
-                                        <Checkbox 
-                                            checked={permissions[page.id]?.[role] ?? false}
-                                            disabled={role === 'Admin'}
-                                            onCheckedChange={() => handlePermissionChange(page.id, role)}
-                                        />
-                                    </TableCell>
-                                ))}
-                            </TableRow>
-                        ))}
-                    </TableBody>
-                </Table>
-            </CardContent>
+          <CardHeader>
+            <CardTitle className="font-headline text-h3 flex items-center gap-2">
+              <ShieldCheck className="size-6" />
+              Permissões por Função
+            </CardTitle>
+            <CardDescription>
+              Defina o que cada função pode ver no sistema. A função de
+              Administrador sempre tem acesso a tudo.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-[200px]">Página do Sistema</TableHead>
+                  <TableHead>Ativa</TableHead>
+                  {roles.map((role) => (
+                    <TableHead key={role} className="text-center">
+                      {role}
+                    </TableHead>
+                  ))}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {pages.map((page) => (
+                  <TableRow key={page.id}>
+                    <TableCell>
+                      <p className="font-medium">{page.name}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {page.path}
+                      </p>
+                    </TableCell>
+                    <TableCell>
+                      <Switch defaultChecked />
+                    </TableCell>
+                    {roles.map((role) => (
+                      <TableCell key={role} className="text-center">
+                        <Checkbox
+                          checked={permissions[page.id]?.[role] ?? false}
+                          disabled={role === "Admin"}
+                          onCheckedChange={() =>
+                            handlePermissionChange(page.id, role)
+                          }
+                        />
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
         </Card>
-        
+
         <div className="flex justify-end">
-             <Button onClick={handleSaveChanges}>
-                <Save className="mr-2 h-4 w-4" />
-                Salvar Alterações
-            </Button>
+          <Button onClick={handleSaveChanges}>
+            <Save className="mr-2 h-4 w-4" />
+            Salvar Alterações
+          </Button>
         </div>
       </main>
     </div>
   );
 }
-
-    
