@@ -14,8 +14,9 @@ import {
   Save,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { getAuthClient, getDbClient, getFunctionsClient } from "@/lib/firebase";
-import { httpsCallable } from "firebase/functions";
+import { getAuthClient } from "@/lib/firebase";
+import { getFunctions, httpsCallable } from "firebase/functions";
+import { app } from "@/lib/firebase";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
@@ -199,17 +200,8 @@ export default function PermissoesPage() {
     }
     
     const handleCreateUser = async (email: string, role: string) => {
-        const functionsClient = await getFunctionsClient();
-        if(!functionsClient) {
-             toast({
-                variant: "destructive",
-                title: "Erro de Configuração",
-                description: "O serviço de funções do Firebase não está disponível."
-             });
-             return;
-        }
-
-        const inviteUser = httpsCallable(functionsClient, 'inviteUser');
+        const functions = getFunctions(app);
+        const inviteUser = httpsCallable(functions, 'inviteUser');
         try {
             const result = await inviteUser({ email, role });
             toast({
