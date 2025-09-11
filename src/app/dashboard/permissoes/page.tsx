@@ -8,9 +8,10 @@ import {
   FileText,
   LogOut,
   MoreHorizontal,
+  PlusCircle,
   Save,
-  Shield,
   UserCheck,
+  UserPlus,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
@@ -25,6 +26,15 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -33,6 +43,13 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Table,
   TableBody,
   TableCell,
@@ -40,7 +57,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Switch } from "@/components/ui/switch";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Logo } from "@/components/icons";
 
@@ -52,15 +70,6 @@ const initialUsers = [
     email: "ana.paula@example.com",
     avatar: "https://picsum.photos/seed/1/100/100",
     role: "Admin",
-    permissions: {
-      painel: true,
-      vendas: true,
-      logistica: true,
-      relatorios: true,
-      taxas: true,
-      conexoes: true,
-      permissoes: true,
-    },
   },
   {
     id: "2",
@@ -68,15 +77,6 @@ const initialUsers = [
     email: "raissa.dandara@example.com",
     avatar: "https://picsum.photos/seed/2/100/100",
     role: "Vendedor",
-    permissions: {
-      painel: true,
-      vendas: true,
-      logistica: false,
-      relatorios: true,
-      taxas: false,
-      conexoes: false,
-      permissoes: false,
-    },
   },
   {
     id: "3",
@@ -84,30 +84,57 @@ const initialUsers = [
     email: "regiane.alves@example.com",
     avatar: "https://picsum.photos/seed/3/100/100",
     role: "Logística",
-    permissions: {
-      painel: true,
-      vendas: false,
-      logistica: true,
-      relatorios: false,
-      taxas: false,
-      conexoes: false,
-      permissoes: false,
-    },
+  },
+  {
+    id: "4",
+    name: "jasciele23ferreira@hotmail.com",
+    email: "jasciele23ferreira@hotmail.com",
+    avatar: "https://picsum.photos/seed/4/100/100",
+    role: "Financeiro",
+  },
+  {
+    id: "5",
+    name: "mariluciadesign@gmail.com",
+    email: "mariluciadesign@gmail.com",
+    avatar: "https://picsum.photos/seed/5/100/100",
+    role: "Sócio",
+  },
+   {
+    id: "6",
+    name: "lojadacristia@gmail.com",
+    email: "lojadacristia@gmail.com",
+    avatar: "https://picsum.photos/seed/6/100/100",
+    role: "Expedição",
+  },
+   {
+    id: "7",
+    name: "matheuswelled@gmail.com",
+    email: "matheuswelled@gmail.com",
+    avatar: "https://picsum.photos/seed/7/100/100",
+    role: "Sócio",
+  },
+  {
+    id: "8",
+    name: "nicollyellen92@gmail.com",
+    email: "nicollyellen92@gmail.com",
+    avatar: "https://picsum.photos/seed/8/100/100",
+    role: "Expedição",
   },
 ];
 
-const permissionLabels: Record<string, string> = {
-    painel: "Painel",
-    vendas: "Vendas",
-    logistica: "Logística",
-    relatorios: "Relatórios",
-    taxas: "Taxas",
-    conexoes: "Conexões",
-    permissoes: "Permissões",
+const roles = ["Admin", "Sócio", "Financeiro", "Vendedor", "Logística", "Expedição"];
+
+const initialNewUserState = {
+    name: "",
+    email: "",
+    password: "",
+    role: roles[3], // Default to "Vendedor"
 }
 
 export default function PermissoesPage() {
   const [users, setUsers] = React.useState(initialUsers);
+  const [newUser, setNewUser] = React.useState(initialNewUserState);
+  const [isNewUserDialogOpen, setIsNewUserDialogOpen] = React.useState(false);
   const router = useRouter();
   const { toast } = useToast();
 
@@ -131,30 +158,40 @@ export default function PermissoesPage() {
       router.push("/login");
     }
   };
-  
-  const handlePermissionChange = (userId: string, permissionKey: string, value: boolean) => {
-    setUsers(currentUsers =>
-      currentUsers.map(user =>
-        user.id === userId
-          ? {
-              ...user,
-              permissions: {
-                ...user.permissions,
-                [permissionKey]: value,
-              },
-            }
-          : user
-      )
-    );
+
+  const handleRoleChange = (userId: string, newRole: string) => {
+      setUsers(currentUsers => currentUsers.map(user => 
+        user.id === userId ? { ...user, role: newRole } : user
+      ));
   };
-  
+
   const handleSaveChanges = () => {
     // Here you would typically save the changes to your backend/database
-    console.log("Saving new permissions:", users);
+    console.log("Saving new roles:", users);
     toast({
-        title: "Permissões Salvas!",
-        description: "As permissões dos usuários foram atualizadas com sucesso.",
+      title: "Funções Salvas!",
+      description: "As funções dos usuários foram atualizadas com sucesso.",
     });
+  };
+
+  const handleAddNewUser = () => {
+    if (!newUser.name || !newUser.email || !newUser.password) {
+        toast({ title: "Campos incompletos", description: "Por favor, preencha todos os campos para adicionar um novo usuário.", variant: "destructive" });
+        return;
+    }
+    const newUserWithId = { 
+        ...newUser, 
+        id: String(Date.now()),
+        avatar: `https://picsum.photos/seed/${Date.now()}/100/100`,
+    };
+    // Don't save password to state
+    const { password, ...userToSave } = newUserWithId;
+    setUsers(prev => [...prev, userToSave]);
+    console.log("Creating new user (mock):", newUserWithId);
+
+    toast({ title: "Usuário Adicionado", description: `${newUser.name} foi adicionado com a função de ${newUser.role}.` });
+    setNewUser(initialNewUserState);
+    setIsNewUserDialogOpen(false);
   }
 
   return (
@@ -296,30 +333,20 @@ export default function PermissoesPage() {
       <main className="flex flex-1 flex-col gap-4 p-4 md:gap-8 md:p-8">
         <Card>
           <CardHeader>
-            <div className="flex justify-between items-start">
-              <div>
-                <CardTitle className="font-headline text-h3 flex items-center gap-2">
-                  <UserCheck className="size-6" />
-                  Gerenciamento de Permissões
-                </CardTitle>
-                <CardDescription>
-                  Controle o acesso dos usuários às diferentes telas do sistema.
-                </CardDescription>
-              </div>
-              <Button onClick={handleSaveChanges}>
-                <Save className="mr-2 h-4 w-4" />
-                Salvar Alterações
-              </Button>
-            </div>
+            <CardTitle className="font-headline text-h3 flex items-center gap-2">
+                <UserCheck className="size-6" />
+                Gestão de Usuários
+            </CardTitle>
+            <CardDescription>
+                Atribua funções para controlar o acesso de cada usuário.
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Usuário</TableHead>
-                  {Object.entries(permissionLabels).map(([key, label]) => (
-                    <TableHead key={key} className="text-center">{label}</TableHead>
-                  ))}
+                  <TableHead className="w-[200px]">Função (Role)</TableHead>
                   <TableHead className="w-[80px]"></TableHead>
                 </TableRow>
               </TableHeader>
@@ -342,16 +369,18 @@ export default function PermissoesPage() {
                         </div>
                       </div>
                     </TableCell>
-                    {Object.keys(permissionLabels).map((key) => (
-                      <TableCell key={key} className="text-center">
-                        <Switch
-                          checked={(user.permissions as any)[key]}
-                          onCheckedChange={(value) => handlePermissionChange(user.id, key, value)}
-                          disabled={user.role === 'Admin'}
-                          aria-label={`Permissão para ${permissionLabels[key]}`}
-                        />
-                      </TableCell>
-                    ))}
+                    <TableCell>
+                      <Select value={user.role} onValueChange={(value) => handleRoleChange(user.id, value)}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecione a função" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {roles.map(role => (
+                                <SelectItem key={role} value={role}>{role}</SelectItem>
+                            ))}
+                          </SelectContent>
+                      </Select>
+                    </TableCell>
                     <TableCell>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -377,9 +406,64 @@ export default function PermissoesPage() {
                 ))}
               </TableBody>
             </Table>
+            <div className="flex justify-between items-center mt-6">
+                <Dialog open={isNewUserDialogOpen} onOpenChange={setIsNewUserDialogOpen}>
+                    <DialogTrigger asChild>
+                         <Button variant="outline"><UserPlus className="mr-2" /> Adicionar Novo Usuário</Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                        <DialogHeader>
+                            <DialogTitle>Adicionar Novo Usuário</DialogTitle>
+                            <DialogDescription>
+                                Preencha os dados abaixo para criar um novo acesso ao sistema.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <div className="grid gap-4 py-4">
+                            <div className="grid grid-cols-4 items-center gap-4">
+                                <Label htmlFor="new-name" className="text-right">Nome</Label>
+                                <Input id="new-name" value={newUser.name} onChange={(e) => setNewUser(p => ({...p, name: e.target.value}))} className="col-span-3" />
+                            </div>
+                            <div className="grid grid-cols-4 items-center gap-4">
+                                <Label htmlFor="new-email" className="text-right">Email</Label>
+                                <Input id="new-email" type="email" value={newUser.email} onChange={(e) => setNewUser(p => ({...p, email: e.target.value}))} className="col-span-3" />
+                            </div>
+                            <div className="grid grid-cols-4 items-center gap-4">
+                                <Label htmlFor="new-password" className="text-right">Senha</Label>
+                                <Input id="new-password" type="password" value={newUser.password} onChange={(e) => setNewUser(p => ({...p, password: e.target.value}))} className="col-span-3" />
+                            </div>
+                            <div className="grid grid-cols-4 items-center gap-4">
+                                <Label htmlFor="new-role" className="text-right">Função</Label>
+                                <div className="col-span-3">
+                                   <Select value={newUser.role} onValueChange={(value) => setNewUser(p => ({...p, role: value}))}>
+                                        <SelectTrigger>
+                                            <SelectValue placeholder="Selecione a função" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {roles.map(role => (
+                                                <SelectItem key={role} value={role}>{role}</SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            </div>
+                        </div>
+                        <DialogFooter>
+                            <Button type="button" onClick={handleAddNewUser}>
+                                <PlusCircle className="mr-2" />
+                                Adicionar
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+                <Button onClick={handleSaveChanges}>
+                    <Save className="mr-2 h-4 w-4" />
+                    Salvar Alterações
+                </Button>
+            </div>
           </CardContent>
         </Card>
       </main>
     </div>
   );
 }
+
