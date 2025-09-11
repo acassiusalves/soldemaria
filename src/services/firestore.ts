@@ -1,25 +1,39 @@
 
 import { getDbClient } from "@/lib/firebase";
-import { collection, getDocs, doc, getDoc, setDoc, query, where, updateDoc } from "firebase/firestore";
+import { collection, getDocs, doc, getDoc, setDoc, query, where, updateDoc, onSnapshot } from "firebase/firestore";
 import type { AppUser, AppSettings, Role } from "@/lib/types";
 import { availableRoles, pagePermissions } from "@/lib/permissions";
 
-export async function loadUsersWithRoles(): Promise<AppUser[]> {
-    const db = await getDbClient();
-    if (!db) return [];
+export function loadUsersWithRoles(callback: (users: AppUser[]) => void): () => void {
+    const loadAndSubscribe = async () => {
+        const db = await getDbClient();
+        if (!db) return () => {};
+        
+        const usersQuery = query(collection(db, "users"));
+        const unsubscribe = onSnapshot(usersQuery, (snapshot) => {
+            const users = snapshot.docs.map(doc => ({
+                id: doc.id,
+                email: doc.data().email || '',
+                role: doc.data().role || 'vendedor',
+            }));
+            callback(users);
+        }, (error) => {
+            console.error("Error listening to users collection:", error);
+            callback([]);
+        });
+        
+        return unsubscribe;
+    };
     
-    try {
-        const usersSnapshot = await getDocs(collection(db, "users"));
-        const users = usersSnapshot.docs.map(doc => ({
-            id: doc.id,
-            email: doc.data().email || '',
-            role: doc.data().role || 'vendedor',
-        }));
-        return users;
-    } catch (error) {
-        console.error("Error loading users with roles:", error);
-        return [];
-    }
+    let unsubscribe: (() => void) | null = null;
+    loadAndSubscribe().then(unsub => unsubscribe = unsub);
+
+    // Return a function that can be called to unsubscribe
+    return () => {
+        if (unsubscribe) {
+            unsubscribe();
+        }
+    };
 }
 
 export async function updateUserRole(userId: string, newRole: Role) {

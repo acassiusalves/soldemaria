@@ -85,14 +85,10 @@ export default function PermissoesPage() {
       }, [router]);
 
     useEffect(() => {
-        async function loadData() {
+        async function loadInitialSettings() {
             setIsLoading(true);
             try {
-                const [settings, appUsers] = await Promise.all([
-                    loadAppSettings(),
-                    loadUsersWithRoles()
-                ]);
-
+                const settings = await loadAppSettings();
                 if (settings) {
                     if (settings.permissions) {
                         const mergedPermissions = { ...defaultPagePermissions };
@@ -107,23 +103,27 @@ export default function PermissoesPage() {
                         setInactivePages(settings.inactivePages);
                     }
                 }
-                
-                if (appUsers && appUsers.length > 0) {
-                    setUsers(appUsers);
-                }
-
             } catch(error) {
-                console.error("Failed to load settings or users:", error);
-                toast({
+                 console.error("Failed to load settings:", error);
+                 toast({
                     variant: "destructive",
-                    title: "Erro ao Carregar Dados",
-                    description: "Não foi possível carregar as configurações do Firestore."
+                    title: "Erro ao Carregar Configurações",
+                    description: "Não foi possível carregar as configurações de permissão."
                 })
             } finally {
-                setIsLoading(false);
+                // We set loading to false once users are loaded.
             }
         }
-        loadData();
+        
+        loadInitialSettings();
+        
+        const unsubscribe = loadUsersWithRoles((appUsers) => {
+            setUsers(appUsers);
+            setIsLoading(false);
+        });
+
+        // Cleanup subscription on unmount
+        return () => unsubscribe();
     }, [toast]);
 
     const handleLogout = async () => {
@@ -210,11 +210,6 @@ export default function PermissoesPage() {
                 title: "Sucesso!",
                 description: message,
             });
-            // Recarregar lista de usuários para mostrar o novo membro
-            const appUsers = await loadUsersWithRoles();
-            if (appUsers && appUsers.length > 0) {
-                setUsers(appUsers);
-            }
             setIsNewUserDialogOpen(false);
         } catch (error: any) {
              console.error("Erro ao convidar usuário:", error);
