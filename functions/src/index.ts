@@ -1,3 +1,4 @@
+
 import {onCall, HttpsError} from "firebase-functions/v2/https";
 import * as functions from "firebase-functions";
 import {initializeApp} from "firebase-admin/app";
@@ -50,6 +51,36 @@ export const inviteUser = onCall(
       return {ok: true, uid: user.uid, role, resetLink};
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Falha ao convidar";
+      throw new HttpsError("internal", msg);
+    }
+  }
+);
+
+/* ========== deleteUser (callable) ========== */
+export const deleteUser = onCall(
+  {region: "southamerica-east1"},
+  async (req) => {
+    const uid = req.data.uid;
+    if (!uid) {
+      throw new HttpsError("invalid-argument", "O UID do usuário é obrigatório.");
+    }
+    
+    // TODO: Adicionar verificação se o chamador tem permissão (ex: admin)
+    
+    try {
+      const auth = getAuth();
+      const db = getFirestore();
+
+      // Excluir do Authentication
+      await auth.deleteUser(uid);
+
+      // Excluir do Firestore
+      await db.collection("users").doc(uid).delete();
+
+      return { ok: true, message: "Usuário excluído com sucesso." };
+    } catch (error: any) {
+      console.error("Erro ao excluir usuário:", error);
+      const msg = error instanceof Error ? error.message : "Falha ao excluir usuário.";
       throw new HttpsError("internal", msg);
     }
   }

@@ -13,6 +13,7 @@ import {
   Loader2,
   Save,
   RefreshCw,
+  Trash2,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { getAuthClient } from "@/lib/firebase";
@@ -51,6 +52,17 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Logo } from "@/components/icons";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -242,6 +254,26 @@ export default function PermissoesPage() {
              })
         } finally {
             setIsSyncing(false);
+        }
+    };
+    
+    const handleDeleteUser = async (userId: string) => {
+        try {
+            const region = process.env.NEXT_PUBLIC_FIREBASE_FUNCTIONS_REGION || "southamerica-east1";
+            const functions = getFunctions(app, region);
+            const deleteUserFn = httpsCallable(functions, 'deleteUser');
+            await deleteUserFn({ uid: userId });
+            toast({
+                title: "Usuário Excluído",
+                description: "O usuário foi removido do sistema.",
+            });
+        } catch (error: any) {
+             console.error("Erro ao excluir usuário:", error);
+             toast({
+                variant: "destructive",
+                title: "Erro ao Excluir",
+                description: `${error?.code || 'internal'} — ${error?.message || 'Não foi possível remover o usuário.'}`
+             })
         }
     };
     
@@ -457,6 +489,7 @@ export default function PermissoesPage() {
                                     <TableRow>
                                         <TableHead>Email do Usuário</TableHead>
                                         <TableHead className="w-[180px]">Função (Role)</TableHead>
+                                        <TableHead className="w-[100px] text-right">Ações</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
@@ -481,10 +514,33 @@ export default function PermissoesPage() {
                                                     </SelectContent>
                                                 </Select>
                                             </TableCell>
+                                            <TableCell className="text-right">
+                                                <AlertDialog>
+                                                    <AlertDialogTrigger asChild>
+                                                        <Button variant="ghost" size="icon" className="text-destructive" disabled={user.email?.toLowerCase().includes('admin@')}>
+                                                            <Trash2 className="h-4 w-4" />
+                                                        </Button>
+                                                    </AlertDialogTrigger>
+                                                    <AlertDialogContent>
+                                                        <AlertDialogHeader>
+                                                            <AlertDialogTitle>Você tem certeza?</AlertDialogTitle>
+                                                            <AlertDialogDescription>
+                                                                Esta ação não pode ser desfeita. Isso irá excluir permanentemente o usuário <strong>{user.email}</strong> do sistema de autenticação e do banco de dados.
+                                                            </AlertDialogDescription>
+                                                        </AlertDialogHeader>
+                                                        <AlertDialogFooter>
+                                                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                                            <AlertDialogAction onClick={() => handleDeleteUser(user.id)}>
+                                                                Sim, Excluir Usuário
+                                                            </AlertDialogAction>
+                                                        </AlertDialogFooter>
+                                                    </AlertDialogContent>
+                                                </AlertDialog>
+                                            </TableCell>
                                         </TableRow>
                                     )) : (
                                         <TableRow>
-                                            <TableCell colSpan={2} className="h-24 text-center">Nenhum usuário encontrado no Firestore.</TableCell>
+                                            <TableCell colSpan={3} className="h-24 text-center">Nenhum usuário encontrado no Firestore.</TableCell>
                                         </TableRow>
                                     )}
                                 </TableBody>
