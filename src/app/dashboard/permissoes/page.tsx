@@ -14,7 +14,7 @@ import {
   Save,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { getAuthClient, getDbClient } from "@/lib/firebase";
+import { getAuthClient, getDbClient, getFunctionsClient } from "@/lib/firebase";
 import { httpsCallable } from "firebase/functions";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -30,7 +30,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -57,6 +56,16 @@ import { pagePermissions as defaultPagePermissions, availableRoles } from "@/lib
 import { saveAppSettings, loadAppSettings, loadUsersWithRoles, updateUserRole } from "@/services/firestore";
 import type { AppUser } from "@/lib/types";
 import { NewUserDialog } from "@/components/new-user-dialog";
+
+const fallbackUsers: AppUser[] = [
+    { id: "1", email: "admin@gmail.com", role: "admin" },
+    { id: "2", email: "socio@gmail.com", role: "socio" },
+    { id: "3", email: "financeiro@gmail.com", role: "financeiro" },
+    { id: "4", email: "vendedor@gmail.com", role: "vendedor" },
+    { id: "5", email: "logistica@gmail.com", role: "logistica" },
+    { id: "6", email: "expedicao@gmail.com", role: "expedicao" },
+];
+
 
 export default function PermissoesPage() {
     const [users, setUsers] = useState<AppUser[]>([]);
@@ -105,13 +114,19 @@ export default function PermissoesPage() {
                         setInactivePages(settings.inactivePages);
                     }
                 }
-                setUsers(appUsers);
+                
+                if (appUsers && appUsers.length > 0) {
+                    setUsers(appUsers);
+                } else {
+                    setUsers(fallbackUsers);
+                }
             } catch(error) {
                 console.error("Failed to load settings or users:", error);
+                setUsers(fallbackUsers); // Use fallback on error
                 toast({
                     variant: "destructive",
                     title: "Erro ao Carregar Dados",
-                    description: "Não foi possível carregar as configurações de usuários e permissões."
+                    description: "Não foi possível carregar as configurações. Usando dados de exemplo."
                 })
             } finally {
                 setIsLoading(false);
@@ -130,7 +145,7 @@ export default function PermissoesPage() {
 
     const handleRoleChange = (userId: string, newRole: string) => {
         setUsers(currentUsers =>
-            currentUsers.map(u => (u.id === userId ? { ...u, role: newRole } : u))
+            currentUsers.map(u => (u.id === userId ? { ...u, role: newRole as any } : u))
         );
     };
     
@@ -194,28 +209,28 @@ export default function PermissoesPage() {
     }
     
     const handleCreateUser = async (email: string, role: string) => {
-        // This part requires a Firebase Function named 'inviteUser' to be deployed.
-        // For now, it will log to console and simulate success.
-        console.log(`Simulating invitation for ${email} with role ${role}`);
-        
-        toast({
-            title: "Simulação de Convite",
-            description: `Um convite seria enviado para ${email} com a função de ${role}.`,
-        });
+        const functions = await getFunctionsClient();
+        if(!functions) {
+             toast({
+                variant: "destructive",
+                title: "Erro de Configuração",
+                description: "O serviço de funções do Firebase não está disponível."
+             });
+             return;
+        }
 
-        // To make it fully functional, you'd use something like this:
-        /*
-        const functions = getFunctions(app);
         const inviteUser = httpsCallable(functions, 'inviteUser');
         try {
             const result = await inviteUser({ email, role });
             toast({
                 title: "Sucesso!",
-                description: (result.data as any).result || `Convite para ${email} enviado com sucesso.`,
+                description: (result.data as any).message || `Convite para ${email} enviado com sucesso.`,
             });
-            // Reload user list to show the new member
+            // Recarregar lista de usuários para mostrar o novo membro
             const appUsers = await loadUsersWithRoles();
-            setUsers(appUsers);
+            if (appUsers && appUsers.length > 0) {
+                setUsers(appUsers);
+            }
             setIsNewUserDialogOpen(false);
         } catch (error: any) {
              console.error("Erro ao convidar usuário:", error);
@@ -225,8 +240,6 @@ export default function PermissoesPage() {
                 description: error.message || "Ocorreu um erro desconhecido."
              })
         }
-        */
-        setIsNewUserDialogOpen(false);
     }
     
   return (
@@ -501,3 +514,5 @@ export default function PermissoesPage() {
     </>
   );
 }
+
+    

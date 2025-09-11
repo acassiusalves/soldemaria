@@ -1,4 +1,3 @@
-
 "use client";
 
 import { initializeApp, getApps, getApp, type FirebaseApp } from "firebase/app";
@@ -40,6 +39,10 @@ export const getAnalyticsClient = async () => {
     const supported = await isSupported();
     return supported ? getAnalytics(app) : null;
 };
+
+// This is a temporary solution to avoid breaking changes.
+// The `functions` export is deprecated and will be removed in a future version.
+export const functions = null;
 
 
 export { app };
