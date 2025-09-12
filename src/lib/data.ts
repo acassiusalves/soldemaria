@@ -90,3 +90,9 @@ export interface CustomCalculation {
         operator: '+' | '-';
     };
 }
+
+export type VendorGoal = {
+    faturamento?: number;
+    ticketMedio?: number;
+    itensPorPedido?: number;
+}

@@ -27,6 +27,7 @@ type VendorMetric = {
 
 interface VendorPerformanceTableProps {
   data: VendorMetric[];
+  showGoals?: boolean;
 }
 
 const formatCurrency = (value?: number) =>
@@ -42,6 +43,7 @@ const formatNumber = (value?: number) =>
 
 export default function VendorPerformanceTable({
   data,
+  showGoals = false,
 }: VendorPerformanceTableProps) {
   if (!data || data.length === 0) {
     return (
@@ -51,6 +53,26 @@ export default function VendorPerformanceTable({
         </p>
       </div>
     );
+  }
+
+  const renderGoalCell = (value?: number, goal?: number, isCurrency = true) => {
+    if (!showGoals || goal === undefined) {
+      return isCurrency ? formatCurrency(value) : formatNumber(value);
+    }
+    const progress = goal > 0 ? ((value || 0) / goal) * 100 : 0;
+    const isNegative = (value || 0) < goal;
+
+    return (
+      <div className="flex flex-col items-end gap-1">
+        <span className={cn(progress >= 100 ? "text-green-600 font-semibold" : "")}>
+            {isCurrency ? formatCurrency(value) : formatNumber(value)}
+        </span>
+        <div className="flex items-center gap-2 w-full justify-end">
+            <span className="text-xs text-muted-foreground">{isCurrency ? formatCurrency(goal) : formatNumber(goal)}</span>
+            <Progress value={Math.min(100, progress)} className={cn("w-16 h-1.5", progress < 100 && "bg-red-200 [&>*]:bg-red-500")} />
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -76,10 +98,16 @@ export default function VendorPerformanceTable({
                 </TableCell>
 
                 <TableCell className="font-medium">{vendor.name}</TableCell>
-                <TableCell className="text-right font-semibold">{formatCurrency(vendor.revenue)}</TableCell>
+                <TableCell className="text-right font-semibold">
+                    {renderGoalCell(vendor.revenue, vendor.goalFaturamento)}
+                </TableCell>
                 <TableCell className="text-right">{vendor.orders}</TableCell>
-                <TableCell className="text-right">{formatCurrency(vendor.averageTicket)}</TableCell>
-                <TableCell className="text-right">{formatNumber(vendor.averageItemsPerOrder)}</TableCell>
+                <TableCell className="text-right">
+                    {renderGoalCell(vendor.averageTicket, vendor.goalTicketMedio)}
+                </TableCell>
+                <TableCell className="text-right">
+                    {renderGoalCell(vendor.averageItemsPerOrder, vendor.goalItensPorPedido, false)}
+                </TableCell>
               </TableRow>
             );
           })}

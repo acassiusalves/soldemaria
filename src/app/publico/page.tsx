@@ -11,10 +11,13 @@ import {
 } from "@/components/ui/card";
 import { Logo } from "@/components/icons";
 import Link from "next/link";
-import { collection, onSnapshot, query, Timestamp } from "firebase/firestore";
+import { collection, onSnapshot, query, Timestamp, doc } from "firebase/firestore";
 import { getDbClient } from "@/lib/firebase";
 import VendorPerformanceTable from "@/components/vendor-performance-table";
-import type { VendaDetalhada } from "@/lib/data";
+import type { VendaDetalhada, VendorGoal } from "@/lib/data";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { getMonth, getYear, format } from 'date-fns';
 
 // Funções de ajuda para processar os dados
 const toDate = (value: unknown): Date | null => {
@@ -88,7 +91,7 @@ const QTY_KEYS   = ["quantidade","qtd","qtde","qte","itens","itens_total"];
 const VENDOR_KEYS = ["vendedor", "Vendedor"];
 
 
-const calculateVendorMetrics = (data: VendaDetalhada[]) => {
+const calculateVendorMetrics = (data: VendaDetalhada[], monthlyGoals: Record<string, Record<string, VendorGoal>>) => {
   const salesGroups = new Map<string, VendaDetalhada[]>();
   data.forEach((row) => {
     const codeRaw = pick(row, CODE_KEYS);
@@ -127,24 +130,36 @@ const calculateVendorMetrics = (data: VendaDetalhada[]) => {
     vendors[vendorName].orders += 1;
     vendors[vendorName].itemsSold += totalItems;
   }
+  
+  const currentPeriodKey = format(new Date(), 'yyyy-MM');
+  const vendorGoalsForPeriod = monthlyGoals[currentPeriodKey] || {};
 
-  return Object.entries(vendors).map(([name, data]) => ({
-    name,
-    revenue: data.revenue,
-    orders: data.orders,
-    itemsSold: data.itemsSold,
-    averageTicket: data.orders > 0 ? data.revenue / data.orders : 0,
-    averageItemsPerOrder: data.orders > 0 ? data.itemsSold / data.orders : 0,
-  })).sort((a, b) => b.revenue - a.revenue);
+  return Object.entries(vendors).map(([name, data]) => {
+    const goals = vendorGoalsForPeriod[name] || {};
+    return {
+        name,
+        revenue: data.revenue,
+        orders: data.orders,
+        itemsSold: data.itemsSold,
+        averageTicket: data.orders > 0 ? data.revenue / data.orders : 0,
+        averageItemsPerOrder: data.orders > 0 ? data.itemsSold / data.orders : 0,
+        goalFaturamento: goals.faturamento,
+        goalTicketMedio: goals.ticketMedio,
+        goalItensPorPedido: goals.itensPorPedido,
+    }
+  }).sort((a, b) => b.revenue - a.revenue);
 };
 
 
 export default function PublicoPage() {
   const [vendorData, setVendorData] = React.useState<any[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
+  const [showGoals, setShowGoals] = React.useState(false);
+  const [monthlyGoals, setMonthlyGoals] = React.useState<Record<string, Record<string, VendorGoal>>>({});
 
   React.useEffect(() => {
-    let unsub: () => void;
+    let salesUnsub: () => void;
+    let goalsUnsub: () => void;
     (async () => {
       const db = await getDbClient();
       if (!db) {
@@ -152,20 +167,32 @@ export default function PublicoPage() {
         return;
       };
       
-      const q = query(collection(db, "vendas"));
-      unsub = onSnapshot(q, (snapshot) => {
+      const salesQuery = query(collection(db, "vendas"));
+      salesUnsub = onSnapshot(salesQuery, (snapshot) => {
         if (snapshot.metadata.hasPendingWrites) return;
         const sales = snapshot.docs.map(d => ({ ...d.data(), id: d.id })) as VendaDetalhada[];
-        const metrics = calculateVendorMetrics(sales);
+        const metrics = calculateVendorMetrics(sales, monthlyGoals);
         setVendorData(metrics);
         setIsLoading(false);
       });
+      
+      const periodKey = format(new Date(), 'yyyy-MM');
+      const metasRef = doc(db, "metas-vendedores", periodKey);
+      goalsUnsub = onSnapshot(metasRef, (docSnap) => {
+          if (docSnap.exists()) {
+              setMonthlyGoals(prev => ({ ...prev, [periodKey]: docSnap.data() as Record<string, VendorGoal> }));
+          } else {
+              setMonthlyGoals(prev => ({ ...prev, [periodKey]: {} }));
+          }
+      });
+
     })();
 
     return () => {
-      if (unsub) unsub();
+      if (salesUnsub) salesUnsub();
+      if (goalsUnsub) goalsUnsub();
     };
-  }, []);
+  }, [monthlyGoals]);
 
   return (
     <div className="flex min-h-screen w-full flex-col">
@@ -183,8 +210,22 @@ export default function PublicoPage() {
       <main className="flex flex-1 flex-col gap-4 p-4 md:gap-8 md:p-8">
         <Card>
             <CardHeader>
-                <CardTitle>Ranking de Vendedores</CardTitle>
-                <CardDescription>Performance de vendas por vendedor (dados de todo o período).</CardDescription>
+              <div className="flex justify-between items-center">
+                <div>
+                  <CardTitle>Ranking de Vendedores</CardTitle>
+                  <CardDescription>Performance de vendas por vendedor (dados de todo o período).</CardDescription>
+                </div>
+                <div className="flex items-center space-x-2">
+                    <Label htmlFor="show-goals" className="text-sm font-normal">
+                        Mostrar Metas
+                    </Label>
+                    <Switch
+                        id="show-goals"
+                        checked={showGoals}
+                        onCheckedChange={setShowGoals}
+                    />
+                </div>
+              </div>
             </CardHeader>
             <CardContent>
                 {isLoading ? (
@@ -192,7 +233,7 @@ export default function PublicoPage() {
                         <p>Carregando dados...</p>
                     </div>
                 ) : (
-                    <VendorPerformanceTable data={vendorData} />
+                    <VendorPerformanceTable data={vendorData} showGoals={showGoals} />
                 )}
             </CardContent>
         </Card>
