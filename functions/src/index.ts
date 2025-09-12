@@ -1,6 +1,6 @@
 
 import {onCall, HttpsError} from "firebase-functions/v2/https";
-import * as functions from "firebase-functions";
+import {onUserCreated} from "firebase-functions/v2/auth";
 import {initializeApp} from "firebase-admin/app";
 import {getAuth} from "firebase-admin/auth";
 import {getFirestore, FieldValue} from "firebase-admin/firestore";
@@ -87,8 +87,10 @@ export const deleteUser = onCall(
 );
 
 /* ========== Espelho: Auth -> Firestore (v1 trigger) ========== */
-export const authUserMirror = functions.auth.user()
-  .onCreate(async (u) => {
+export const authUserMirror = onUserCreated(
+  {region: "southamerica-east1"},
+  async (event: any) => {
+    const u = event.data;
     const email = (u.email || "").toLowerCase();
     const db = getFirestore();
     const ref = db.collection("users").doc(u.uid);
