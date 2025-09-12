@@ -11,13 +11,13 @@ import {
 } from "@/components/ui/card";
 import { Logo } from "@/components/icons";
 import Link from "next/link";
-import { collection, onSnapshot, query, Timestamp, doc } from "firebase/firestore";
+import { collection, onSnapshot, query, Timestamp, doc, where } from "firebase/firestore";
 import { getDbClient } from "@/lib/firebase";
 import VendorPerformanceTable from "@/components/vendor-performance-table";
 import type { VendaDetalhada, VendorGoal } from "@/lib/data";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { getMonth, getYear, format } from 'date-fns';
+import { getMonth, getYear, format, startOfMonth, endOfMonth } from 'date-fns';
 
 // Funções de ajuda para processar os dados
 const toDate = (value: unknown): Date | null => {
@@ -167,7 +167,15 @@ export default function PublicoPage() {
         return;
       };
       
-      const salesQuery = query(collection(db, "vendas"));
+      const now = new Date();
+      const startOfCurrentMonth = startOfMonth(now);
+      const endOfCurrentMonth = endOfMonth(now);
+
+      const salesQuery = query(
+        collection(db, "vendas"),
+        where("data", ">=", Timestamp.fromDate(startOfCurrentMonth)),
+        where("data", "<=", Timestamp.fromDate(endOfCurrentMonth))
+      );
       salesUnsub = onSnapshot(salesQuery, (snapshot) => {
         if (snapshot.metadata.hasPendingWrites) return;
         const sales = snapshot.docs.map(d => ({ ...d.data(), id: d.id })) as VendaDetalhada[];
@@ -212,8 +220,8 @@ export default function PublicoPage() {
             <CardHeader>
               <div className="flex justify-between items-center">
                 <div>
-                  <CardTitle>Ranking de Vendedores</CardTitle>
-                  <CardDescription>Performance de vendas por vendedor (dados de todo o período).</CardDescription>
+                  <CardTitle>Ranking de Vendedores (Mês Atual)</CardTitle>
+                  <CardDescription>Performance de vendas por vendedor no mês corrente.</CardDescription>
                 </div>
                 <div className="flex items-center space-x-2">
                     <Label htmlFor="show-goals" className="text-sm font-normal">
