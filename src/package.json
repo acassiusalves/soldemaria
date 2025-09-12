@@ -10,8 +10,7 @@
     "genkit:dev": "genkit start -- tsx src/ai/dev.ts",
     "genkit:watch": "genkit start -- tsx --watch src/ai/dev.ts",
     "lint": "next lint",
-    "typecheck": "tsc --noEmit",
-    "postinstall": "git config pull.rebase true"
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.1.0",
