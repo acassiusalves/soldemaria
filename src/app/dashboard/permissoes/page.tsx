@@ -241,12 +241,26 @@ export default function PermissoesPage() {
         }
     };
     
-    const handleDeleteUser = (userId: string) => {
-        setUsers(currentUsers => currentUsers.filter(u => u.id !== userId));
-        toast({
-            title: "Usuário Removido da Lista",
-            description: "O usuário foi removido da visualização. A exclusão permanente está temporariamente desativada."
-        });
+    const handleDeleteUser = async (userId: string) => {
+        const region = process.env.NEXT_PUBLIC_FIREBASE_FUNCTIONS_REGION || "southamerica-east1";
+        const functions = getFunctions(app, region);
+        const deleteUserFn = httpsCallable(functions, 'deleteUser');
+        
+        try {
+            await deleteUserFn({ uid: userId });
+            toast({
+                title: "Usuário Excluído",
+                description: "O usuário foi removido permanentemente do sistema."
+            });
+            // O listener do onSnapshot irá atualizar a lista de usuários automaticamente
+        } catch (error: any) {
+             console.error("Erro ao excluir usuário:", error);
+             toast({
+                variant: "destructive",
+                title: "Erro ao Excluir",
+                description: `${error?.code || 'internal'} — ${error?.message || 'Não foi possível excluir o usuário.'}`
+             })
+        }
     };
     
   return (
@@ -396,15 +410,15 @@ export default function PermissoesPage() {
                                                     </AlertDialogTrigger>
                                                     <AlertDialogContent>
                                                         <AlertDialogHeader>
-                                                            <AlertDialogTitle>Remover da lista?</AlertDialogTitle>
+                                                            <AlertDialogTitle>Excluir usuário?</AlertDialogTitle>
                                                             <AlertDialogDescription>
-                                                                Esta ação irá remover o usuário <strong>{user.email}</strong> apenas da visualização atual. O usuário não será excluído permanentemente do sistema.
+                                                                Esta ação não pode ser desfeita. O usuário <strong>{user.email}</strong> será removido permanentemente do sistema.
                                                             </AlertDialogDescription>
                                                         </AlertDialogHeader>
                                                         <AlertDialogFooter>
                                                             <AlertDialogCancel>Cancelar</AlertDialogCancel>
                                                             <AlertDialogAction onClick={() => handleDeleteUser(user.id)}>
-                                                                Sim, Remover da Lista
+                                                                Sim, Excluir Permanentemente
                                                             </AlertDialogAction>
                                                         </AlertDialogFooter>
                                                     </AlertDialogContent>
@@ -452,5 +466,3 @@ export default function PermissoesPage() {
     </>
   );
 }
-
-    
