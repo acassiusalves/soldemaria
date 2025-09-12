@@ -596,10 +596,10 @@ export default function DashboardPage() {
               Conexões
             </Link>
             <Link
-              href="/dashboard/permissoes"
+              href="/publico"
               className="text-muted-foreground transition-colors hover:text-foreground"
             >
-              Permissões
+              Público
             </Link>
           </nav>
           <div className="flex w-full items-center gap-4 md:ml-auto md:gap-2 lg:gap-4">

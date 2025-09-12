@@ -1433,11 +1433,19 @@ React.useEffect(() => {
           >
             Conexões
           </Link>
+<<<<<<< HEAD
           <Link
             href="/dashboard/permissoes"
             className="text-muted-foreground transition-colors hover:text-foreground"
           >
             Permissões
+=======
+           <Link
+            href="/dashboard/publico"
+            className="text-muted-foreground transition-colors hover:text-foreground"
+          >
+            Público
+>>>>>>> ac4268a (Nao etendi, te pedi uma tarefa simples, criar uma paggina chamda Publico)
           </Link>
         </nav>
         <div className="flex w-full items-center gap-4 md:ml-auto md:gap-2 lg:gap-4">
@@ -1655,3 +1663,10 @@ React.useEffect(() => {
     </>
   );
 }
+<<<<<<< HEAD
+=======
+
+
+
+
+>>>>>>> ac4268a (Nao etendi, te pedi uma tarefa simples, criar uma paggina chamda Publico)
