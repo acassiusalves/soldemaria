@@ -257,24 +257,12 @@ export default function PermissoesPage() {
         }
     };
     
-    const handleDeleteUser = async (userId: string) => {
-        try {
-            const region = process.env.NEXT_PUBLIC_FIREBASE_FUNCTIONS_REGION || "southamerica-east1";
-            const functions = getFunctions(app, region);
-            const deleteUserFn = httpsCallable(functions, 'deleteUser');
-            await deleteUserFn({ uid: userId });
-            toast({
-                title: "Usuário Excluído",
-                description: "O usuário foi removido do sistema.",
-            });
-        } catch (error: any) {
-             console.error("Erro ao excluir usuário:", error);
-             toast({
-                variant: "destructive",
-                title: "Erro ao Excluir",
-                description: `${error?.code || 'internal'} — ${error?.message || 'Não foi possível remover o usuário.'}`
-             })
-        }
+    const handleDeleteUser = (userId: string) => {
+        setUsers(currentUsers => currentUsers.filter(u => u.id !== userId));
+        toast({
+            title: "Usuário Removido da Lista",
+            description: "O usuário foi removido da visualização atual.",
+        });
     };
     
   return (
@@ -525,13 +513,13 @@ export default function PermissoesPage() {
                                                         <AlertDialogHeader>
                                                             <AlertDialogTitle>Você tem certeza?</AlertDialogTitle>
                                                             <AlertDialogDescription>
-                                                                Esta ação não pode ser desfeita. Isso irá excluir permanentemente o usuário <strong>{user.email}</strong> do sistema de autenticação e do banco de dados.
+                                                                Esta ação irá apenas remover o usuário <strong>{user.email}</strong> da lista visualmente. O usuário não será apagado do sistema.
                                                             </AlertDialogDescription>
                                                         </AlertDialogHeader>
                                                         <AlertDialogFooter>
                                                             <AlertDialogCancel>Cancelar</AlertDialogCancel>
                                                             <AlertDialogAction onClick={() => handleDeleteUser(user.id)}>
-                                                                Sim, Excluir Usuário
+                                                                Sim, Remover da Lista
                                                             </AlertDialogAction>
                                                         </AlertDialogFooter>
                                                     </AlertDialogContent>
