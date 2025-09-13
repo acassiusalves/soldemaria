@@ -1,3 +1,4 @@
+
 "use client";
 
 import { createContext, useContext, useState, useEffect } from 'react';
@@ -30,7 +31,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const auth = await getAuthClient();
         if (!auth) {
           setIsLoading(false);
-          if (pathname !== '/login') router.push('/login');
+          if (pathname.startsWith('/dashboard')) router.push('/login');
           return;
         }
 
@@ -52,7 +53,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           if (!user) {
             setUserRole(null);
             setIsLoading(false);
-            if (pathname !== '/login') router.push('/login');
+            if (pathname.startsWith('/dashboard')) router.push('/login');
             return;
           }
 
@@ -103,7 +104,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AppContext.Provider value={{ userRole, appSettings, isLoading }}>
-        {isLoading ? (
+        {isLoading && pathname.startsWith('/dashboard') ? (
              <div className="flex h-screen w-full items-center justify-center">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
             </div>
