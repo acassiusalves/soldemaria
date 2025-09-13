@@ -1,5 +1,6 @@
 
 
+
 "use client";
 
 import * as React from "react";
@@ -1441,7 +1442,7 @@ React.useEffect(() => {
             Permissões
 =======
            <Link
-            href="/dashboard/publico"
+            href="/publico"
             className="text-muted-foreground transition-colors hover:text-foreground"
           >
             Público
@@ -1669,4 +1670,8 @@ React.useEffect(() => {
 
 
 
+<<<<<<< HEAD
 >>>>>>> ac4268a (Nao etendi, te pedi uma tarefa simples, criar uma paggina chamda Publico)
+=======
+
+>>>>>>> 4f67230 (Quero que essa pagina seja de fato publica, que nao necessite de login p)

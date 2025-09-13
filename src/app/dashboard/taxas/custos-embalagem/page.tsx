@@ -316,7 +316,7 @@ export default function CustosEmbalagemPage() {
             Conexões
           </Link>
            <Link
-            href="/dashboard/publico"
+            href="/publico"
             className="text-muted-foreground transition-colors hover:text-foreground"
           >
             Público
