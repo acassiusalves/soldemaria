@@ -1037,28 +1037,34 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
           headerRow.custoEmbalagem = 0;
         }
               
-        // 1) Se alguma linha do grupo já trouxe CUSTO TOTAL consolidado, usa ela (soma se vierem quebradas)
+        // === CMV: seguir exatamente a planilha ===
+        // 1) Se existir custoTotal declarado em alguma linha, usa-o (soma se vier fragmentado).
         const custoTotalDeclarado = rows
           .map(r => Number(r.custoTotal))
           .filter(v => Number.isFinite(v) && v > 0)
           .reduce((a, b) => a + b, 0);
 
-        let custoTotalPedido: number;
-        if (custoTotalDeclarado > 0) {
-          custoTotalPedido = custoTotalDeclarado;
-        } else {
-          // 2) Caso contrário, calcula via custoUnitario * quantidade (apenas quantidades válidas > 0)
-          const base = (subRows.length > 0 ? subRows : rows);
-          custoTotalPedido = base.reduce((sum, item) => {
-            const qtd = Number(item.quantidade);
-            const custo = Number(item.custoUnitario);
-            if (Number.isFinite(qtd) && qtd > 0 && Number.isFinite(custo) && custo >= 0) {
-              return sum + (custo * qtd);
-            }
-            return sum;
-          }, 0);
-        }
-        headerRow.custoTotal = custoTotalPedido;
+        // 2) Caso não haja custoTotal declarado, CMV = soma direta da coluna "custoUnitario"
+        //    (sem multiplicar por quantidade), como na planilha.
+        const base = (subRows.length > 0 ? subRows : rows);
+        const somaCustoUnitario = base.reduce((sum, item) => {
+          const custo = Number(item.custoUnitario);
+          return Number.isFinite(custo) && custo > 0 ? sum + custo : sum;
+        }, 0);
+
+        // 3) Fallback (raro): se ambas acima forem 0, usa produto custoUnitario * quantidade (>0).
+        const somaCustoUnitarioVezesQtd = base.reduce((sum, item) => {
+          const custo = Number(item.custoUnitario);
+          const qtd = Number(item.quantidade);
+          return (Number.isFinite(custo) && custo >= 0 && Number.isFinite(qtd) && qtd > 0)
+            ? sum + (custo * qtd)
+            : sum;
+        }, 0);
+
+        headerRow.custoTotal =
+          (custoTotalDeclarado > 0 ? custoTotalDeclarado
+           : (somaCustoUnitario > 0 ? somaCustoUnitario
+              : somaCustoUnitarioVezesQtd));
 
         // Custo total da taxa de cartão
         headerRow.taxaTotalCartao = (headerRow.costs || []).reduce((sum, cost) => {
@@ -1100,7 +1106,6 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
             acc.descontos += Number(row.valorDescontos) || 0;
             acc.custoTotal += Number(row.custoTotal) || 0;
             acc.frete += Number(row.custoFrete) || 0;
-            acc.valorFinalTotal += valorFinal;
             acc.totalItems += Number(row.quantidadeTotal) || 0;
             
             return acc;
@@ -1110,7 +1115,6 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
             descontos: 0, 
             custoTotal: 0, 
             frete: 0, 
-            valorFinalTotal: 0,
             totalItems: 0,
         }
     );
@@ -1126,7 +1130,6 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
 
       return {
           faturamento: totals.faturamento,
-          valorFinalTotal: totals.valorFinalTotal,
           descontos: totals.descontos,
           custoTotal: totals.custoTotal,
           frete: totals.frete,
@@ -1391,7 +1394,6 @@ React.useEffect(() => {
 
   const loadingSummary = {
     faturamento: 0,
-    valorFinalTotal: 0,
     descontos: 0,
     custoTotal: 0,
     frete: 0,
@@ -1613,6 +1615,7 @@ React.useEffect(() => {
     </>
   );
 }
+
 
 
 
