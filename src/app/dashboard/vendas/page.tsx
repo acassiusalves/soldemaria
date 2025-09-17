@@ -502,6 +502,18 @@ export default function VendasPage() {
   const [isLoadingPreferences, setIsLoadingPreferences] = React.useState(true);
   const [isSavingPreferences, setIsSavingPreferences] = React.useState(false);
 
+  const [loadingStatus, setLoadingStatus] = React.useState({
+    vendas: false,
+    logistica: false,
+    custos: false,
+    custosEmbalagem: false,
+    taxas: false,
+  });
+
+  const areAllDataSourcesLoaded = React.useMemo(() => {
+    return Object.values(loadingStatus).every(status => status === true);
+  }, [loadingStatus]);
+
 
     const handleLogout = async () => {
     const auth = await getAuthClient();
@@ -559,18 +571,20 @@ export default function VendasPage() {
         if(!db) return;
 
         const collectionsToWatch = [
-            { name: "vendas", setter: setVendasData },
-            { name: "logistica", setter: setLogisticaData },
-            { name: "custos", setter: setCustosData },
-            { name: "custos-embalagem", setter: setCustosEmbalagem },
+            { name: "vendas", setter: setVendasData, flag: "vendas" },
+            { name: "logistica", setter: setLogisticaData, flag: "logistica" },
+            { name: "custos", setter: setCustosData, flag: "custos" },
+            { name: "custos-embalagem", setter: setCustosEmbalagem, flag: "custosEmbalagem" },
+            { name: "taxas", setter: setTaxasOperadoras, flag: "taxas" },
         ];
 
-        collectionsToWatch.forEach(({ name, setter }) => {
+        collectionsToWatch.forEach(({ name, setter, flag }) => {
             const q = query(collection(db, name));
             const unsub = onSnapshot(q, (snapshot) => {
-                if (snapshot.metadata.hasPendingWrites) return;
+                if (snapshot.metadata.hasPendingWrites && loadingStatus[flag as keyof typeof loadingStatus]) return;
                 const data = snapshot.docs.map(d => ({ ...d.data(), id: d.id })) as any[];
                 setter(data);
+                setLoadingStatus(prev => ({...prev, [flag]: true}));
             });
             unsubs.push(unsub);
         });
@@ -598,11 +612,6 @@ export default function VendasPage() {
         });
         unsubs.push(metaUnsub);
 
-        const taxasUnsub = onSnapshot(collection(db, "taxas"), (snapshot) => {
-        const data = snapshot.docs.map(d => ({ ...d.data(), id: d.id })) as Operadora[];
-        setTaxasOperadoras(data);
-        });
-        unsubs.push(taxasUnsub);
     })();
     
     return () => { 
@@ -1058,6 +1067,9 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
   }, [filteredData, applyCustomCalculations, custosEmbalagem, taxasOperadoras]);
 
   const finalSummary = React.useMemo(() => {
+    if (!areAllDataSourcesLoaded) {
+      return null;
+    }
     const numOrders = groupedForView.length;
     
     const totals = groupedForView.reduce(
@@ -1097,7 +1109,7 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
           qtdMedia,
           margemBruta
       }
-  }, [groupedForView]);
+  }, [groupedForView, areAllDataSourcesLoaded]);
 
 
 React.useEffect(() => {
@@ -1353,6 +1365,16 @@ React.useEffect(() => {
 
   }, [columns, customCalculations, groupedForView]);
 
+  const loadingSummary = {
+    faturamento: 0,
+    valorFinalTotal: 0,
+    descontos: 0,
+    custoTotal: 0,
+    frete: 0,
+  };
+
+  const displaySummary = areAllDataSourcesLoaded ? finalSummary : loadingSummary;
+
   return (
     <>
     <div className="flex min-h-screen w-full flex-col">
@@ -1508,32 +1530,32 @@ React.useEffect(() => {
         <div className="grid gap-4 md:grid-cols-5">
           <SummaryCard 
             title="Valor Final Total" 
-            value={finalSummary.valorFinalTotal} 
-            icon={<Receipt className="text-primary" />}
+            value={displaySummary?.valorFinalTotal ?? 0}
+            icon={areAllDataSourcesLoaded ? <Receipt className="text-primary" /> : <Loader2 className="animate-spin text-muted-foreground" />}
             isCurrency
           />
           <SummaryCard 
             title="Faturamento" 
-            value={finalSummary.faturamento} 
-            icon={<DollarSign className="text-primary" />}
+            value={displaySummary?.faturamento ?? 0} 
+            icon={areAllDataSourcesLoaded ? <DollarSign className="text-primary" /> : <Loader2 className="animate-spin text-muted-foreground" />}
             isCurrency
           />
            <SummaryCard 
             title="Descontos" 
-            value={finalSummary.descontos} 
-            icon={<Tag className="text-primary" />}
+            value={displaySummary?.descontos ?? 0}
+            icon={areAllDataSourcesLoaded ? <Tag className="text-primary" /> : <Loader2 className="animate-spin text-muted-foreground" />}
             isCurrency
           />
           <SummaryCard 
             title="CMV (Custo)" 
-            value={finalSummary.custoTotal}
-            icon={<Archive className="text-primary" />}
+            value={displaySummary?.custoTotal ?? 0}
+            icon={areAllDataSourcesLoaded ? <Archive className="text-primary" /> : <Loader2 className="animate-spin text-muted-foreground" />}
             isCurrency
            />
           <SummaryCard 
             title="Frete" 
-            value={finalSummary.frete}
-            icon={<Truck className="text-primary" />}
+            value={displaySummary?.frete ?? 0}
+            icon={areAllDataSourcesLoaded ? <Truck className="text-primary" /> : <Loader2 className="animate-spin text-muted-foreground" />}
             isCurrency
           />
         </div>
@@ -1573,3 +1595,4 @@ React.useEffect(() => {
     </>
   );
 }
+
