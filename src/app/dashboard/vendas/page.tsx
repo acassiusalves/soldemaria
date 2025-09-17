@@ -54,10 +54,6 @@ import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { getAuthClient, getDbClient } from "@/lib/firebase";
 import Image from "next/image";
-import { NavMenu } from '@/components/nav-menu';
-
-
-import { cn, stripUndefinedDeep } from "@/lib/utils";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -100,6 +96,8 @@ import { Progress } from "@/components/ui/progress";
 import { Logo } from "@/components/icons";
 import { CalculationDialog } from "@/components/calculation-dialog";
 import SummaryCard from "@/components/summary-card";
+import { NavMenu } from '@/components/nav-menu';
+import { cn, stripUndefinedDeep } from "@/lib/utils";
 
 
 /* ========== helpers de datas e normalização ========== */
@@ -772,7 +770,7 @@ const syncExistingCustomColumns = React.useCallback(async () => {
     
     if (needsOrderUpdate) {
         setColumnOrder(currentOrder);
-        await saveUserPreference(auth.currentUser.uid, 'vendas_columns_order', currentOrder);
+        await saveUserPreference(auth.currentUser.uid, 'vendas_columns_order', newOrder);
     }
     
 }, [customCalculations, columnVisibility, columnOrder]);
@@ -1032,10 +1030,10 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
           headerRow.custoEmbalagem = 0;
         }
               
-        // custo total do pedido a partir das sub-rows
-        const custoTotalPedido = (headerRow.subRows || []).reduce((sum: number, item: any) => {
+        const rowsParaCusto = subRows.length > 0 ? subRows : rows;
+        const custoTotalPedido = rowsParaCusto.reduce((sum, item) => {
             const custo = Number(item.custoUnitario) || 0;
-            const qtd   = Number(item.quantidade)   || 0;
+            const qtd = Number(item.quantidade) || (item.descricao ? 1 : 0); // se nao tem qtd mas tem desc, conta como 1
             return sum + (custo * qtd);
         }, 0);
         headerRow.custoTotal = custoTotalPedido;
@@ -1100,7 +1098,7 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
       const margemBruta = totals.faturamento - totals.custoTotal;
 
       return {
-          faturamento: totals.faturamento,
+          faturamento: totals.valorFinalTotal,
           valorFinalTotal: totals.valorFinalTotal,
           descontos: totals.descontos,
           custoTotal: totals.custoTotal,
@@ -1595,4 +1593,5 @@ React.useEffect(() => {
     </>
   );
 }
+
 
