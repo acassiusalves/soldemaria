@@ -54,6 +54,7 @@ import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { getAuthClient, getDbClient } from "@/lib/firebase";
 import Image from "next/image";
+import { NavMenu } from '@/components/nav-menu';
 
 
 import { cn, stripUndefinedDeep } from "@/lib/utils";
@@ -931,7 +932,10 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
         }
 
         // Sum 'final' from all rows belonging to the group
-        if(subRows.length > 0) {
+        const valorFinalDoCabecalho = Number(headerRow.final) || 0;
+        if (valorFinalDoCabecalho > 0) {
+            headerRow.final = valorFinalDoCabecalho;
+        } else if(subRows.length > 0) {
             headerRow.final = subRows.reduce((acc, row) => {
                 const itemFinal = Number(row.final) || 0;
                 const itemQuantidade = Number(row.quantidade) || 0;
@@ -1085,7 +1089,11 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
       const margemBruta = totals.faturamento - totals.custoTotal;
 
       return {
-          ...totals,
+          faturamento: totals.valorFinalTotal,
+          valorFinalTotal: totals.valorFinalTotal,
+          descontos: totals.descontos,
+          custoTotal: totals.custoTotal,
+          frete: totals.frete,
           ticketMedio,
           qtdMedia,
           margemBruta
@@ -1566,4 +1574,3 @@ React.useEffect(() => {
     </>
   );
 }
-
