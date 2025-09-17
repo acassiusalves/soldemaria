@@ -1060,12 +1060,9 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
     const totals = groupedForView.reduce(
         (acc, row) => {
             const valorFinal = Number(row.final) || 0;
-            const valorDescontos = Number(row.valorDescontos) || 0;
             
-            const itemRows = row.subRows || [row];
-            
-            acc.faturamento += valorFinal - valorDescontos;
-            acc.descontos += valorDescontos;
+            acc.faturamento += valorFinal;
+            acc.descontos += Number(row.valorDescontos) || 0;
             acc.custoTotal += Number(row.custoTotal) || 0;
             acc.frete += Number(row.custoFrete) || 0;
             acc.valorFinalTotal += valorFinal;
@@ -1353,92 +1350,7 @@ React.useEffect(() => {
     <>
     <div className="flex min-h-screen w-full flex-col">
       <header className="sticky top-0 flex h-16 items-center gap-4 border-b bg-background px-4 md:px-6">
-        <nav className="hidden flex-col gap-6 text-lg font-medium md:flex md:flex-row md:items-center md:gap-5 md:text-sm lg:gap-6">
-          <Link
-            href="/dashboard"
-            className="flex items-center gap-2 text-lg font-semibold md:text-base"
-          >
-            <Image src="/Design sem nome-4.png" width={32} height={32} alt="Logo" className="rounded-full" />
-            <span className="text-xl font-semibold font-headline">Visão de Vendas</span>
-          </Link>
-          <Link
-            href="/dashboard"
-            className="text-muted-foreground transition-colors hover:text-foreground"
-          >
-            Painel
-          </Link>
-          <Link
-            href="/dashboard/vendas"
-            className="text-foreground transition-colors hover:text-foreground"
-          >
-            Vendas
-          </Link>
-          <Link
-            href="/dashboard/logistica"
-            className="text-muted-foreground transition-colors hover:text-foreground"
-          >
-            Logística
-          </Link>
-           <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="flex items-center gap-1 text-muted-foreground transition-colors hover:text-foreground data-[state=open]:bg-accent px-3">
-                  Relatórios
-                  <ChevronDown className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start">
-                <DropdownMenuItem asChild>
-                  <Link href="/dashboard/relatorios/visao-geral">Visão Geral</Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link href="/dashboard/relatorios/financeiro">Financeiro</Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link href="/dashboard/relatorios/canais-e-origens">Canais & Origens</Link>
-                </DropdownMenuItem>
-                 <DropdownMenuItem asChild>
-                  <Link href="/dashboard/relatorios/vendedores">Vendedores</Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link href="/dashboard/relatorios/produtos">Produtos</Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link href="/dashboard/relatorios/clientes">Clientes</Link>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-           <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-               <Button variant="ghost" className="flex items-center gap-1 text-muted-foreground transition-colors hover:text-foreground data-[state=open]:bg-accent px-3">
-                Taxas
-                <ChevronDown className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start">
-              <DropdownMenuItem asChild>
-                <Link href="/dashboard/taxas/cartao">Taxas do Cartão</Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <Link href="/dashboard/taxas/custos">Custos sobre Vendas</Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <Link href="/dashboard/taxas/custos-embalagem">Custos Embalagem</Link>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-           <Link
-            href="/dashboard/conexoes"
-            className="text-muted-foreground transition-colors hover:text-foreground"
-          >
-            Conexões
-          </Link>
-          <Link
-            href="/publico"
-            className="text-muted-foreground transition-colors hover:text-foreground"
-          >
-            Público
-          </Link>
-        </nav>
+        <NavMenu />
         <div className="flex w-full items-center gap-4 md:ml-auto md:gap-2 lg:gap-4">
             <div className="ml-auto flex-1 sm:flex-initial">
               {/* This space is intentionally left blank for now */}
@@ -1654,3 +1566,4 @@ React.useEffect(() => {
     </>
   );
 }
+
