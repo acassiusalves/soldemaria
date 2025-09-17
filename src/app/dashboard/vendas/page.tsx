@@ -931,7 +931,6 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
             headerRow.quantidadeTotal = Number(rows[0].quantidade) || 0;
         }
 
-        // Sum 'final' from all rows belonging to the group
         const valorFinalDoCabecalho = Number(headerRow.final) || 0;
         if (valorFinalDoCabecalho > 0) {
             headerRow.final = valorFinalDoCabecalho;
@@ -1089,7 +1088,7 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
       const margemBruta = totals.faturamento - totals.custoTotal;
 
       return {
-          faturamento: totals.valorFinalTotal,
+          faturamento: totals.faturamento,
           valorFinalTotal: totals.valorFinalTotal,
           descontos: totals.descontos,
           custoTotal: totals.custoTotal,
