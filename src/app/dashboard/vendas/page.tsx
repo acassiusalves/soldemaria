@@ -1125,7 +1125,7 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
         });
 
       return {
-          faturamento: totals.valorFinalTotal,
+          faturamento: totals.faturamento,
           valorFinalTotal: totals.valorFinalTotal,
           descontos: totals.descontos,
           custoTotal: totals.custoTotal,
@@ -1551,13 +1551,7 @@ React.useEffect(() => {
           )}
         </Card>
         
-        <div className="grid gap-4 md:grid-cols-5">
-          <SummaryCard 
-            title="Valor Final Total" 
-            value={displaySummary?.valorFinalTotal ?? 0}
-            icon={areAllDataSourcesLoaded ? <Receipt className="text-primary" /> : <Loader2 className="animate-spin text-muted-foreground" />}
-            isCurrency
-          />
+        <div className="grid gap-4 md:grid-cols-4">
           <SummaryCard 
             title="Faturamento" 
             value={displaySummary?.faturamento ?? 0} 
@@ -1619,6 +1613,7 @@ React.useEffect(() => {
     </>
   );
 }
+
 
 
 
