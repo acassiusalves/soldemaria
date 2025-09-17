@@ -1,6 +1,5 @@
 
 
-
 "use client";
 
 import * as React from "react";
@@ -1062,14 +1061,13 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
         (acc, row) => {
             const valorFinal = Number(row.final) || 0;
             const valorDescontos = Number(row.valorDescontos) || 0;
-            const custoFrete = Number(row.custoFrete) || 0;
             
             const itemRows = row.subRows || [row];
             
-            acc.faturamento += valorFinal - valorDescontos + custoFrete;
+            acc.faturamento += valorFinal - valorDescontos;
             acc.descontos += valorDescontos;
             acc.custoTotal += Number(row.custoTotal) || 0;
-            acc.frete += custoFrete;
+            acc.frete += Number(row.custoFrete) || 0;
             acc.valorFinalTotal += valorFinal;
             acc.totalItems += Number(row.quantidadeTotal) || 0;
             
