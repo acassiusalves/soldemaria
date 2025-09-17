@@ -223,10 +223,15 @@ const headerMappingNormalized: Record<string, string> = {
   "custo unitario": "custoUnitario",
   "valor unitario": "valorUnitario",
   "final": "final",
+  "valor final": "final",
+  "valorfinal": "final",
   "valor entrega": "custoFrete",
   "valor credito": "valorCredito",
   "valor descontos": "valorDescontos",
   "origem cliente": "origemCliente",
+  // Aliases comuns de custo total (se a planilha usa outro título)
+  "custo": "custoTotal",
+  "custo do pedido": "custoTotal",
 };
 
 /* ========== limpadores ========= */
@@ -320,8 +325,10 @@ const mapRowToSystem = (row: Record<string, any>) => {
   const out: Record<string, any> = {};
   for (const rawHeader in row) {
     const normalized = normalizeHeader(rawHeader);
-    if (normalized === 'valor_final') continue; // Ignora a coluna `valor_final` da planilha
-    const sysKey = resolveSystemKey(normalized);
+    // força qualquer forma de "valor final" cair em `final`
+    const sysKey =
+      headerMappingNormalized[normalized] ||
+      (normalized.replace(/\s+/g, "_") === "valor_final" ? "final" : resolveSystemKey(normalized));
     const val = cleanNumericValue(row[rawHeader]);
     if (sysKey) out[sysKey] = val;
     else out[normalized.replace(/\s+/g, "_")] = val; // fallback snake_case
@@ -1030,12 +1037,27 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
           headerRow.custoEmbalagem = 0;
         }
               
-        const rowsParaCusto = subRows.length > 0 ? subRows : rows;
-        const custoTotalPedido = rowsParaCusto.reduce((sum, item) => {
-            const custo = Number(item.custoUnitario) || 0;
-            const qtd = Number(item.quantidade) || (item.descricao ? 1 : 0); // se nao tem qtd mas tem desc, conta como 1
-            return sum + (custo * qtd);
-        }, 0);
+        // 1) Se alguma linha do grupo já trouxe CUSTO TOTAL consolidado, usa ela (soma se vierem quebradas)
+        const custoTotalDeclarado = rows
+          .map(r => Number(r.custoTotal))
+          .filter(v => Number.isFinite(v) && v > 0)
+          .reduce((a, b) => a + b, 0);
+
+        let custoTotalPedido: number;
+        if (custoTotalDeclarado > 0) {
+          custoTotalPedido = custoTotalDeclarado;
+        } else {
+          // 2) Caso contrário, calcula via custoUnitario * quantidade (apenas quantidades válidas > 0)
+          const base = (subRows.length > 0 ? subRows : rows);
+          custoTotalPedido = base.reduce((sum, item) => {
+            const qtd = Number(item.quantidade);
+            const custo = Number(item.custoUnitario);
+            if (Number.isFinite(qtd) && qtd > 0 && Number.isFinite(custo) && custo >= 0) {
+              return sum + (custo * qtd);
+            }
+            return sum;
+          }, 0);
+        }
         headerRow.custoTotal = custoTotalPedido;
 
         // Custo total da taxa de cartão
@@ -1096,6 +1118,11 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
       const ticketMedio = numOrders > 0 ? totals.faturamento / numOrders : 0;
       const qtdMedia = numOrders > 0 ? totals.totalItems / numOrders : 0;
       const margemBruta = totals.faturamento - totals.custoTotal;
+      
+        console.log({
+          faturamento_somado: groupedForView.reduce((a,r)=>a+(Number(r.final)||0), 0),
+          cmv_somado: groupedForView.reduce((a,r)=>a+(Number(r.custoTotal)||0), 0),
+        });
 
       return {
           faturamento: totals.valorFinalTotal,
@@ -1222,7 +1249,6 @@ React.useEffect(() => {
       vendasData.forEach(row => Object.keys(row).forEach(k => allKeys.add(k)));
       if (!allKeys.has("data") && dataToSave.some(r => (r as any).data)) allKeys.add("data");
       allKeys.add('quantidadeTotal');
-      allKeys.delete('valor_final'); // Garante que a coluna indesejada não seja salva
 
       const current = new Map(columns.map(c => [c.id, c]));
       allKeys.forEach(key => { if (!current.has(key)) current.set(key, { id: key, label: getLabel(key, customCalculations), isSortable: true }); });
@@ -1593,5 +1619,6 @@ React.useEffect(() => {
     </>
   );
 }
+
 
 
