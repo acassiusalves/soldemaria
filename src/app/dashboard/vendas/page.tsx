@@ -1404,6 +1404,19 @@ React.useEffect(() => {
 
   const displaySummary = areAllDataSourcesLoaded ? finalSummary : loadingSummary;
 
+  const handleTextFilterChange = (v: string) => setFilter(v);
+  const handleVendorFilterChange = (vals: string[] | Set<string>) => setVendorFilter(new Set(vals));
+  const handleDeliverymanFilterChange = (vals: string[] | Set<string>) => setDeliverymanFilter(new Set(vals));
+  const handleLogisticsFilterChange = (vals: string[] | Set<string>) => setLogisticsFilter(new Set(vals));
+  const handleCityFilterChange = (vals: string[] | Set<string>) => setCityFilter(new Set(vals));
+  const clearAllAdvancedFilters = () => {
+    setFilter('');
+    setVendorFilter(new Set());
+    setDeliverymanFilter(new Set());
+    setLogisticsFilter(new Set());
+    setCityFilter(new Set());
+  };
+
   return (
     <>
     <div className="flex min-h-screen w-full flex-col">
@@ -1588,6 +1601,17 @@ React.useEffect(() => {
             data={finalFilteredData} 
             columns={mergedColumns}
             showAdvancedFilters={true}
+            textFilter={filter}
+            onTextFilterChange={handleTextFilterChange}
+            vendorFilter={vendorFilter}
+            onVendorFilterChange={handleVendorFilterChange}
+            deliverymanFilter={deliverymanFilter}
+            onDeliverymanFilterChange={handleDeliverymanFilterChange}
+            logisticsFilter={logisticsFilter}
+            onLogisticsFilterChange={handleLogisticsFilterChange}
+            cityFilter={cityFilter}
+            onCityFilterChange={handleCityFilterChange}
+            onClearAllAdvancedFilters={clearAllAdvancedFilters}
             columnVisibility={columnVisibility}
             onVisibilityChange={handleVisibilityChange}
             columnOrder={columnOrder}
@@ -1618,12 +1642,3 @@ React.useEffect(() => {
     </>
   );
 }
-
-
-
-
-
-
-
-
-    

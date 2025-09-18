@@ -144,23 +144,36 @@ const FIXED_COLUMNS: ColumnDef[] = [
   { id: "valor",        label: "Valor Logística",         isSortable: true, className: "text-right" },
 ];
 
-interface DetailedSalesHistoryTableProps {
-    data: any[];
-    columns: ColumnDef[];
-    tableTitle?: string;
-    showAdvancedFilters?: boolean;
-    columnVisibility?: ColumnVisibility;
-    onVisibilityChange?: (newVisibility: ColumnVisibility) => void;
-    columnOrder?: ColumnOrder;
-    onOrderChange?: (newOrder: string[]) => void;
-    onSavePreferences?: (key: "vendas_columns_visibility" | "vendas_columns_order", value: any) => void;
-    isLoadingPreferences?: boolean;
-    isSavingPreferences?: boolean;
-    customCalculations?: CustomCalculation[];
-    taxasOperadoras?: Operadora[];
-    isLogisticsPage?: boolean;
-    isCostsPage?: boolean;
-    onDeleteOrder?: (orderCode: number | string) => void;
+export interface DetailedSalesHistoryTableProps {
+  data: any[];
+  columns: ColumnDef[];
+  tableTitle?: string;
+  showAdvancedFilters?: boolean;
+  columnVisibility?: ColumnVisibility;
+  onVisibilityChange?: (newVisibility: ColumnVisibility) => void;
+  columnOrder?: ColumnOrder;
+  onOrderChange?: (newOrder: string[]) => void;
+  onSavePreferences?: (key: "vendas_columns_visibility" | "vendas_columns_order", value: any) => void;
+  isLoadingPreferences?: boolean;
+  isSavingPreferences?: boolean;
+  customCalculations?: CustomCalculation[];
+  taxasOperadoras?: Operadora[];
+  isLogisticsPage?: boolean;
+  isCostsPage?: boolean;
+  onDeleteOrder?: (orderCode: number | string) => void;
+
+  // Filtros controlados
+  textFilter?: string;
+  onTextFilterChange?: (v: string) => void;
+  vendorFilter?: Set<string>;
+  onVendorFilterChange?: (vals: Set<string>) => void;
+  deliverymanFilter?: Set<string>;
+  onDeliverymanFilterChange?: (vals: Set<string>) => void;
+  logisticsFilter?: Set<string>;
+  onLogisticsFilterChange?: (vals: Set<string>) => void;
+  cityFilter?: Set<string>;
+  onCityFilterChange?: (vals: Set<string>) => void;
+  onClearAllAdvancedFilters?: () => void;
 }
 
 const MultiSelectFilter = ({
@@ -397,18 +410,23 @@ export default function DetailedSalesHistoryTable({
     isLogisticsPage = false,
     isCostsPage = false,
     onDeleteOrder,
+    textFilter,
+    onTextFilterChange,
+    vendorFilter,
+    onVendorFilterChange,
+    deliverymanFilter,
+    onDeliverymanFilterChange,
+    logisticsFilter,
+    onLogisticsFilterChange,
+    cityFilter,
+    onCityFilterChange,
+    onClearAllAdvancedFilters,
 }: DetailedSalesHistoryTableProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const [sortKey, setSortKey] = useState<SortKey>("data");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
-  const [filter, setFilter] = useState('');
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
-  const [vendorFilter, setVendorFilter] = useState<Set<string>>(new Set());
-  const [deliverymanFilter, setDeliverymanFilter] = useState<Set<string>>(new Set());
-  const [logisticsFilter, setLogisticsFilter] = useState<Set<string>>(new Set());
-  const [cityFilter, setCityFilter] = useState<Set<string>>(new Set());
-  
   const [internalVisibility, setInternalVisibility] = useState<ColumnVisibility>({});
   const [internalOrder, setInternalOrder] = useState<ColumnOrder>([]);
   const [isOrderManagerOpen, setIsOrderManagerOpen] = useState(false);
@@ -558,25 +576,10 @@ export default function DetailedSalesHistoryTable({
     };
   }, [data]);
 
-  const filteredData = useMemo(() => {
-    return data.filter(group => {
-      const textMatch = !filter ||
-                        String(group.codigo).toLowerCase().includes(filter.toLowerCase()) ||
-                        String(group.nomeCliente).toLowerCase().includes(filter.toLowerCase());
-      
-      const vendorMatch = vendorFilter.size === 0 || vendorFilter.has(group.vendedor);
-      const deliverymanMatch = deliverymanFilter.size === 0 || deliverymanFilter.has(group.entregador);
-      const logisticsMatch = logisticsFilter.size === 0 || logisticsFilter.has(group.logistica);
-      const cityMatch = cityFilter.size === 0 || cityFilter.has(group.cidade);
-
-      return textMatch && vendorMatch && deliverymanMatch && logisticsMatch && cityMatch;
-    });
-  }, [data, filter, vendorFilter, deliverymanFilter, logisticsFilter, cityFilter]);
-
   const sortedData = useMemo(() => {
-    if (!sortKey) return filteredData;
+    if (!sortKey) return data;
 
-    return [...filteredData].sort((a, b) => {
+    return [...data].sort((a, b) => {
       let aValue = (a as any)[sortKey];
       let bValue = (b as any)[sortKey];
       
@@ -594,7 +597,7 @@ export default function DetailedSalesHistoryTable({
       if (valA > valB) return sortDirection === "asc" ? 1 : -1;
       return 0;
     });
-  }, [filteredData, sortKey, sortDirection]);
+  }, [data, sortKey, sortDirection]);
 
   const paginatedData = useMemo(() => {
     const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
@@ -775,16 +778,13 @@ export default function DetailedSalesHistoryTable({
 
 
   const hasActiveAdvancedFilter = useMemo(() => {
-    return vendorFilter.size > 0 || deliverymanFilter.size > 0 || logisticsFilter.size > 0 || cityFilter.size > 0;
+    return (vendorFilter?.size ?? 0) > 0 || 
+           (deliverymanFilter?.size ?? 0) > 0 || 
+           (logisticsFilter?.size ?? 0) > 0 || 
+           (cityFilter?.size ?? 0) > 0;
   }, [vendorFilter, deliverymanFilter, logisticsFilter, cityFilter]);
 
-  const clearAllAdvancedFilters = () => {
-    setVendorFilter(new Set());
-    setDeliverymanFilter(new Set());
-    setLogisticsFilter(new Set());
-    setCityFilter(new Set());
-  }
-
+  
   const handleSetAllVisibility = (visible: boolean) => {
     if (!onVisibilityChange) return;
     const next = mainColumns.reduce((acc, col) => {
@@ -853,8 +853,8 @@ const renderEmbalagemTab = (row: any) => {
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input 
                 placeholder="Filtrar por Código ou Cliente..."
-                value={filter}
-                onChange={(e) => setFilter(e.target.value)}
+                value={textFilter || ''}
+                onChange={(e) => onTextFilterChange?.(e.target.value)}
                 className="pl-9"
                 />
             </div>
@@ -923,14 +923,14 @@ const renderEmbalagemTab = (row: any) => {
         </div>
 
         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
-            {showAdvancedFilters && (
+            {showAdvancedFilters && onVendorFilterChange && onDeliverymanFilterChange && onLogisticsFilterChange && onCityFilterChange && (
                 <div className="flex items-center gap-2 flex-wrap">
-                    <MultiSelectFilter title="Vendedor" options={uniqueVendores} selectedValues={vendorFilter} onSelectionChange={setVendorFilter} />
-                    <MultiSelectFilter title="Entregador" options={uniqueEntregadores} selectedValues={deliverymanFilter} onSelectionChange={setDeliverymanFilter} />
-                    <MultiSelectFilter title="Logística" options={uniqueLogisticas} selectedValues={logisticsFilter} onSelectionChange={setLogisticsFilter} />
-                    <MultiSelectFilter title="Cidade" options={uniqueCidades} selectedValues={cityFilter} onSelectionChange={setCityFilter} />
-                    {hasActiveAdvancedFilter && (
-                        <Button variant="ghost" onClick={clearAllAdvancedFilters} className="text-muted-foreground">
+                    <MultiSelectFilter title="Vendedor" options={uniqueVendores} selectedValues={vendorFilter || new Set()} onSelectionChange={onVendorFilterChange} />
+                    <MultiSelectFilter title="Entregador" options={uniqueEntregadores} selectedValues={deliverymanFilter || new Set()} onSelectionChange={onDeliverymanFilterChange} />
+                    <MultiSelectFilter title="Logística" options={uniqueLogisticas} selectedValues={logisticsFilter || new Set()} onSelectionChange={onLogisticsFilterChange} />
+                    <MultiSelectFilter title="Cidade" options={uniqueCidades} selectedValues={cityFilter || new Set()} onSelectionChange={onCityFilterChange} />
+                    {hasActiveAdvancedFilter && onClearAllAdvancedFilters && (
+                        <Button variant="ghost" onClick={onClearAllAdvancedFilters} className="text-muted-foreground">
                             <X className="mr-2 h-4 w-4" />
                             Limpar Filtros
                         </Button>
@@ -1140,15 +1140,3 @@ const renderEmbalagemTab = (row: any) => {
     </>
   );
 }
-
-
-
-
-
-
-
-
-
-
-
-    
