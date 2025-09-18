@@ -1039,34 +1039,23 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
           headerRow.custoEmbalagem = 0;
         }
               
-        // === CMV: seguir exatamente a planilha ===
-        // 1) Se existir custoTotal declarado em alguma linha, usa-o (soma se vier fragmentado).
         const custoTotalDeclarado = rows
           .map(r => Number(r.custoTotal))
           .filter(v => Number.isFinite(v) && v > 0)
           .reduce((a, b) => a + b, 0);
 
-        // 2) Caso não haja custoTotal declarado, CMV = soma direta da coluna "custoUnitario"
-        //    (sem multiplicar por quantidade), como na planilha.
-        const base = (subRows.length > 0 ? subRows : rows);
-        const somaCustoUnitario = base.reduce((sum, item) => {
-          const custo = Number(item.custoUnitario);
-          return Number.isFinite(custo) && custo > 0 ? sum + custo : sum;
-        }, 0);
-
-        // 3) Fallback (raro): se ambas acima forem 0, usa produto custoUnitario * quantidade (>0).
-        const somaCustoUnitarioVezesQtd = base.reduce((sum, item) => {
-          const custo = Number(item.custoUnitario);
-          const qtd = Number(item.quantidade);
-          return (Number.isFinite(custo) && custo >= 0 && Number.isFinite(qtd) && qtd > 0)
-            ? sum + (custo * qtd)
-            : sum;
-        }, 0);
-
-        headerRow.custoTotal =
-          (custoTotalDeclarado > 0 ? custoTotalDeclarado
-           : (somaCustoUnitario > 0 ? somaCustoUnitario
-              : somaCustoUnitarioVezesQtd));
+        if (custoTotalDeclarado > 0) {
+          headerRow.custoTotal = custoTotalDeclarado;
+        } else {
+          const baseCusto = (subRows.length > 0 ? subRows : rows);
+          headerRow.custoTotal = baseCusto.reduce((sum, item) => {
+            const custo = Number(item.custoUnitario);
+            const qtd = Number(item.quantidade) || (item.descricao ? 1 : 0);
+            return (Number.isFinite(custo) && custo >= 0 && Number.isFinite(qtd) && qtd > 0)
+              ? sum + (custo * qtd)
+              : sum;
+          }, 0);
+        }
 
         // Custo total da taxa de cartão
         headerRow.taxaTotalCartao = (headerRow.costs || []).reduce((sum, cost) => {
