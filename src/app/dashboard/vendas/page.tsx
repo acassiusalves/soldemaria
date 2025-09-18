@@ -884,21 +884,36 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
     });
 }, [customCalculations, mergedColumns]);
 
-  /* ======= Filtro por período ======= */
-  const filteredData = React.useMemo(() => {
-    if (!date?.from) return allData;
-    const fromDate = date.from;
-    const toDateVal = date.to ? endOfDay(date.to) : endOfDay(fromDate);
-    return allData.filter((item) => {
-      const itemDate = toDate(item.data);
-      return itemDate && itemDate >= fromDate && itemDate <= toDateVal;
+  const [filter, setFilter] = React.useState('');
+  const [vendorFilter, setVendorFilter] = React.useState<Set<string>>(new Set());
+  const [deliverymanFilter, setDeliverymanFilter] = React.useState<Set<string>>(new Set());
+  const [logisticsFilter, setLogisticsFilter] = React.useState<Set<string>>(new Set());
+  const [cityFilter, setCityFilter] = React.useState<Set<string>>(new Set());
+
+  const displayData = React.useMemo(() => {
+    return allData.filter(group => {
+      if (!group) return false;
+      const itemDate = toDate(group.data);
+      if (date?.from && itemDate && itemDate < date.from) return false;
+      if (date?.to && itemDate && itemDate > endOfDay(date.to)) return false;
+
+      const textMatch = !filter ||
+                        String(group.codigo).toLowerCase().includes(filter.toLowerCase()) ||
+                        String(group.nomeCliente).toLowerCase().includes(filter.toLowerCase());
+      
+      const vendorMatch = vendorFilter.size === 0 || vendorFilter.has(group.vendedor || '');
+      const deliverymanMatch = deliverymanFilter.size === 0 || deliverymanFilter.has(group.entregador || '');
+      const logisticsMatch = logisticsFilter.size === 0 || logisticsFilter.has(group.logistica || '');
+      const cityMatch = cityFilter.size === 0 || cityFilter.has(group.cidade || '');
+
+      return textMatch && vendorMatch && deliverymanMatch && logisticsMatch && cityMatch;
     });
-  }, [date, allData]);
+  }, [date, allData, filter, vendorFilter, deliverymanFilter, logisticsFilter, cityFilter]);
 
   /* ======= AGRUPAMENTO por código + subRows e Aplicação de Cálculos ======= */
   const groupedForView = React.useMemo(() => {
     const groups = new Map<string, any[]>();
-    for (const row of filteredData) {
+    for (const row of displayData) {
         const code = normCode((row as any).codigo);
         if (!code) continue;
 
@@ -1090,7 +1105,7 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
     }
     
     return applyCustomCalculations(aggregatedData);
-  }, [filteredData, applyCustomCalculations, custosEmbalagem, taxasOperadoras]);
+  }, [displayData, applyCustomCalculations, custosEmbalagem, taxasOperadoras]);
 
   const finalSummary = React.useMemo(() => {
     if (!areAllDataSourcesLoaded) {
@@ -1615,6 +1630,7 @@ React.useEffect(() => {
     </>
   );
 }
+
 
 
 
