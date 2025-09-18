@@ -468,7 +468,7 @@ async function persistCalcColumns(calcs: CustomCalculation[]) {
 
   // mantém do metadata apenas:
   // - colunas não custom, ou
-  // - colunas custom que ainda existem
+  // - colunas custom que ainda existem na lista de cálculos
   const kept = existing.filter(c => !isCustomId(c.id) || calcIds.has(c.id));
 
   // adiciona/atualiza as colunas dos cálculos atuais
@@ -890,30 +890,17 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
     });
 }, [customCalculations, mergedColumns]);
 
-  const finalFilteredData = React.useMemo(() => {
-    return allData.filter(group => {
-      if (!group) return false;
-      const itemDate = toDate(group.data);
-      if (date?.from && itemDate && itemDate < date.from) return false;
-      if (date?.to && itemDate && itemDate > endOfDay(date.to)) return false;
-
-      const textMatch = !filter ||
-                        String(group.codigo).toLowerCase().includes(filter.toLowerCase()) ||
-                        String(group.nomeCliente).toLowerCase().includes(filter.toLowerCase());
-      
-      const vendorMatch = vendorFilter.size === 0 || vendorFilter.has(group.vendedor || '');
-      const deliverymanMatch = deliverymanFilter.size === 0 || deliverymanFilter.has(group.entregador || '');
-      const logisticsMatch = logisticsFilter.size === 0 || logisticsFilter.has(group.logistica || '');
-      const cityMatch = cityFilter.size === 0 || cityFilter.has(group.cidade || '');
-
-      return textMatch && vendorMatch && deliverymanMatch && logisticsMatch && cityMatch;
-    });
-  }, [date, allData, filter, vendorFilter, deliverymanFilter, logisticsFilter, cityFilter]);
-
   /* ======= AGRUPAMENTO por código + subRows e Aplicação de Cálculos ======= */
   const groupedForView = React.useMemo(() => {
+    
+    const filteredByDate = allData.filter(item => {
+        if (!date?.from) return true; // Se não há data, não filtra por data
+        const itemDate = toDate(item.data);
+        return itemDate && itemDate >= date.from && itemDate <= endOfDay(date.to || date.from);
+    });
+
     const groups = new Map<string, any[]>();
-    for (const row of finalFilteredData) {
+    for (const row of filteredByDate) {
         const code = normCode((row as any).codigo);
         if (!code) continue;
 
@@ -1105,14 +1092,30 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
     }
     
     return applyCustomCalculations(aggregatedData);
-  }, [finalFilteredData, applyCustomCalculations, custosEmbalagem, taxasOperadoras]);
+  }, [allData, date, custosEmbalagem, taxasOperadoras, applyCustomCalculations]);
+  
+  const finalFilteredData = React.useMemo(() => {
+    return groupedForView.filter(group => {
+      if (!group) return false;
+      const textMatch = !filter ||
+                        String(group.codigo).toLowerCase().includes(filter.toLowerCase()) ||
+                        String(group.nomeCliente).toLowerCase().includes(filter.toLowerCase());
+      
+      const vendorMatch = vendorFilter.size === 0 || vendorFilter.has(group.vendedor || '');
+      const deliverymanMatch = deliverymanFilter.size === 0 || deliverymanFilter.has(group.entregador || '');
+      const logisticsMatch = logisticsFilter.size === 0 || logisticsFilter.has(group.logistica || '');
+      const cityMatch = cityFilter.size === 0 || cityFilter.has(group.cidade || '');
+
+      return textMatch && vendorMatch && deliverymanMatch && logisticsMatch && cityMatch;
+    });
+  }, [groupedForView, filter, vendorFilter, deliverymanFilter, logisticsFilter, cityFilter]);
 
   const finalSummary = React.useMemo(() => {
     if (!areAllDataSourcesLoaded) {
       return null;
     }
     
-    const totals = groupedForView.reduce(
+    const totals = finalFilteredData.reduce(
         (acc, row) => {
             const valorFinal = Number(row.final) || 0;
             
@@ -1137,7 +1140,7 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
           custoTotal: totals.custoTotal,
           frete: totals.frete,
       }
-  }, [groupedForView, areAllDataSourcesLoaded]);
+  }, [finalFilteredData, areAllDataSourcesLoaded]);
 
 
 React.useEffect(() => {
@@ -1582,7 +1585,7 @@ React.useEffect(() => {
 
 
         <DetailedSalesHistoryTable 
-            data={groupedForView} 
+            data={finalFilteredData} 
             columns={mergedColumns}
             showAdvancedFilters={true}
             columnVisibility={columnVisibility}
