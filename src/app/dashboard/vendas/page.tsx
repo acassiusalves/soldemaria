@@ -514,6 +514,12 @@ export default function VendasPage() {
     custosEmbalagem: false,
     taxas: false,
   });
+  
+  const [filter, setFilter] = React.useState('');
+  const [vendorFilter, setVendorFilter] = React.useState<Set<string>>(new Set());
+  const [deliverymanFilter, setDeliverymanFilter] = React.useState<Set<string>>(new Set());
+  const [logisticsFilter, setLogisticsFilter] = React.useState<Set<string>>(new Set());
+  const [cityFilter, setCityFilter] = React.useState<Set<string>>(new Set());
 
   const areAllDataSourcesLoaded = React.useMemo(() => {
     return Object.values(loadingStatus).every(status => status === true);
@@ -777,7 +783,7 @@ const syncExistingCustomColumns = React.useCallback(async () => {
     
     if (needsOrderUpdate) {
         setColumnOrder(currentOrder);
-        await saveUserPreference(auth.currentUser.uid, 'vendas_columns_order', newOrder);
+        await saveUserPreference(auth.currentUser.uid, 'vendas_columns_order', columnOrder);
     }
     
 }, [customCalculations, columnVisibility, columnOrder]);
@@ -884,13 +890,7 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
     });
 }, [customCalculations, mergedColumns]);
 
-  const [filter, setFilter] = React.useState('');
-  const [vendorFilter, setVendorFilter] = React.useState<Set<string>>(new Set());
-  const [deliverymanFilter, setDeliverymanFilter] = React.useState<Set<string>>(new Set());
-  const [logisticsFilter, setLogisticsFilter] = React.useState<Set<string>>(new Set());
-  const [cityFilter, setCityFilter] = React.useState<Set<string>>(new Set());
-
-  const displayData = React.useMemo(() => {
+  const finalFilteredData = React.useMemo(() => {
     return allData.filter(group => {
       if (!group) return false;
       const itemDate = toDate(group.data);
@@ -913,7 +913,7 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
   /* ======= AGRUPAMENTO por código + subRows e Aplicação de Cálculos ======= */
   const groupedForView = React.useMemo(() => {
     const groups = new Map<string, any[]>();
-    for (const row of displayData) {
+    for (const row of finalFilteredData) {
         const code = normCode((row as any).codigo);
         if (!code) continue;
 
@@ -956,7 +956,7 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
         );
 
         headerRow.quantidadeTotal = subRows.reduce((acc, item) => acc + (Number(item.quantidade) || 0), 0);
-        if (headerRow.quantidadeTotal === 0 && rows.length > 0) {
+        if (headerRow.quantidadeTotal === 0 && rows.length > 0 && subRows.length === 0) {
             headerRow.quantidadeTotal = Number(rows[0].quantidade) || 0;
         }
 
@@ -1105,7 +1105,7 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
     }
     
     return applyCustomCalculations(aggregatedData);
-  }, [displayData, applyCustomCalculations, custosEmbalagem, taxasOperadoras]);
+  }, [finalFilteredData, applyCustomCalculations, custosEmbalagem, taxasOperadoras]);
 
   const finalSummary = React.useMemo(() => {
     if (!areAllDataSourcesLoaded) {
@@ -1116,8 +1116,9 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
     const totals = groupedForView.reduce(
         (acc, row) => {
             const valorFinal = Number(row.final) || 0;
-            
-            acc.faturamento += valorFinal;
+            const faturamentoBruto = valorFinal;
+
+            acc.faturamento += faturamentoBruto;
             acc.descontos += Number(row.valorDescontos) || 0;
             acc.custoTotal += Number(row.custoTotal) || 0;
             acc.frete += Number(row.custoFrete) || 0;
@@ -1134,23 +1135,11 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
         }
     );
 
-      const ticketMedio = numOrders > 0 ? totals.faturamento / numOrders : 0;
-      const qtdMedia = numOrders > 0 ? totals.totalItems / numOrders : 0;
-      const margemBruta = totals.faturamento - totals.custoTotal;
-      
-        console.log({
-          faturamento_somado: groupedForView.reduce((a,r)=>a+(Number(r.final)||0), 0),
-          cmv_somado: groupedForView.reduce((a,r)=>a+(Number(r.custoTotal)||0), 0),
-        });
-
       return {
           faturamento: totals.faturamento,
           descontos: totals.descontos,
           custoTotal: totals.custoTotal,
           frete: totals.frete,
-          ticketMedio,
-          qtdMedia,
-          margemBruta
       }
   }, [groupedForView, areAllDataSourcesLoaded]);
 
@@ -1636,3 +1625,6 @@ React.useEffect(() => {
 
 
 
+
+
+    
