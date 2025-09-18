@@ -1111,18 +1111,15 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
     if (!areAllDataSourcesLoaded) {
       return null;
     }
-    const numOrders = groupedForView.length;
     
     const totals = groupedForView.reduce(
         (acc, row) => {
             const valorFinal = Number(row.final) || 0;
-            const faturamentoBruto = valorFinal;
-
-            acc.faturamento += faturamentoBruto;
+            
+            acc.faturamento += valorFinal;
             acc.descontos += Number(row.valorDescontos) || 0;
             acc.custoTotal += Number(row.custoTotal) || 0;
             acc.frete += Number(row.custoFrete) || 0;
-            acc.totalItems += Number(row.quantidadeTotal) || 0;
             
             return acc;
         },
@@ -1131,7 +1128,6 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
             descontos: 0, 
             custoTotal: 0, 
             frete: 0, 
-            totalItems: 0,
         }
     );
 
