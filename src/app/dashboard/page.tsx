@@ -325,37 +325,30 @@ export default function DashboardPage() {
 
       const totalDescontos = sales.reduce((acc, s) => acc + (Number(s.valorDescontos) || 0), 0);
       
+      const faturamentoLiquido = totalFinal - totalDescontos;
+      summary.faturamento += faturamentoLiquido;
+      summary.descontos += totalDescontos;
+        
       const custoTotalDeclarado = sales
         .map(r => Number(r.custoTotal))
         .filter(v => Number.isFinite(v) && v > 0)
         .reduce((a, b) => a + b, 0);
 
       const baseCusto = (itemRows.length > 0 ? itemRows : sales);
-      const somaCustoUnitario = baseCusto.reduce((sum, item) => {
-        const custo = Number(item.custoUnitario);
-        return Number.isFinite(custo) && custo > 0 ? sum + custo : sum;
-      }, 0);
-
       const somaCustoUnitarioVezesQtd = baseCusto.reduce((sum, item) => {
         const custo = Number(item.custoUnitario);
-        const qtd = Number(item.quantidade);
+        const qtd = Number(item.quantidade) || (item.descricao ? 1 : 0);
         return (Number.isFinite(custo) && custo >= 0 && Number.isFinite(qtd) && qtd > 0)
           ? sum + (custo * qtd)
           : sum;
       }, 0);
 
-      const custoTotal = (custoTotalDeclarado > 0 ? custoTotalDeclarado
-         : (somaCustoUnitario > 0 ? somaCustoUnitario
-            : somaCustoUnitarioVezesQtd));
+      const custoTotal = custoTotalDeclarado > 0 ? custoTotalDeclarado : somaCustoUnitarioVezesQtd;
 
       const totalItems = itemRows.reduce((acc, s) => acc + (Number(s.quantidade) || 0), 0);
       
       const custoFrete = sales.reduce((acc, s) => acc + (Number(s.custoFrete) || 0), 0);
-
-      const faturamentoLiquido = totalFinal - totalDescontos;
         
-      summary.faturamento += faturamentoLiquido;
-      summary.descontos += totalDescontos;
       summary.custoTotal += custoTotal;
       summary.frete += custoFrete;
       summary.totalItems += totalItems;

@@ -1106,9 +1106,9 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
     
     const totals = finalFilteredData.reduce(
         (acc, row) => {
-            const valorFinal = Number(row.final) || 0;
+            const faturamentoLiquido = (Number(row.final) || 0) - (Number(row.valorDescontos) || 0);
             
-            acc.faturamento += valorFinal;
+            acc.faturamento += faturamentoLiquido;
             acc.descontos += Number(row.valorDescontos) || 0;
             acc.custoTotal += Number(row.custoTotal) || 0;
             acc.frete += Number(row.custoFrete) || 0;
