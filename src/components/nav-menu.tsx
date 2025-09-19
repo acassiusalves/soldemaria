@@ -1,3 +1,4 @@
+
 "use client";
 
 import React from 'react';
@@ -39,6 +40,7 @@ const navLinks = [
   },
   { href: '/dashboard/conexoes', label: 'Conexões' },
   { href: '/dashboard/permissoes', label: 'Permissões' },
+  { href: '/publico', label: 'Público' },
 ];
 
 export function NavMenu() {
@@ -50,6 +52,7 @@ export function NavMenu() {
   }
 
   const hasAccess = (href: string) => {
+    if (href === '/publico') return true; // Public page always has access
     if (userRole === 'admin') return true;
     
     // Find the most specific permission key that matches the start of the href
