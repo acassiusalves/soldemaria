@@ -948,12 +948,12 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
         }
 
         const valorFinalDoCabecalho = Number(headerRow.final) || 0;
-        if (valorFinalDoCabecalho > 0) {
+        if (valorFinalDoCabecalho > 0 && subRows.length === 0) {
             headerRow.final = valorFinalDoCabecalho;
         } else if(subRows.length > 0) {
             headerRow.final = subRows.reduce((acc, row) => {
                 const itemFinal = Number(row.final) || 0;
-                const itemQuantidade = Number(row.quantidade) || 0;
+                const itemQuantidade = Number(row.quantidade) || 1; // Assume 1 if not present but item exists
                 const itemValorUnitario = Number(row.valorUnitario) || 0;
                 
                 if (itemFinal > 0) return acc + itemFinal;
@@ -1039,11 +1039,6 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
           headerRow.custoEmbalagem = 0;
         }
               
-        const custoTotalDeclarado = rows
-          .map(r => Number(r.custoTotal))
-          .filter(v => Number.isFinite(v) && v > 0)
-          .reduce((a, b) => a + b, 0);
-
         const baseCusto = (subRows.length > 0 ? subRows : rows);
         const somaCustoUnitarioVezesQtd = baseCusto.reduce((sum, item) => {
           const custo = Number(item.custoUnitario);
@@ -1052,8 +1047,9 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
             ? sum + (custo * qtd)
             : sum;
         }, 0);
+        
+        headerRow.custoTotal = somaCustoUnitarioVezesQtd;
 
-        headerRow.custoTotal = custoTotalDeclarado > 0 ? custoTotalDeclarado : somaCustoUnitarioVezesQtd;
 
         // Custo total da taxa de cartão
         headerRow.taxaTotalCartao = (headerRow.costs || []).reduce((sum, cost) => {
@@ -1635,5 +1631,7 @@ React.useEffect(() => {
     </>
   );
 }
+
+    
 
     
