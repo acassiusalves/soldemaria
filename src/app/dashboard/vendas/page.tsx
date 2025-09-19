@@ -946,21 +946,35 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
         if (headerRow.quantidadeTotal === 0 && rows.length > 0 && subRows.length === 0) {
             headerRow.quantidadeTotal = Number(rows[0].quantidade) || 0;
         }
+        
+        // --- NOVO CÁLCULO DE FATURAMENTO ---
+        
+        // 1) soma dos itens (se existirem)
+        const itemsSum = subRows.reduce((acc, item) => {
+          const lineTotal =
+            (Number(item.final) || 0) > 0
+              ? Number(item.final) || 0
+              : (Number(item.valorUnitario) || 0) * (Number(item.quantidade) || 1);
+          return acc + lineTotal;
+        }, 0);
 
-        const headerFinal = Number(rows.find(r => !isEmptyCell(r.final))?.final) || 0;
-
+        // 2) total do cabeçalho (apenas linhas que NÃO são detalhe)
+        const headerFinal = rows
+          .filter(r => !isDetailRow(r))
+          .map(r => Number(r.final) || 0)
+          .filter(v => v > 0)
+          .reduce((max, v) => Math.max(max, v), 0);
+        
+        // 3) escolher o total do pedido
         let orderRevenue = 0;
         if (headerFinal > 0) {
+          // se o cabeçalho traz o total do pedido, ele prevalece
           orderRevenue = headerFinal;
-        } else if (subRows.length > 0) {
-          orderRevenue = subRows.reduce((acc, item) => {
-            const lineTotal =
-              (Number(item.final) || 0) > 0
-                ? Number(item.final) || 0
-                : (Number(item.valorUnitario) || 0) * (Number(item.quantidade) || 1);
-            return acc + lineTotal;
-          }, 0);
+        } else if (itemsSum > 0) {
+          // caso contrário, soma dos itens
+          orderRevenue = itemsSum;
         } else {
+          // último fallback
           orderRevenue = Number(headerRow.final) || 0;
         }
 
@@ -1638,6 +1652,7 @@ React.useEffect(() => {
     
 
     
+
 
 
 
