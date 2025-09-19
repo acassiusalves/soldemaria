@@ -950,9 +950,6 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
             headerRow.quantidadeTotal = Number(rows[0].quantidade) || 0;
         }
         
-        // --- NOVO CÁLCULO DE FATURAMENTO ---
-        
-        // 1) soma dos itens (se existirem)
         const itemsSum = subRows.reduce((acc, item) => {
           const lineTotal =
             (Number(item.final) || 0) > 0
@@ -960,24 +957,19 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
               : (Number(item.valorUnitario) || 0) * (Number(item.quantidade) || 1);
           return acc + lineTotal;
         }, 0);
-
-        // 2) total do cabeçalho (apenas linhas que NÃO são detalhe)
+        
         const headerFinal = rows
           .filter(r => !isDetailRow(r))
           .map(r => Number(r.final) || 0)
           .filter(v => v > 0)
           .reduce((max, v) => Math.max(max, v), 0);
         
-        // 3) escolher o total do pedido
         let orderRevenue = 0;
         if (headerFinal > 0) {
-          // se o cabeçalho traz o total do pedido, ele prevalece
           orderRevenue = headerFinal;
         } else if (itemsSum > 0) {
-          // caso contrário, soma dos itens
           orderRevenue = itemsSum;
         } else {
-          // último fallback
           orderRevenue = Number(headerRow.final) || 0;
         }
 
@@ -987,11 +979,9 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
             ))
         );
         
-        // receita de logística: pegar UMA vez por pedido (evita duplicar caso venha em todas as linhas)
         const logisticRevenue = Number(rows.find(r => !isEmptyCell(r.valor))?.valor) || 0;
         headerRow.valor = logisticRevenue;
         
-        // faturamento do pedido (para bater com a planilha) = somente itens/cabeçalho
         headerRow.final = orderRevenue;
 
 
@@ -1290,16 +1280,17 @@ React.useEffect(() => {
           const vendaRef = doc(db, "vendas", docId);
           const { id, ...payload } = item;
           
-          payload.id = docId;
+          let cleanPayload = stripUndefinedDeep(payload);
+          cleanPayload.id = docId;
 
-          if (payload.data && payload.data instanceof Date) {
-            payload.data = Timestamp.fromDate(payload.data);
+          if (cleanPayload.data && cleanPayload.data instanceof Date) {
+            cleanPayload.data = Timestamp.fromDate(cleanPayload.data);
           }
-          if (payload.uploadTimestamp && payload.uploadTimestamp instanceof Date) {
-            payload.uploadTimestamp = Timestamp.fromDate(payload.uploadTimestamp);
+          if (cleanPayload.uploadTimestamp && cleanPayload.uploadTimestamp instanceof Date) {
+            cleanPayload.uploadTimestamp = Timestamp.fromDate(cleanPayload.uploadTimestamp);
           }
 
-          batch.set(vendaRef, payload);
+          batch.set(vendaRef, cleanPayload);
         });
 
         await batch.commit();
@@ -1722,6 +1713,7 @@ React.useEffect(() => {
     
 
     
+
 
 
 

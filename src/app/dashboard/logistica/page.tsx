@@ -34,7 +34,7 @@ import { getAuthClient, getDbClient } from "@/lib/firebase";
 import { NavMenu } from '@/components/nav-menu';
 
 
-import { cn } from "@/lib/utils";
+import { cn, stripUndefinedDeep } from "@/lib/utils";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -500,16 +500,17 @@ export default function LogisticaPage() {
           const logisticaRef = doc(db, "logistica", docId);
           const { id, ...payload } = item;
           
-          payload.id = docId;
+          let cleanPayload = stripUndefinedDeep(payload);
+          cleanPayload.id = docId;
 
-          if (payload.data && payload.data instanceof Date) {
-            payload.data = Timestamp.fromDate(payload.data);
+          if (cleanPayload.data && cleanPayload.data instanceof Date) {
+            cleanPayload.data = Timestamp.fromDate(cleanPayload.data);
           }
-          if (payload.uploadTimestamp && payload.uploadTimestamp instanceof Date) {
-            payload.uploadTimestamp = Timestamp.fromDate(payload.uploadTimestamp);
+          if (cleanPayload.uploadTimestamp && cleanPayload.uploadTimestamp instanceof Date) {
+            cleanPayload.uploadTimestamp = Timestamp.fromDate(cleanPayload.uploadTimestamp);
           }
 
-          batch.set(logisticaRef, payload);
+          batch.set(logisticaRef, cleanPayload);
         });
 
         await batch.commit();
@@ -788,3 +789,4 @@ export default function LogisticaPage() {
     </div>
   );
 }
+

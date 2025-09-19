@@ -65,6 +65,7 @@ import { SupportDataDialog } from "@/components/support-data-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Progress } from "@/components/ui/progress";
 import { organizeCosts } from "@/ai/flows/organize-costs";
+import { stripUndefinedDeep } from "@/lib/utils";
 
 /* ========== helpers de datas e normalização ========== */
 const toDate = (value: unknown): Date | null => {
@@ -460,16 +461,17 @@ export default function CustosVendasPage() {
           const custoRef = doc(db, "custos", docId);
           const { id, ...payload } = item;
           
-          payload.id = docId;
+          let cleanPayload = stripUndefinedDeep(payload);
+          cleanPayload.id = docId;
 
-          if (payload.data && payload.data instanceof Date) {
-            payload.data = Timestamp.fromDate(payload.data);
+          if (cleanPayload.data && cleanPayload.data instanceof Date) {
+            cleanPayload.data = Timestamp.fromDate(cleanPayload.data);
           }
-          if (payload.uploadTimestamp && payload.uploadTimestamp instanceof Date) {
-            payload.uploadTimestamp = Timestamp.fromDate(payload.uploadTimestamp);
+          if (cleanPayload.uploadTimestamp && cleanPayload.uploadTimestamp instanceof Date) {
+            cleanPayload.uploadTimestamp = Timestamp.fromDate(cleanPayload.uploadTimestamp);
           }
 
-          batch.set(custoRef, payload);
+          batch.set(custoRef, cleanPayload);
         });
 
         await batch.commit();
@@ -696,3 +698,4 @@ export default function CustosVendasPage() {
     </div>
   );
 }
+
