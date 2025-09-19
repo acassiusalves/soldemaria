@@ -1044,18 +1044,16 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
           .filter(v => Number.isFinite(v) && v > 0)
           .reduce((a, b) => a + b, 0);
 
-        if (custoTotalDeclarado > 0) {
-          headerRow.custoTotal = custoTotalDeclarado;
-        } else {
-          const baseCusto = (subRows.length > 0 ? subRows : rows);
-          headerRow.custoTotal = baseCusto.reduce((sum, item) => {
-            const custo = Number(item.custoUnitario);
-            const qtd = Number(item.quantidade) || (item.descricao ? 1 : 0);
-            return (Number.isFinite(custo) && custo >= 0 && Number.isFinite(qtd) && qtd > 0)
-              ? sum + (custo * qtd)
-              : sum;
-          }, 0);
-        }
+        const baseCusto = (subRows.length > 0 ? subRows : rows);
+        const somaCustoUnitarioVezesQtd = baseCusto.reduce((sum, item) => {
+          const custo = Number(item.custoUnitario);
+          const qtd = Number(item.quantidade) || (item.descricao ? 1 : 0);
+          return (Number.isFinite(custo) && custo >= 0 && Number.isFinite(qtd) && qtd > 0)
+            ? sum + (custo * qtd)
+            : sum;
+        }, 0);
+
+        headerRow.custoTotal = custoTotalDeclarado > 0 ? custoTotalDeclarado : somaCustoUnitarioVezesQtd;
 
         // Custo total da taxa de cartão
         headerRow.taxaTotalCartao = (headerRow.costs || []).reduce((sum, cost) => {
@@ -1090,7 +1088,13 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
                         String(group.codigo).toLowerCase().includes(filter.toLowerCase()) ||
                         String(group.nomeCliente).toLowerCase().includes(filter.toLowerCase());
       
-      const vendorMatch = vendorFilter.size === 0 || vendorFilter.has(group.vendedor || '');
+      const vendorMatch =
+        vendorFilter.size === 0 ||
+        vendorFilter.has(group.vendedor || '') ||
+        (Array.isArray(group.subRows) && group.subRows.some((sr: any) =>
+          vendorFilter.has(sr.vendedor || '')
+        ));
+      
       const deliverymanMatch = deliverymanFilter.size === 0 || deliverymanFilter.has(group.entregador || '');
       const logisticsMatch = logisticsFilter.size === 0 || logisticsFilter.has(group.logistica || '');
       const cityMatch = cityFilter.size === 0 || cityFilter.has(group.cidade || '');
@@ -1631,3 +1635,5 @@ React.useEffect(() => {
     </>
   );
 }
+
+    

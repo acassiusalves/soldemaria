@@ -446,13 +446,39 @@ export default function DashboardPage() {
         storeMetrics.cost += custoTotal;
       }
         
-      const vendorName = mainSale.vendedor || "Sem Vendedor";
-      if (!vendors[vendorName]) {
-        vendors[vendorName] = { revenue: 0, orders: new Set(), items: 0 };
+      const addVendorSlice = (vendor: string, orderCode: string, revenue: number, items: number) => {
+        const key = vendor?.trim() || "Sem Vendedor";
+        if (!vendors[key]) vendors[key] = { revenue: 0, orders: new Set(), items: 0 };
+        vendors[key].revenue += revenue;
+        vendors[key].orders.add(orderCode);
+        vendors[key].items += items;
+      };
+      
+      if (itemRows.length === 0) {
+        addVendorSlice(mainSale.vendedor, code, faturamentoLiquido, totalItems);
+      } else {
+        let totalItemBruto = 0;
+        const porVendedor: Record<string, { bruto: number; itens: number }> = {};
+      
+        for (const r of itemRows) {
+          const vend = (r.vendedor || mainSale.vendedor || "Sem Vendedor") as string;
+          const qtd = Number(r.quantidade) || 0;
+          const bruto = (Number(r.final) || 0) > 0
+            ? Number(r.final)
+            : (Number(r.valorUnitario) || 0) * qtd;
+      
+          totalItemBruto += bruto;
+          if (!porVendedor[vend]) porVendedor[vend] = { bruto: 0, itens: 0 };
+          porVendedor[vend].bruto += bruto;
+          porVendedor[vend].itens += qtd;
+        }
+      
+        Object.entries(porVendedor).forEach(([vend, agg]) => {
+          const descontoRateado = totalItemBruto > 0 ? (agg.bruto / totalItemBruto) * totalDescontos : 0;
+          const liquidoVend = agg.bruto - descontoRateado;
+          addVendorSlice(vend, code, liquidoVend, agg.itens);
+        });
       }
-      vendors[vendorName].revenue += faturamentoLiquido;
-      vendors[vendorName].orders.add(code);
-      vendors[vendorName].items += totalItems;
 
       
       const customerName = mainSale.nomeCliente || "Cliente não identificado";
@@ -809,3 +835,5 @@ export default function DashboardPage() {
       </div>
   );
 }
+
+    
