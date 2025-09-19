@@ -1181,9 +1181,7 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
     
     const totals = finalFilteredData.reduce(
         (acc, row) => {
-            const faturamentoBruto = Number(row.final) || 0;
-            
-            acc.faturamento += faturamentoBruto;
+            acc.faturamento += Number(row.final) || 0;
             acc.descontos += Number(row.valorDescontos) || 0;
             acc.custoTotal += Number(row.custoTotal) || 0;
             acc.frete += Number(row.custoFrete) || 0;
@@ -1294,8 +1292,12 @@ React.useEffect(() => {
           
           payload.id = docId;
 
-          if (payload.data instanceof Date) payload.data = Timestamp.fromDate(payload.data);
-          if (payload.uploadTimestamp instanceof Date) payload.uploadTimestamp = Timestamp.fromDate(payload.uploadTimestamp);
+          if (payload.data && payload.data instanceof Date) {
+            payload.data = Timestamp.fromDate(payload.data);
+          }
+          if (payload.uploadTimestamp && payload.uploadTimestamp instanceof Date) {
+            payload.uploadTimestamp = Timestamp.fromDate(payload.uploadTimestamp);
+          }
 
           batch.set(vendaRef, payload);
         });
@@ -1720,6 +1722,7 @@ React.useEffect(() => {
     
 
     
+
 
 
 

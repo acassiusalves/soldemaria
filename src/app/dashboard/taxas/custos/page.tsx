@@ -462,8 +462,12 @@ export default function CustosVendasPage() {
           
           payload.id = docId;
 
-          if (payload.data instanceof Date) payload.data = Timestamp.fromDate(payload.data);
-          if (payload.uploadTimestamp instanceof Date) payload.uploadTimestamp = Timestamp.fromDate(payload.uploadTimestamp);
+          if (payload.data && payload.data instanceof Date) {
+            payload.data = Timestamp.fromDate(payload.data);
+          }
+          if (payload.uploadTimestamp && payload.uploadTimestamp instanceof Date) {
+            payload.uploadTimestamp = Timestamp.fromDate(payload.uploadTimestamp);
+          }
 
           batch.set(custoRef, payload);
         });
