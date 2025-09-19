@@ -981,16 +981,18 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
           orderRevenue = Number(headerRow.final) || 0;
         }
 
-        headerRow.final = orderRevenue;
-
-        
         headerRow.costs = rows.flatMap(r => r.costs || []).filter((cost, index, self) => 
             index === self.findIndex(c => (
                 c.id === cost.id && c.valor === cost.valor
             ))
         );
-        headerRow.valor = rows.find(r => !isEmptyCell(r.valor))?.valor;
+        
+        // some TODOS os 'valor' vindos da coleção de logística para este pedido
+        const logisticRevenue = rows.reduce((acc, r) => acc + (Number(r.valor) || 0), 0);
+        headerRow.valor = logisticRevenue;
 
+        // faturamento do pedido = itens/cabeçalho + valor de logística cobrado ao cliente
+        headerRow.final = orderRevenue + logisticRevenue;
 
         // === APLICAÇÃO DAS REGRAS DE EMBALAGEM (POR PEDIDO) ===
         const qTotal = Number(headerRow.quantidadeTotal) || 0;
@@ -1100,7 +1102,6 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
   React.useEffect(() => {
     if (!areAllDataSourcesLoaded) return;
 
-    // Totais alternativos direto das linhas cruas
     const rawHeaderTotal = allData.reduce((acc, r) => {
       const isDetail = isDetailRow(r);
       const v = Number(r.final) || 0;
@@ -1118,7 +1119,6 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
 
     const chosenTotal = groupedForView.reduce((acc, g) => acc + (Number(g.final) || 0), 0);
 
-    // Top 10 pedidos com diferença entre header e soma de itens
     const diffs = groupedForView
       .map(g => {
         const code = String(g.codigo);
@@ -1138,11 +1138,15 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
       })
       .filter(d => Math.abs(d.diff) > 0.01)
       .slice(0, 10);
+    
+    const sumValorLogistica = groupedForView.reduce((acc, g) => acc + (Number(g.valor) || 0), 0);
 
     console.log("=== RECONCILIADOR ===");
     console.log("Soma cabeçalho (raw):", rawHeaderTotal.toFixed(2));
     console.log("Soma itens (raw):    ", rawItemsTotal.toFixed(2));
     console.log("Soma escolhida (UI): ", chosenTotal.toFixed(2));
+    console.log("Valor Logística (receita):", sumValorLogistica.toFixed(2));
+    console.log("Faturamento (UI - logística):", (chosenTotal - sumValorLogistica).toFixed(2));
     console.table(diffs);
     console.log("=====================");
   }, [areAllDataSourcesLoaded, allData, groupedForView]);
@@ -1705,6 +1709,7 @@ React.useEffect(() => {
     
 
     
+
 
 
 
