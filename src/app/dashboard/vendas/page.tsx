@@ -947,17 +947,23 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
             headerRow.quantidadeTotal = Number(rows[0].quantidade) || 0;
         }
 
+        const headerFinal = Number(rows.find(r => !isEmptyCell(r.final))?.final) || 0;
+
         let orderRevenue = 0;
-        if (subRows.length > 0) {
-            orderRevenue = subRows.reduce((acc, item) => {
-                const itemValor = (Number(item.final) || 0) > 0 
-                    ? (Number(item.final) || 0)
-                    : ((Number(item.valorUnitario) || 0) * (Number(item.quantidade) || 1));
-                return acc + itemValor;
-            }, 0);
+        if (headerFinal > 0) {
+          orderRevenue = headerFinal;
+        } else if (subRows.length > 0) {
+          orderRevenue = subRows.reduce((acc, item) => {
+            const lineTotal =
+              (Number(item.final) || 0) > 0
+                ? Number(item.final) || 0
+                : (Number(item.valorUnitario) || 0) * (Number(item.quantidade) || 1);
+            return acc + lineTotal;
+          }, 0);
         } else {
-            orderRevenue = Number(headerRow.final) || 0;
+          orderRevenue = Number(headerRow.final) || 0;
         }
+
         headerRow.final = orderRevenue;
 
         
@@ -1632,5 +1638,6 @@ React.useEffect(() => {
     
 
     
+
 
 
