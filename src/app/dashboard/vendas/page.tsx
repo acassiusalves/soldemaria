@@ -950,9 +950,10 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
         let orderRevenue = 0;
         if (subRows.length > 0) {
             orderRevenue = subRows.reduce((acc, item) => {
-                const itemQuantidade = Number(item.quantidade) || 1;
-                const itemValorUnitario = Number(item.valorUnitario) || 0;
-                return acc + (itemQuantidade * itemValorUnitario);
+                const itemValor = (Number(item.final) || 0) > 0 
+                    ? (Number(item.final) || 0)
+                    : ((Number(item.valorUnitario) || 0) * (Number(item.quantidade) || 1));
+                return acc + itemValor;
             }, 0);
         } else {
             orderRevenue = Number(headerRow.final) || 0;
@@ -1102,9 +1103,9 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
     
     const totals = finalFilteredData.reduce(
         (acc, row) => {
-            const faturamentoLiquido = (Number(row.final) || 0) - (Number(row.valorDescontos) || 0);
+            const faturamentoBruto = Number(row.final) || 0;
             
-            acc.faturamento += faturamentoLiquido;
+            acc.faturamento += faturamentoBruto;
             acc.descontos += Number(row.valorDescontos) || 0;
             acc.custoTotal += Number(row.custoTotal) || 0;
             acc.frete += Number(row.custoFrete) || 0;
@@ -1631,4 +1632,5 @@ React.useEffect(() => {
     
 
     
+
 
