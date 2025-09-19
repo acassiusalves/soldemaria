@@ -947,18 +947,17 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
             headerRow.quantidadeTotal = Number(rows[0].quantidade) || 0;
         }
 
-        // CORRECTED REVENUE CALCULATION
-        const orderRevenue = subRows.reduce((acc, item) => {
-            const itemFinal = Number(item.final) || 0;
-            const itemValorUnitario = Number(item.valorUnitario) || 0;
-            const itemQuantidade = Number(item.quantidade) || 1;
-            
-            if (itemFinal > 0) return acc + itemFinal;
-            if (itemValorUnitario > 0 && itemQuantidade > 0) return acc + (itemValorUnitario * itemQuantidade);
-            return acc;
-        }, 0);
-        
-        headerRow.final = orderRevenue > 0 ? orderRevenue : (Number(headerRow.final) || 0);
+        let orderRevenue = 0;
+        if (subRows.length > 0) {
+            orderRevenue = subRows.reduce((acc, item) => {
+                const itemQuantidade = Number(item.quantidade) || 1;
+                const itemValorUnitario = Number(item.valorUnitario) || 0;
+                return acc + (itemQuantidade * itemValorUnitario);
+            }, 0);
+        } else {
+            orderRevenue = Number(headerRow.final) || 0;
+        }
+        headerRow.final = orderRevenue;
 
         
         headerRow.costs = rows.flatMap(r => r.costs || []).filter((cost, index, self) => 
@@ -1632,3 +1631,4 @@ React.useEffect(() => {
     
 
     
+
