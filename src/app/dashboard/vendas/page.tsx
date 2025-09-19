@@ -987,12 +987,13 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
             ))
         );
         
-        // some TODOS os 'valor' vindos da coleção de logística para este pedido
-        const logisticRevenue = rows.reduce((acc, r) => acc + (Number(r.valor) || 0), 0);
+        // receita de logística: pegar UMA vez por pedido (evita duplicar caso venha em todas as linhas)
+        const logisticRevenue = Number(rows.find(r => !isEmptyCell(r.valor))?.valor) || 0;
         headerRow.valor = logisticRevenue;
+        
+        // faturamento do pedido (para bater com a planilha) = somente itens/cabeçalho
+        headerRow.final = orderRevenue;
 
-        // faturamento do pedido = itens/cabeçalho + valor de logística cobrado ao cliente
-        headerRow.final = orderRevenue + logisticRevenue;
 
         // === APLICAÇÃO DAS REGRAS DE EMBALAGEM (POR PEDIDO) ===
         const qTotal = Number(headerRow.quantidadeTotal) || 0;
@@ -1146,7 +1147,7 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
     console.log("Soma itens (raw):    ", rawItemsTotal.toFixed(2));
     console.log("Soma escolhida (UI): ", chosenTotal.toFixed(2));
     console.log("Valor Logística (receita):", sumValorLogistica.toFixed(2));
-    console.log("Faturamento (UI - logística):", (chosenTotal - sumValorLogistica).toFixed(2));
+    console.log("Faturamento (UI):", (chosenTotal).toFixed(2));
     console.table(diffs);
     console.log("=====================");
   }, [areAllDataSourcesLoaded, allData, groupedForView]);
@@ -1186,6 +1187,7 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
             acc.descontos += Number(row.valorDescontos) || 0;
             acc.custoTotal += Number(row.custoTotal) || 0;
             acc.frete += Number(row.custoFrete) || 0;
+            acc.receitaLogistica += Number(row.valor) || 0;
             
             return acc;
         },
@@ -1193,7 +1195,8 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
             faturamento: 0, 
             descontos: 0, 
             custoTotal: 0, 
-            frete: 0, 
+            frete: 0,
+            receitaLogistica: 0,
         }
     );
 
@@ -1202,6 +1205,7 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
           descontos: totals.descontos,
           custoTotal: totals.custoTotal,
           frete: totals.frete,
+          receitaLogistica: totals.receitaLogistica,
       }
   }, [finalFilteredData, areAllDataSourcesLoaded]);
 
@@ -1463,6 +1467,7 @@ React.useEffect(() => {
     descontos: 0,
     custoTotal: 0,
     frete: 0,
+    receitaLogistica: 0,
   };
 
   const displaySummary = areAllDataSourcesLoaded ? finalSummary : loadingSummary;
@@ -1632,7 +1637,7 @@ React.useEffect(() => {
           )}
         </Card>
         
-        <div className="grid gap-4 md:grid-cols-4">
+        <div className="grid gap-4 md:grid-cols-5">
           <SummaryCard 
             title="Faturamento" 
             value={displaySummary?.faturamento ?? 0} 
@@ -1651,6 +1656,12 @@ React.useEffect(() => {
             icon={areAllDataSourcesLoaded ? <Archive className="text-primary" /> : <Loader2 className="animate-spin text-muted-foreground" />}
             isCurrency
            />
+           <SummaryCard 
+            title="Entrega Cobrado" 
+            value={displaySummary?.receitaLogistica ?? 0}
+            icon={areAllDataSourcesLoaded ? <Receipt className="text-primary" /> : <Loader2 className="animate-spin text-muted-foreground" />}
+            isCurrency
+          />
           <SummaryCard 
             title="Frete" 
             value={displaySummary?.frete ?? 0}
@@ -1709,6 +1720,7 @@ React.useEffect(() => {
     
 
     
+
 
 
 
