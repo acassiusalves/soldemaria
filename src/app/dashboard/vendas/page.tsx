@@ -243,35 +243,42 @@ const cleanNumericValue = (value: any): number | string => {
   if (typeof value === "number") return value;
   if (typeof value !== "string") return value;
 
-  let s = value.replace(/\u00A0/g, " ").trim(); // tira NBSP
+  let s = value.replace(/\u00A0/g, " ").trim(); // NBSP
   if (!s) return s;
 
   // não tentar converter datas
   if (isDateLike(s)) return s;
 
-  // remove símbolos de moeda e espaços
-  s = s.replace(/\s/g, "").replace(/R\$/i, "");
+  // (123,45) -> -123,45  |  R$ -123,45 -> -123,45
+  const isParenNegative = /^\(.*\)$/.test(s);
+  s = s.replace(/[()]/g, "").replace(/\s/g, "").replace(/R\$/i, "");
+  if (/^-?\d+$/.test(s)) return Number(s); // inteiro puro
 
   const hasComma = s.includes(",");
-  const hasDot   = s.includes(".");
+  const hasDot = s.includes(".");
 
-  if (hasComma && hasDot) {
-    const lastDot = s.lastIndexOf('.');
-    const lastComma = s.lastIndexOf(',');
-    // 1.234,56 (pt-BR) -> 1234.56
+  // Caso típico BR: milhar com ponto e sem vírgula -> remover pontos
+  if (hasDot && !hasComma && /^\d{1,3}(\.\d{3})+$/.test(s)) {
+    s = s.replace(/\./g, "");
+  } else if (hasComma && hasDot) {
+    // 1.234,56 -> 1234.56
+    const lastDot = s.lastIndexOf(".");
+    const lastComma = s.lastIndexOf(",");
     if (lastComma > lastDot) {
       s = s.replace(/\./g, "").replace(",", ".");
-    } else { // 1,234.56 (en-US) -> 1234.56
+    } else {
+      // 1,234.56 -> 1234.56 (formato en-US)
       s = s.replace(/,/g, "");
     }
   } else if (hasComma) {
     // 1234,56 -> 1234.56
     s = s.replace(",", ".");
   }
-  // Se tiver só ponto (1234.56), já está ok
-  // Se não tiver nem ponto nem vírgula, já está ok
+  // se chegou aqui e tem só ponto, já está decimal correto
 
-  const num = Number(s);
+  let num = Number(s);
+  if (isParenNegative) num = -Math.abs(num);
+
   return Number.isFinite(num) && /[0-9]/.test(s) ? num : value;
 };
 
@@ -283,14 +290,10 @@ export const resolveSystemKey = (normalized: string): string => {
 /* ========== normalizador de código (chave) ========== */
 const normCode = (v: any) => {
   let s = String(v ?? "").replace(/\u00A0/g, " ").trim();
-
   // 357528.0 -> 357528
   if (/^\d+(?:\.0+)?$/.test(s)) s = s.replace(/\.0+$/, "");
-
-  // remove tudo que não é dígito (ponto, traço, espaço, etc.)
-  s = s.replace(/[^\d]/g, "");
-  // remove zeros à esquerda
-  s = s.replace(/^0+/, "");
+  // manter letras e números; remover separadores; padronizar maiúsculas
+  s = s.replace(/[^\p{L}\p{N}]/gu, "").toUpperCase();
   return s;
 };
 
@@ -305,20 +308,20 @@ const isEmptyCell = (v: any) => {
 };
 
 /* ========== reconhecer linhas de detalhe ========== */
-const ITEM_KEYS = [
-  "item","descricao","quantidade","custoUnitario","valorUnitario",
-  "valorCredito","valorDescontos"
+const ITEM_HINT_KEYS = [
+  "item", "descricao", "valorUnitario", "quantidade"
 ];
-// campos vindos de planilhas de apoio (recebimentos)
 const SUPPORT_DETAIL_KEYS = [
   "valor_da_parcela","modo_de_pagamento","instituicao_financeira",
   "bandeira1","bandeira2","parcelas1","parcelas2",
   "valorParcela1","valorParcela2","taxaCartao1","taxaCartao2"
 ];
 
-const isDetailRow = (row: Record<string, any>) =>
-  ITEM_KEYS.some(k => !isEmptyCell(row[k])) ||
-  SUPPORT_DETAIL_KEYS.some(k => !isEmptyCell(row[k]));
+const isDetailRow = (row: Record<string, any>) => {
+  const hasItemFields = ITEM_HINT_KEYS.some(k => !isEmptyCell(row[k]));
+  const hasSupportFields = SUPPORT_DETAIL_KEYS.some(k => !isEmptyCell(row[k]));
+  return hasItemFields || hasSupportFields;
+};
 
 /* ========== mapear linha bruta -> chaves do sistema ========== */
 const mapRowToSystem = (row: Record<string, any>) => {
@@ -1094,6 +1097,56 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
     return applyCustomCalculations(aggregatedData);
   }, [allData, date, custosEmbalagem, taxasOperadoras, applyCustomCalculations]);
   
+  React.useEffect(() => {
+    if (!areAllDataSourcesLoaded) return;
+
+    // Totais alternativos direto das linhas cruas
+    const rawHeaderTotal = allData.reduce((acc, r) => {
+      const isDetail = isDetailRow(r);
+      const v = Number(r.final) || 0;
+      return !isDetail && v > 0 ? acc + v : acc;
+    }, 0);
+
+    const rawItemsTotal = allData.reduce((acc, r) => {
+      if (!isDetailRow(r)) return acc;
+      const vFinal = Number(r.final) || 0;
+      const vUnit = Number(r.valorUnitario) || 0;
+      const q = Number(r.quantidade) || 0;
+      const line = vFinal > 0 ? vFinal : (vUnit * (q || (r.descricao ? 1 : 0)));
+      return acc + (Number.isFinite(line) ? line : 0);
+    }, 0);
+
+    const chosenTotal = groupedForView.reduce((acc, g) => acc + (Number(g.final) || 0), 0);
+
+    // Top 10 pedidos com diferença entre header e soma de itens
+    const diffs = groupedForView
+      .map(g => {
+        const code = String(g.codigo);
+        const rows = allData.filter(r => normCode(r.codigo) === normCode(code));
+        const items = rows.filter(isDetailRow);
+        const itemsSum = items.reduce((a, it) => {
+          const vFinal = Number(it.final) || 0;
+          const vUnit = Number(it.valorUnitario) || 0;
+          const q = Number(it.quantidade) || (it.descricao ? 1 : 0);
+          return a + (vFinal > 0 ? vFinal : vUnit * q);
+        }, 0);
+        const header = rows.filter(r => !isDetailRow(r))
+          .map(r => Number(r.final) || 0)
+          .filter(v => v > 0)
+          .reduce((m, v) => Math.max(m, v), 0);
+        return { code, header, itemsSum, chosen: Number(g.final) || 0, diff: (header || itemsSum) - (Number(g.final) || 0) };
+      })
+      .filter(d => Math.abs(d.diff) > 0.01)
+      .slice(0, 10);
+
+    console.log("=== RECONCILIADOR ===");
+    console.log("Soma cabeçalho (raw):", rawHeaderTotal.toFixed(2));
+    console.log("Soma itens (raw):    ", rawItemsTotal.toFixed(2));
+    console.log("Soma escolhida (UI): ", chosenTotal.toFixed(2));
+    console.table(diffs);
+    console.log("=====================");
+  }, [areAllDataSourcesLoaded, allData, groupedForView]);
+  
   const finalFilteredData = React.useMemo(() => {
     return groupedForView.filter(group => {
       if (!group) return false;
@@ -1652,6 +1705,7 @@ React.useEffect(() => {
     
 
     
+
 
 
 
