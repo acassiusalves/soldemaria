@@ -979,11 +979,12 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
             ))
         );
         
+        // receita de logística: pegar UMA vez por pedido (evita duplicar caso venha em todas as linhas)
         const logisticRevenue = Number(rows.find(r => !isEmptyCell(r.valor))?.valor) || 0;
         headerRow.valor = logisticRevenue;
-        
-        headerRow.final = orderRevenue;
 
+        // faturamento do pedido (para bater com a planilha) = somente itens/cabeçalho
+        headerRow.final = orderRevenue;
 
         // === APLICAÇÃO DAS REGRAS DE EMBALAGEM (POR PEDIDO) ===
         const qTotal = Number(headerRow.quantidadeTotal) || 0;
@@ -1713,6 +1714,7 @@ React.useEffect(() => {
     
 
     
+
 
 
 
