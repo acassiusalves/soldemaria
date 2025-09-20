@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import React, { useState, useMemo, useEffect, useRef } from "react";
@@ -83,21 +82,16 @@ const REQUIRED_ALWAYS_ON = ["codigo"];
 // Converte qualquer coisa parecida com data em Date
 const toDateSafe = (value: unknown): Date | null => {
   if (!value) return null;
-
-  // Date nativo
   if (value instanceof Date && isValid(value)) return value;
-
-  // Objetos do Firestore (duas formas seguras)
+  
   const anyVal = value as any;
-  // 1) Qualquer objeto com toDate()
-  if (anyVal && typeof anyVal.toDate === "function") {
+  if (anyVal && typeof anyVal.toDate === 'function') {
     const d = anyVal.toDate();
-    return isValid(d) ? d : null;
+    if (isValid(d)) return d;
   }
-  // 2) Objeto com { seconds, nanoseconds }
-  if (anyVal && typeof anyVal.seconds === "number") {
+  if (anyVal && typeof anyVal.seconds === 'number' && typeof anyVal.nanoseconds === 'number') {
     const d = new Date(anyVal.seconds * 1000);
-    return isValid(d) ? d : null;
+    if (isValid(d)) return d;
   }
 
   // Número serial de Excel (provável)
@@ -723,7 +717,10 @@ export default function DetailedSalesHistoryTable({
   );
 
   const renderCell = (row: any, column: ColumnDef) => {
-    if (column.cell) return column.cell({ row });
+    if (column.id === 'data') {
+        const value = row.data;
+        return formatPt(value);
+    }
   
     let value = row[column.id];
     if (column.id.startsWith('custom_') || value === null || value === undefined) {
@@ -747,7 +744,6 @@ export default function DetailedSalesHistoryTable({
         if (!isNaN(n)) return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
     }
   
-    if (column.id === "data") return formatPt(value); // This is now a fallback in case cell fn is not there
     if ((column.id.startsWith('custom_') || column.id.startsWith('Custom_')) && typeof value === 'number' && !isPercentage) return value.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   
     return String(value);
@@ -1190,3 +1186,6 @@ const renderEmbalagemTab = (row: any) => {
   );
 }
 
+
+
+    
