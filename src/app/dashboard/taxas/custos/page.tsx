@@ -466,8 +466,13 @@ export default function CustosVendasPage() {
 
           const dateObject = toDate(cleanPayload.data);
           if (dateObject) {
-              cleanPayload.data = Timestamp.fromDate(dateObject);
+            cleanPayload.data = Timestamp.fromDate(dateObject);
+          } else if (cleanPayload.data && typeof (cleanPayload.data as any).toDate === 'function') {
+            // já é Timestamp-like, mantém
+          } else {
+            delete (cleanPayload as any).data;
           }
+          
           const uploadTimestampObject = toDate(cleanPayload.uploadTimestamp);
           if (uploadTimestampObject) {
             cleanPayload.uploadTimestamp = Timestamp.fromDate(uploadTimestampObject);

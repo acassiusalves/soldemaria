@@ -1109,6 +1109,7 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
 
     const chosenTotal = groupedForView.reduce((acc, g) => acc + (Number(g.final) || 0), 0);
 
+    // Top 10 pedidos com diferença entre header e soma de itens
     const diffs = groupedForView
       .map(g => {
         const code = String(g.codigo);
@@ -1282,9 +1283,15 @@ React.useEffect(() => {
           let cleanPayload = stripUndefinedDeep(payload);
           cleanPayload.id = docId;
 
+          // Converter 'data' para Timestamp SEM jamais apagar se já for válida
           const dateObject = toDate(cleanPayload.data);
           if (dateObject) {
-              cleanPayload.data = Timestamp.fromDate(dateObject);
+            cleanPayload.data = Timestamp.fromDate(dateObject);
+          } else if (cleanPayload.data && typeof (cleanPayload.data as any).toDate === 'function') {
+            // já é Timestamp-like, mantém
+          } else {
+            // se veio lixo (ex.: {} por versões antigas), remove
+            delete (cleanPayload as any).data;
           }
           
           const uploadTimestampObject = toDate(cleanPayload.uploadTimestamp);
@@ -1715,6 +1722,7 @@ React.useEffect(() => {
     
 
     
+
 
 
 
