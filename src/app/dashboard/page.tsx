@@ -179,7 +179,8 @@ export default function DashboardPage() {
   const [allLogistics, setAllLogistics] = React.useState<VendaDetalhada[]>([]);
   const [taxasOperadoras, setTaxasOperadoras] = React.useState<Operadora[]>([]);
   const [custosData, setCustosData] = React.useState<VendaDetalhada[]>([]);
-  const [custosEmbalagem, setCustosEmbalagem] = React.useState<Embalagem[]>([]);
+  const [custosEmbalagem, setCustosEmbalagem,
+] = React.useState<Embalagem[]>([]);
   
   React.useEffect(() => {
     (async () => {
@@ -301,204 +302,193 @@ export default function DashboardPage() {
     }
 
     for (const [code, sales] of salesGroups.entries()) {
-      const itemRows = sales.filter(isDetailRow);
-      const headerRows = sales.filter(s => !isDetailRow(s));
-      const mainSale = headerRows.length > 0 ? headerRows[0] : (itemRows.length > 0 ? itemRows[0] : sales[0]);
-      
-      const valorFinalDoCabecalho = Number(mainSale.final) || 0;
-      let totalFinal = 0;
-      if (valorFinalDoCabecalho > 0) {
-          totalFinal = valorFinalDoCabecalho;
-      } else if(itemRows.length > 0) {
-          totalFinal = itemRows.reduce((acc, row) => {
-              const itemFinal = Number(row.final) || 0;
-              const itemQuantidade = Number(row.quantidade) || 0;
-              const itemValorUnitario = Number(row.valorUnitario) || 0;
-              
-              if (itemFinal > 0) return acc + itemFinal;
-              if (itemQuantidade > 0 && itemValorUnitario > 0) return acc + (itemQuantidade * itemValorUnitario);
-              return acc;
-          }, 0);
-      } else if (sales.length > 0) {
-           totalFinal = Number(sales[0].final) || 0;
-      }
+        const itemRows = sales.filter(isDetailRow);
+        const headerRows = sales.filter(s => !isDetailRow(s));
+        const mainSale = headerRows.length > 0 ? headerRows[0] : (itemRows.length > 0 ? itemRows[0] : sales[0]);
 
-      const totalDescontos = sales.reduce((acc, s) => acc + (Number(s.valorDescontos) || 0), 0);
-      
-      const faturamentoLiquido = totalFinal - totalDescontos;
-      summary.faturamento += faturamentoLiquido;
-      summary.descontos += totalDescontos;
+        const itemsSum = itemRows.reduce((acc, item) => {
+            const lineTotal = (Number(item.final) || 0) > 0
+                ? Number(item.final) || 0
+                : (Number(item.valorUnitario) || 0) * (Number(item.quantidade) || 1);
+            return acc + lineTotal;
+        }, 0);
+
+        const headerFinal = headerRows
+            .map(r => Number(r.final) || 0)
+            .filter(v => v > 0)
+            .reduce((max, v) => Math.max(max, v), 0);
         
-      const custoTotalDeclarado = sales
-        .map(r => Number(r.custoTotal))
-        .filter(v => Number.isFinite(v) && v > 0)
-        .reduce((a, b) => a + b, 0);
-
-      const baseCusto = (itemRows.length > 0 ? itemRows : sales);
-      const somaCustoUnitarioVezesQtd = baseCusto.reduce((sum, item) => {
-        const custo = Number(item.custoUnitario);
-        const qtd = Number(item.quantidade) || (item.descricao ? 1 : 0);
-        return (Number.isFinite(custo) && custo >= 0 && Number.isFinite(qtd) && qtd > 0)
-          ? sum + (custo * qtd)
-          : sum;
-      }, 0);
-
-      const custoTotal = custoTotalDeclarado > 0 ? custoTotalDeclarado : somaCustoUnitarioVezesQtd;
-
-      const totalItems = itemRows.reduce((acc, s) => acc + (Number(s.quantidade) || 0), 0);
-      
-      const custoFrete = sales.reduce((acc, s) => acc + (Number(s.custoFrete) || 0), 0);
-        
-      summary.custoTotal += custoTotal;
-      summary.frete += custoFrete;
-      summary.totalItems += totalItems;
-
-      const custosDoPedido = custosByCode.get(code) || [];
-      const taxaTotalCartao = custosDoPedido.reduce((sum, cost) => {
-          const valor = Number(cost.valor) || 0;
-          const modo = (cost.modo_de_pagamento || '').toLowerCase();
-          const tipo = (cost.tipo_pagamento || '').toLowerCase();
-          const instituicao = (cost.instituicao_financeira || '').toLowerCase();
-          const parcela = Number(cost.parcela) || 1;
-          let taxaPercentual = 0;
-          const operadora = taxasOperadoras.find(op => op.nome.toLowerCase() === instituicao);
-          if (operadora) {
-              if (modo.includes('cartão') && tipo.includes('débito')) {
-                  taxaPercentual = operadora.taxaDebito || 0;
-              } else if (modo.includes('cartão') && tipo.includes('crédito')) {
-                  const taxaCredito = operadora.taxasCredito.find(t => t.numero === parcela);
-                  taxaPercentual = taxaCredito?.taxa || 0;
-              }
-          }
-          return sum + (valor * (taxaPercentual / 100));
-      }, 0);
-      summary.taxaCartao += taxaTotalCartao;
-      
-      const qTotal = Number(totalItems) || 0;
-      if (qTotal > 0 && Array.isArray(custosEmbalagem) && custosEmbalagem.length > 0) {
-        const logStr = String(mainSale.logistica ?? 'Não especificado');
-        const modalidade = /loja/i.test(logStr) ? 'Loja' : 'Delivery';
-
-        let packagingCost = 0;
-
-        const toNum = (x: any) => {
-          if (typeof x === 'number') return x;
-          if (typeof x === 'string') {
-            const n = Number(x.replace(/\./g, '').replace(',', '.'));
-            return Number.isFinite(n) ? n : 0;
-          }
-          return 0;
-        };
-        const findBy = (re: RegExp) => custosEmbalagem.find(e => re.test(normalizeText(e.nome)));
-
-        if (modalidade === 'Delivery') {
-          const plastico = findBy(/(sacola|saco).*(plastico|plastica)/);
-          if (plastico) packagingCost += toNum(plastico.custo);
-          const tnt = findBy(/((sacola|saco).*)?tnt\b/);
-          if (tnt) packagingCost += toNum(tnt.custo) * qTotal;
-
+        let orderRevenue = 0;
+        if (headerFinal > 0) {
+            orderRevenue = headerFinal;
+        } else if (itemsSum > 0) {
+            orderRevenue = itemsSum;
         } else {
-          const qty = Math.ceil(qTotal / 2);
-          const sacolaLoja =
-            findBy(/(sacola|saco).*(loja)/) ||
-            custosEmbalagem.find(e =>
-              Array.isArray(e.modalidades) &&
-              e.modalidades.some((m: any) => /loja|todos/i.test(String(m)))
-            );
-
-          if (sacolaLoja) packagingCost += toNum(sacolaLoja.custo) * qty;
+            orderRevenue = Number(mainSale.final) || 0;
         }
-        summary.custoEmbalagem += packagingCost;
-      }
 
-      // 1) "Tipo" do pedido (prioriza cabeçalho; se vazio, usa a primeira linha do grupo que tiver)
-      let tipoPedido = extractTipo(mainSale);
-      if (!tipoPedido || tipoPedido === '') {
-        const linhaComTipo = sales.find(s => !!extractTipo(s));
-        tipoPedido = extractTipo(linhaComTipo);
-      }
-      
-      // 2) É delivery?
-      const isDelivery = tipoPedido === 'delivery';
-
-      // 3) "Valor Final" do pedido — somatório pedido a pedido
-      //    - pega do cabeçalho (coluna "Valor Final" do seu Vendas)
-      //    - se não vier, usa seu cálculo por itens (totalFinal já calculado acima)
-      let valorFinalPedido = extractValorFinalPedido(mainSale);
-      if (!valorFinalPedido || valorFinalPedido === 0) {
-        valorFinalPedido = totalFinal; // fallback: soma por itens
-      }
-      
-      // 4) custo do pedido já está em 'custoTotal' (soma custos dos itens)
-      if (isDelivery) {
-        // ATENÇÃO: aqui é exatamente como você definiu:
-        // Faturamento Delivery = somatório da coluna Valor Final (ou fallback)
-        deliveryMetrics.revenue += valorFinalPedido;
-
-        // Ticket Médio = baseado nesses pedidos (conta 1 pedido)
-        deliveryMetrics.orders += 1;
-
-        // Margem Bruta = Faturamento Delivery - Custo (dos itens)
-        deliveryMetrics.cost += custoTotal;
-      } else {
-        storeMetrics.revenue += valorFinalPedido;
-        storeMetrics.orders += 1;
-        storeMetrics.cost += custoTotal;
-      }
+        const totalDescontos = sales.reduce((acc, s) => acc + (Number(s.valorDescontos) || 0), 0);
         
-      const addVendorSlice = (vendor: string, orderCode: string, revenue: number, items: number) => {
-        const key = vendor?.trim() || "Sem Vendedor";
-        if (!vendors[key]) vendors[key] = { revenue: 0, orders: new Set(), items: 0 };
-        vendors[key].revenue += revenue;
-        vendors[key].orders.add(orderCode);
-        vendors[key].items += items;
-      };
-      
-      if (itemRows.length === 0) {
-        addVendorSlice(mainSale.vendedor, code, faturamentoLiquido, totalItems);
-      } else {
-        let totalItemBruto = 0;
-        const porVendedor: Record<string, { bruto: number; itens: number }> = {};
-      
-        for (const r of itemRows) {
-          const vend = (r.vendedor || mainSale.vendedor || "Sem Vendedor") as string;
-          const qtd = Number(r.quantidade) || 0;
-          const bruto = (Number(r.final) || 0) > 0
-            ? Number(r.final)
-            : (Number(r.valorUnitario) || 0) * qtd;
-      
-          totalItemBruto += bruto;
-          if (!porVendedor[vend]) porVendedor[vend] = { bruto: 0, itens: 0 };
-          porVendedor[vend].bruto += bruto;
-          porVendedor[vend].itens += qtd;
-        }
-      
-        Object.entries(porVendedor).forEach(([vend, agg]) => {
-          const descontoRateado = totalItemBruto > 0 ? (agg.bruto / totalItemBruto) * totalDescontos : 0;
-          const liquidoVend = agg.bruto - descontoRateado;
-          addVendorSlice(vend, code, liquidoVend, agg.itens);
-        });
-      }
+        const faturamentoLiquido = orderRevenue - totalDescontos;
+        summary.faturamento += faturamentoLiquido;
+        summary.descontos += totalDescontos;
+        
+        const custoTotalDeclarado = sales
+            .map(r => Number(r.custoTotal))
+            .filter(v => Number.isFinite(v) && v > 0)
+            .reduce((a, b) => a + b, 0);
 
+        const baseCusto = (itemRows.length > 0 ? itemRows : sales);
+        const somaCustoUnitarioVezesQtd = baseCusto.reduce((sum, item) => {
+            const custo = Number(item.custoUnitario);
+            const qtd = Number(item.quantidade) || (item.descricao ? 1 : 0);
+            return (Number.isFinite(custo) && custo >= 0 && Number.isFinite(qtd) && qtd > 0)
+            ? sum + (custo * qtd)
+            : sum;
+        }, 0);
+
+        const custoTotal = custoTotalDeclarado > 0 ? custoTotalDeclarado : somaCustoUnitarioVezesQtd;
+        summary.custoTotal += custoTotal;
+        
+        const totalItems = itemRows.reduce((acc, s) => acc + (Number(s.quantidade) || 0), 0);
+        summary.totalItems += totalItems;
+        
+        const custoFrete = sales.reduce((acc, s) => acc + (Number(s.custoFrete) || 0), 0);
+        summary.frete += custoFrete;
       
-      const customerName = mainSale.nomeCliente || "Cliente não identificado";
-      if (!customers[customerName]) {
-          customers[customerName] = { revenue: 0, orders: new Set() };
-      }
-      customers[customerName].revenue += faturamentoLiquido;
-      customers[customerName].orders.add(code);
-      
-      sales.forEach(item => {
-          if(item.descricao) {
-              if (!products[item.descricao]) {
-                  products[item.descricao] = { quantity: 0, revenue: 0 };
-              }
-              const quantity = Number(item.quantidade) || 0;
-              const revenue = (Number(item.final) || 0) > 0 ? (Number(item.final) || 0) : ((Number(item.valorUnitario) || 0) * quantity);
-              products[item.descricao].quantity += quantity;
-              products[item.descricao].revenue += revenue;
-          }
-      });
+        const custosDoPedido = custosByCode.get(code) || [];
+        const taxaTotalCartao = custosDoPedido.reduce((sum, cost) => {
+            const valor = Number(cost.valor) || 0;
+            const modo = (cost.modo_de_pagamento || '').toLowerCase();
+            const tipo = (cost.tipo_pagamento || '').toLowerCase();
+            const instituicao = (cost.instituicao_financeira || '').toLowerCase();
+            const parcela = Number(cost.parcela) || 1;
+            let taxaPercentual = 0;
+            const operadora = taxasOperadoras.find(op => op.nome.toLowerCase() === instituicao);
+            if (operadora) {
+                if (modo.includes('cartão') && tipo.includes('débito')) {
+                    taxaPercentual = operadora.taxaDebito || 0;
+                } else if (modo.includes('cartão') && tipo.includes('crédito')) {
+                    const taxaCredito = operadora.taxasCredito.find(t => t.numero === parcela);
+                    taxaPercentual = taxaCredito?.taxa || 0;
+                }
+            }
+            return sum + (valor * (taxaPercentual / 100));
+        }, 0);
+        summary.taxaCartao += taxaTotalCartao;
+        
+        const qTotal = Number(totalItems) || 0;
+        if (qTotal > 0 && Array.isArray(custosEmbalagem) && custosEmbalagem.length > 0) {
+            const logStr = String(mainSale.logistica ?? 'Não especificado');
+            const modalidade = /loja/i.test(logStr) ? 'Loja' : 'Delivery';
+
+            let packagingCost = 0;
+
+            const toNum = (x: any) => {
+            if (typeof x === 'number') return x;
+            if (typeof x === 'string') {
+                const n = Number(x.replace(/\./g, '').replace(',', '.'));
+                return Number.isFinite(n) ? n : 0;
+            }
+            return 0;
+            };
+            const findBy = (re: RegExp) => custosEmbalagem.find(e => re.test(normalizeText(e.nome)));
+
+            if (modalidade === 'Delivery') {
+            const plastico = findBy(/(sacola|saco).*(plastico|plastica)/);
+            if (plastico) packagingCost += toNum(plastico.custo);
+            const tnt = findBy(/((sacola|saco).*)?tnt\b/);
+            if (tnt) packagingCost += toNum(tnt.custo) * qTotal;
+
+            } else {
+            const qty = Math.ceil(qTotal / 2);
+            const sacolaLoja =
+                findBy(/(sacola|saco).*(loja)/) ||
+                custosEmbalagem.find(e =>
+                Array.isArray(e.modalidades) &&
+                e.modalidades.some((m: any) => /loja|todos/i.test(String(m)))
+                );
+
+            if (sacolaLoja) packagingCost += toNum(sacolaLoja.custo) * qty;
+            }
+            summary.custoEmbalagem += packagingCost;
+        }
+
+        let tipoPedido = extractTipo(mainSale);
+        if (!tipoPedido || tipoPedido === '') {
+            const linhaComTipo = sales.find(s => !!extractTipo(s));
+            tipoPedido = extractTipo(linhaComTipo);
+        }
+        
+        const isDelivery = tipoPedido === 'delivery';
+        
+        let valorFinalPedido = extractValorFinalPedido(mainSale);
+        if (!valorFinalPedido || valorFinalPedido === 0) {
+            valorFinalPedido = orderRevenue;
+        }
+        
+        if (isDelivery) {
+            deliveryMetrics.revenue += valorFinalPedido;
+            deliveryMetrics.orders += 1;
+            deliveryMetrics.cost += custoTotal;
+        } else {
+            storeMetrics.revenue += valorFinalPedido;
+            storeMetrics.orders += 1;
+            storeMetrics.cost += custoTotal;
+        }
+        
+        const addVendorSlice = (vendor: string, orderCode: string, revenue: number, items: number) => {
+            const key = vendor?.trim() || "Sem Vendedor";
+            if (!vendors[key]) vendors[key] = { revenue: 0, orders: new Set(), items: 0 };
+            vendors[key].revenue += revenue;
+            vendors[key].orders.add(orderCode);
+            vendors[key].items += items;
+        };
+        
+        if (itemRows.length === 0) {
+            addVendorSlice(mainSale.vendedor, code, faturamentoLiquido, totalItems);
+        } else {
+            let totalItemBruto = 0;
+            const porVendedor: Record<string, { bruto: number; itens: number }> = {};
+        
+            for (const r of itemRows) {
+            const vend = (r.vendedor || mainSale.vendedor || "Sem Vendedor") as string;
+            const qtd = Number(r.quantidade) || 0;
+            const bruto = (Number(r.final) || 0) > 0
+                ? Number(r.final)
+                : (Number(r.valorUnitario) || 0) * qtd;
+        
+            totalItemBruto += bruto;
+            if (!porVendedor[vend]) porVendedor[vend] = { bruto: 0, itens: 0 };
+            porVendedor[vend].bruto += bruto;
+            porVendedor[vend].itens += qtd;
+            }
+        
+            Object.entries(porVendedor).forEach(([vend, agg]) => {
+            const descontoRateado = totalItemBruto > 0 ? (agg.bruto / totalItemBruto) * totalDescontos : 0;
+            const liquidoVend = agg.bruto - descontoRateado;
+            addVendorSlice(vend, code, liquidoVend, agg.itens);
+            });
+        }
+        
+        const customerName = mainSale.nomeCliente || "Cliente não identificado";
+        if (!customers[customerName]) {
+            customers[customerName] = { revenue: 0, orders: new Set() };
+        }
+        customers[customerName].revenue += faturamentoLiquido;
+        customers[customerName].orders.add(code);
+        
+        sales.forEach(item => {
+            if(item.descricao) {
+                if (!products[item.descricao]) {
+                    products[item.descricao] = { quantity: 0, revenue: 0 };
+                }
+                const quantity = Number(item.quantidade) || 0;
+                const revenue = (Number(item.final) || 0) > 0 ? (Number(item.final) || 0) : ((Number(item.valorUnitario) || 0) * quantity);
+                products[item.descricao].quantity += quantity;
+                products[item.descricao].revenue += revenue;
+            }
+        });
     }
 
     const topProductsChartData = Object.entries(products)
@@ -835,5 +825,7 @@ export default function DashboardPage() {
       </div>
   );
 }
+
+    
 
     
