@@ -83,16 +83,28 @@ const REQUIRED_ALWAYS_ON = ["codigo"];
 // Converte qualquer coisa parecida com data em Date
 const toDateSafe = (value: unknown): Date | null => {
   if (!value) return null;
-  if (value instanceof Date && isValid(value)) return value;
-  if (value instanceof (globalThis.Timestamp || Object)) return (value as Timestamp).toDate();
 
-  if (typeof value === "number") {
-    // Número serial de Excel (provável)
-    if (value > 0 && value < 100000) {
-      const excelEpoch = new Date(Date.UTC(1899, 11, 30));
-      const d = new Date(excelEpoch.getTime() + value * 86400000);
-      return isValid(d) ? d : null;
-    }
+  // Date nativo
+  if (value instanceof Date && isValid(value)) return value;
+
+  // Objetos do Firestore (duas formas seguras)
+  const anyVal = value as any;
+  // 1) Qualquer objeto com toDate()
+  if (anyVal && typeof anyVal.toDate === "function") {
+    const d = anyVal.toDate();
+    return isValid(d) ? d : null;
+  }
+  // 2) Objeto com { seconds, nanoseconds }
+  if (anyVal && typeof anyVal.seconds === "number") {
+    const d = new Date(anyVal.seconds * 1000);
+    return isValid(d) ? d : null;
+  }
+
+  // Número serial de Excel (provável)
+  if (typeof value === "number" && value > 0 && value < 100000) {
+    const excelEpoch = new Date(Date.UTC(1899, 11, 30));
+    const d = new Date(excelEpoch.getTime() + value * 86400000);
+    return isValid(d) ? d : null;
   }
 
   if (typeof value === "string") {
@@ -1177,3 +1189,4 @@ const renderEmbalagemTab = (row: any) => {
     </>
   );
 }
+
