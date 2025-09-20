@@ -3,7 +3,7 @@
 "use client";
 
 import React, { useState, useMemo, useEffect, useRef } from "react";
-import { format, parseISO } from "date-fns";
+import { format, parse, parseISO, isValid } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { ArrowUpDown, Columns, ChevronRight, X, Eye, EyeOff, Save, Loader2, Settings2, GripVertical, Calculator, Search, Info, Package, Trash2 } from "lucide-react";
 import { VendaDetalhada, CustomCalculation, Operadora } from "@/lib/data";
@@ -80,6 +80,50 @@ import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from "./ui/t
 const ITEMS_PER_PAGE = 10;
 const REQUIRED_ALWAYS_ON = ["codigo"];
 
+// Converte qualquer coisa parecida com data em Date
+const toDateSafe = (value: unknown): Date | null => {
+  if (!value) return null;
+  if (value instanceof Date && isValid(value)) return value;
+  if (value instanceof Timestamp) return value.toDate();
+
+  if (typeof value === "number") {
+    // Número serial de Excel (provável)
+    if (value > 0 && value < 100000) {
+      const excelEpoch = new Date(Date.UTC(1899, 11, 30));
+      const d = new Date(excelEpoch.getTime() + value * 86400000);
+      return isValid(d) ? d : null;
+    }
+  }
+
+  if (typeof value === "string") {
+    const s = value.trim();
+    if (!s) return null;
+
+    const formats = [
+      "dd/MM/yyyy","d/M/yyyy","dd-MM-yyyy","yyyy-MM-dd","MM/dd/yyyy",
+    ];
+    for (const f of formats) {
+      const d = parse(s, f, new Date());
+      if (isValid(d)) return d;
+    }
+    const iso = parseISO(s.replace(/\//g, "-"));
+    if (isValid(iso)) return iso;
+  }
+  return null;
+};
+
+// Formata no padrão brasileiro ou retorna vazio
+const formatPt = (value: unknown): string => {
+  const d = toDateSafe(value);
+  return d ? format(d, "dd/MM/yyyy") : "";
+};
+
+// Obtém timestamp numérico para ordenação
+const dateSortValue = (value: unknown): number => {
+  const d = toDateSafe(value);
+  return d ? d.getTime() : -Infinity;
+};
+
 type SortKey = keyof VendaDetalhada | string | null;
 type SortDirection = "asc" | "desc";
 type ColumnVisibility = Record<string, boolean>;
@@ -90,6 +134,8 @@ export type ColumnDef = {
   label: string;
   className?: string;
   isSortable?: boolean;
+  cell?: (props: { row: any }) => React.ReactNode;
+  sortingFn?: (a: any, b: any) => number;
 }
 
 const columnLabels: Record<string, string> = {
@@ -410,6 +456,7 @@ export default function DetailedSalesHistoryTable({
     isLogisticsPage = false,
     isCostsPage = false,
     onDeleteOrder,
+
     textFilter,
     onTextFilterChange,
     vendorFilter,
@@ -452,6 +499,25 @@ export default function DetailedSalesHistoryTable({
 
   const setColumnOrder = isManaged ? onOrderChange! : setInternalOrder;
 
+    const resolvedColumns = React.useMemo(() => {
+    return (columns || []).map((col) => {
+      if (col.id !== "data") return col;
+
+      return {
+        ...col,
+        cell: ({ row }: any) => {
+          const v = row?.original?.data ?? row?.getValue?.("data");
+          return formatPt(v);
+        },
+        sortingFn: (a: any, b: any) => {
+          const va = dateSortValue(a?.original?.data ?? a?.getValue?.("data"));
+          const vb = dateSortValue(b?.original?.data ?? b?.getValue?.("data"));
+          return va === vb ? 0 : va < vb ? -1 : 1;
+        },
+      };
+    });
+  }, [columns]);
+
 
   const effectiveColumns = useMemo(() => {
     const systemColumnsToHide = [
@@ -464,7 +530,7 @@ export default function DetailedSalesHistoryTable({
         systemColumnsToHide.push("custoTotal", "taxaTotalCartao");
     }
 
-    const base = (columns && columns.length > 0) ? columns : FIXED_COLUMNS;
+    const base = (resolvedColumns && resolvedColumns.length > 0) ? resolvedColumns : FIXED_COLUMNS;
 
     const map = new Map<string, ColumnDef>();
     
@@ -509,7 +575,7 @@ export default function DetailedSalesHistoryTable({
     }
 
     return Array.from(map.values()).filter(c => !systemColumnsToHide.includes(c.id));
-}, [columns, data, customCalculations, isLogisticsPage, isCostsPage]);
+}, [resolvedColumns, data, customCalculations, isLogisticsPage, isCostsPage]);
 
   const detailColumns = useMemo(() => {
     const detailKeys = ['item', 'descricao', 'quantidade', 'valorUnitario', 'custoUnitario', 'valorCredito', 'valorDescontos'];
@@ -578,12 +644,18 @@ export default function DetailedSalesHistoryTable({
 
   const sortedData = useMemo(() => {
     if (!sortKey) return data;
-
+    
+    const sortFn = effectiveColumns.find(c => c.id === sortKey)?.sortingFn;
+    
     return [...data].sort((a, b) => {
+      if (sortFn) {
+        const result = sortFn(a, b);
+        return sortDirection === 'asc' ? result : -result;
+      }
+      
       let aValue = (a as any)[sortKey];
       let bValue = (b as any)[sortKey];
       
-      // Check customData if primary field is not present
       if (aValue === undefined || aValue === null) aValue = a.customData?.[sortKey];
       if (bValue === undefined || bValue === null) bValue = b.customData?.[sortKey];
 
@@ -597,7 +669,7 @@ export default function DetailedSalesHistoryTable({
       if (valA > valB) return sortDirection === "asc" ? 1 : -1;
       return 0;
     });
-  }, [data, sortKey, sortDirection]);
+  }, [data, sortKey, sortDirection, effectiveColumns]);
 
   const paginatedData = useMemo(() => {
     const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
@@ -637,71 +709,35 @@ export default function DetailedSalesHistoryTable({
     </TableHead>
   );
 
-  const renderCell = (row: any, columnId: string) => {
-      let value = row[columnId];
-      
-      if (columnId.startsWith('custom_') || value === null || value === undefined) {
-          value = row.customData?.[columnId] ?? value;
-      }
-      
-      if(columnId === 'custoTotal' && value === undefined) {
-          value = row.custoTotal;
-      }
-      
-      if(columnId === 'taxaTotalCartao' && value === undefined) {
-          value = row.taxaTotalCartao;
-      }
-      
-      if (columnId === 'tipo_pagamento' || columnId === 'tipo_de_pagamento') {
-          return showBlank(row.tipo_de_pagamento ?? row.tipo_pagamento);
-      }
-      if (columnId === 'parcela') {
-          return showBlank(row.parcela);
-      }
+  const renderCell = (row: any, column: ColumnDef) => {
+    if (column.cell) return column.cell({ row });
   
-      if (value === null || value === undefined || (typeof value === "string" && value.trim() === "")) {
-          return "";
-      }
-      
-      if (columnId === 'quantidadeTotal' && typeof value === 'number') {
-          return value.toString();
-      }
+    let value = row[column.id];
+    if (column.id.startsWith('custom_') || value === null || value === undefined) {
+        value = row.customData?.[column.id] ?? value;
+    }
+    
+    if(column.id === 'custoTotal' && value === undefined) value = row.custoTotal;
+    if(column.id === 'taxaTotalCartao' && value === undefined) value = row.taxaTotalCartao;
+    if (column.id === 'tipo_pagamento' || column.id === 'tipo_de_pagamento') return showBlank(row.tipo_de_pagamento ?? row.tipo_pagamento);
+    if (column.id === 'parcela') return showBlank(row.parcela);
   
-      const toNumber = (x: any) => {
-          if (typeof x === "number") return x;
-          if (typeof x === "string") {
-              const cleaned = x.replace(/\u00A0/g, "").replace(/[^0-9,.-]/g, "").replace(/\./g, "").replace(",", ".");
-              const n = Number(cleaned);
-              if (!Number.isNaN(n)) return n;
-          }
-          return null;
-      };
+    if (value === null || value === undefined || (typeof value === "string" && value.trim() === "")) return "";
+    if (column.id === 'quantidadeTotal' && typeof value === 'number') return value.toString();
   
-      const customCalc = customCalculations.find(c => c.id === columnId);
-      const isPercentage = customCalc?.isPercentage;
+    const customCalc = customCalculations.find(c => c.id === column.id);
+    const isPercentage = customCalc?.isPercentage;
+    if (isPercentage && typeof value === 'number') return `${value.toFixed(2)}%`;
   
-      if (isPercentage && typeof value === 'number') {
-        return `${value.toFixed(2)}%`;
-      }
+    if (["final","custoFrete","imposto","embalagem","comissao","custoUnitario","valorUnitario","valorCredito","valorDescontos", "valor", "custoEmbalagem", "custoTotal", "taxaTotalCartao"].includes(column.id) || (typeof value === 'number' && column.id.startsWith('custom_') && !isPercentage)) {
+        const n = Number(String(value).replace(/[^0-9,.-]/g, '').replace(',', '.'));
+        if (!isNaN(n)) return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+    }
   
-      if (["final","custoFrete","imposto","embalagem","comissao","custoUnitario","valorUnitario","valorCredito","valorDescontos", "valor", "custoEmbalagem", "custoTotal", "taxaTotalCartao"]
-          .includes(columnId) || (typeof value === 'number' && columnId.startsWith('custom_') && !isPercentage)) {
-          const n = toNumber(value);
-          if (n !== null) {
-              return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-          }
-      }
+    if (column.id === "data") return formatPt(value); // This is now a fallback in case cell fn is not there
+    if ((column.id.startsWith('custom_') || column.id.startsWith('Custom_')) && typeof value === 'number' && !isPercentage) return value.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   
-      if (columnId === "data") {
-          const d = value?.toDate ? value.toDate() : (typeof value === 'string' ? parseISO(value) : value);
-          return d instanceof Date && !isNaN(d.getTime()) ? format(d, "dd/MM/yyyy", { locale: ptBR }) : "";
-      }
-  
-      if ((columnId.startsWith('custom_') || columnId.startsWith('Custom_')) && typeof value === 'number' && !isPercentage) {
-          return value.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-      }
-  
-      return String(value);
+    return String(value);
   };
   
   const renderDetailCell = (sale: VendaDetalhada, columnId: string) => {
@@ -817,7 +853,7 @@ const renderEmbalagemTab = (row: any) => {
         <div className="text-sm text-muted-foreground">
             Modalidade: <b>{/loja/i.test(String(row.logistica)) ? 'Loja' : 'Delivery'}</b> ·
             Qtd. Total de Itens: <b>{Number(row.quantidadeTotal) || 0}</b> ·
-            Custo Total Embalagem: <b>{renderCell(row, 'custoEmbalagem')}</b>
+            Custo Total Embalagem: <b>{renderCell(row, { id: 'custoEmbalagem', label: 'Custo Embalagem' })}</b>
         </div>
         <div className="border rounded-lg overflow-hidden">
             <div className="grid grid-cols-4 gap-0 bg-muted/40 px-3 py-2 text-sm font-medium">
@@ -987,7 +1023,7 @@ const renderEmbalagemTab = (row: any) => {
                        </TableCell>
                        {visibleColumns.map(col => (
                          <TableCell key={col.id} className={cn(col.className, col.id === 'final' ? 'font-semibold' : '')}>
-                           {renderCell(row, col.id)}
+                           {renderCell(row, col)}
                          </TableCell>
                        ))}
                        {onDeleteOrder && (
