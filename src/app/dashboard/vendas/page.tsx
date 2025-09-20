@@ -979,11 +979,9 @@ const applyCustomCalculations = React.useCallback((data: VendaDetalhada[]): Vend
             ))
         );
         
-        // receita de logística: pegar UMA vez por pedido (evita duplicar caso venha em todas as linhas)
         const logisticRevenue = Number(rows.find(r => !isEmptyCell(r.valor))?.valor) || 0;
         headerRow.valor = logisticRevenue;
 
-        // faturamento do pedido (para bater com a planilha) = somente itens/cabeçalho
         headerRow.final = orderRevenue;
 
         // === APLICAÇÃO DAS REGRAS DE EMBALAGEM (POR PEDIDO) ===
@@ -1284,11 +1282,14 @@ React.useEffect(() => {
           let cleanPayload = stripUndefinedDeep(payload);
           cleanPayload.id = docId;
 
-          if (cleanPayload.data && cleanPayload.data instanceof Date) {
-            cleanPayload.data = Timestamp.fromDate(cleanPayload.data);
+          const dateObject = toDate(cleanPayload.data);
+          if (dateObject) {
+              cleanPayload.data = Timestamp.fromDate(dateObject);
           }
-          if (cleanPayload.uploadTimestamp && cleanPayload.uploadTimestamp instanceof Date) {
-            cleanPayload.uploadTimestamp = Timestamp.fromDate(cleanPayload.uploadTimestamp);
+          
+          const uploadTimestampObject = toDate(cleanPayload.uploadTimestamp);
+          if (uploadTimestampObject) {
+            cleanPayload.uploadTimestamp = Timestamp.fromDate(uploadTimestampObject);
           }
 
           batch.set(vendaRef, cleanPayload);
@@ -1714,6 +1715,7 @@ React.useEffect(() => {
     
 
     
+
 
 
 

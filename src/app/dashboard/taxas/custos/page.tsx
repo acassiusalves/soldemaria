@@ -464,11 +464,13 @@ export default function CustosVendasPage() {
           let cleanPayload = stripUndefinedDeep(payload);
           cleanPayload.id = docId;
 
-          if (cleanPayload.data && cleanPayload.data instanceof Date) {
-            cleanPayload.data = Timestamp.fromDate(cleanPayload.data);
+          const dateObject = toDate(cleanPayload.data);
+          if (dateObject) {
+              cleanPayload.data = Timestamp.fromDate(dateObject);
           }
-          if (cleanPayload.uploadTimestamp && cleanPayload.uploadTimestamp instanceof Date) {
-            cleanPayload.uploadTimestamp = Timestamp.fromDate(cleanPayload.uploadTimestamp);
+          const uploadTimestampObject = toDate(cleanPayload.uploadTimestamp);
+          if (uploadTimestampObject) {
+            cleanPayload.uploadTimestamp = Timestamp.fromDate(uploadTimestampObject);
           }
 
           batch.set(custoRef, cleanPayload);
@@ -698,4 +700,3 @@ export default function CustosVendasPage() {
     </div>
   );
 }
-
