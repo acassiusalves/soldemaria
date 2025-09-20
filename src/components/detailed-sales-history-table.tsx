@@ -84,7 +84,7 @@ const REQUIRED_ALWAYS_ON = ["codigo"];
 const toDateSafe = (value: unknown): Date | null => {
   if (!value) return null;
   if (value instanceof Date && isValid(value)) return value;
-  if (value instanceof Timestamp) return value.toDate();
+  if (value instanceof (globalThis.Timestamp || Object)) return (value as Timestamp).toDate();
 
   if (typeof value === "number") {
     // Número serial de Excel (provável)
@@ -457,6 +457,7 @@ export default function DetailedSalesHistoryTable({
     isCostsPage = false,
     onDeleteOrder,
 
+    // Filtros controlados
     textFilter,
     onTextFilterChange,
     vendorFilter,
