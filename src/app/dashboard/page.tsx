@@ -178,9 +178,9 @@ const extractTipo = (row: any): string => {
     raw.includes('rappi')
   ) return 'delivery';
   
-  if (raw.includes('loja')) return 'loja';
+  if (raw === 'venda loja' || raw === 'venda funcionario') return 'loja';
 
-  return raw;
+  return '';
 };
 
 // Pega o "Valor Final" de um cabeçalho (com fallbacks de nomes)
@@ -457,13 +457,11 @@ export default function DashboardPage() {
             tipoPedido = extractTipo(linhaComTipo);
         }
         
-        const isDelivery = tipoPedido === 'delivery';
-        
-        if (isDelivery) {
+        if (tipoPedido === 'delivery') {
             deliveryMetrics.revenue += orderRevenue;
             deliveryMetrics.orders += 1;
             deliveryMetrics.cost += custoTotal;
-        } else {
+        } else if (tipoPedido === 'loja') {
             storeMetrics.revenue += orderRevenue;
             storeMetrics.orders += 1;
             storeMetrics.cost += custoTotal;
@@ -497,8 +495,7 @@ export default function DashboardPage() {
             }
         
             Object.entries(porVendedor).forEach(([vend, agg]) => {
-            const faturamentoBrutoVendedor = agg.bruto;
-            addVendorSlice(vend, code, faturamentoBrutoVendedor, agg.itens);
+                addVendorSlice(vend, code, agg.bruto, agg.itens);
             });
         }
         
