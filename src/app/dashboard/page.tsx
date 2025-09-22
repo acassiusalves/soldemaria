@@ -177,47 +177,20 @@ const getOrderKey = (row: any): string => {
 };
 
 const extractTipo = (row: any): string => {
-  const raw = String(
-    getField(row, [
-      // campos comuns
-      'tipo', 'Tipo',
-      'canal', 'canal_venda', 'canalVenda',
-      // campos que faltavam
-      'origem', 'origem_venda', 'origemVenda',
-      'tipo_pedido', 'tipoPedido',
-      'modalidade',
-      'logistica'
-    ]) ?? ''
-  );
+  const raw = getField(row, ['tipo', 'Tipo']);
+  if (!raw) return '';
 
-  const n = normalizeText(raw); // tira acento, caixa, etc.
-  if (!n) return '';
+  const n = normalizeText(raw);
 
-  // “Venda Loja” e similares
-  const ehLoja =
-    n.includes('venda loja') ||
-    n.includes('loja') ||
-    n.includes('retira') ||      // “retira na loja”, “retirada”
-    n.includes('balcao') ||      // às vezes chamam de “balcão”
-    n.includes('ponto de retirada') ||
-    n.includes('funcionario') || // “Venda Funcionário” conta como LOJA
-    n.includes('colaborador') ||
-    /\bfunc\b/.test(n);          // “func.” abreviado
+  const deliveryTypes = ['faturamento de entrega', 'faturamento de loja'];
+  if (deliveryTypes.includes(n)) {
+    return 'delivery';
+  }
 
-  if (ehLoja) return 'loja';
-
-  // Delivery e afins
-  const ehDelivery =
-    n.includes('delivery') ||
-    n.includes('entrega') ||
-    n.includes('ifood') ||
-    n.includes('uber') ||
-    n.includes('99food') ||
-    n.includes('rappi') ||
-    n.includes('motoboy') ||
-    n.includes('logistica'); // quando logistica vem com nome do app
-
-  if (ehDelivery) return 'delivery';
+  const lojaTypes = ['venda loja', 'venda funcionario'];
+  if (lojaTypes.includes(n)) {
+    return 'loja';
+  }
 
   return '';
 };
@@ -882,5 +855,6 @@ export default function DashboardPage() {
     
 
     
+
 
 
