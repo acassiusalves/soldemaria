@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import * as React from "react";
@@ -76,23 +77,60 @@ import CustomerPerformanceList from "@/components/customer-performance-list";
 
 const toDate = (value: unknown): Date | null => {
   if (!value) return null;
-  if (value instanceof Date && isValid(value)) return value;
-  if (value instanceof Timestamp) return value.toDate();
 
+  // Date nativo
+  if (value instanceof Date && isValid(value)) return value;
+
+  // Objetos do Firestore (duas formas seguras)
+  // 1) Qualquer objeto com toDate()
+  // 2) Objeto com { seconds, nanoseconds }
+  const anyVal = value as any;
+  if (anyVal && typeof anyVal.toDate === "function") {
+    const d = anyVal.toDate();
+    return isValid(d) ? d : null;
+  }
+  if (anyVal && typeof anyVal.seconds === "number") {
+    const d = new Date(anyVal.seconds * 1000);
+    return isValid(d) ? d : null;
+  }
+
+  // Número serial do Excel (dias desde 1899-12-30)
+  if (typeof value === "number" && value > 0 && value < 100000) {
+    const excelEpoch = new Date(Date.UTC(1899, 11, 30));
+    const d = new Date(excelEpoch.getTime() + value * 86400000);
+    return isValid(d) ? d : null;
+  }
+
+  // Strings comuns (BR/ISO/US)
   if (typeof value === "string") {
-    const d = parseISO(value);
+    const s = value.trim();
+    if (!s) return null;
+
+    const tryFormats = [
+      "dd/MM/yyyy","d/M/yyyy","dd-MM-yyyy","yyyy-MM-dd","MM/dd/yyyy"
+    ];
+    for (const f of tryFormats) {
+        try {
+            // Tenta parseISO diretamente para formatos como 'yyyy-MM-dd'
+            const d = parseISO(s);
+            if (isValid(d)) return d;
+        } catch {}
+    }
+
+    // Fallback para o parse mais flexível do date-fns se o ISO direto falhar
+    const d = parseISO(s.replace(/\//g, "-"));
     if (isValid(d)) return d;
   }
+
   return null;
 };
 
-// Helper function from vendas/page.tsx to normalize order codes
+
+// Use exatamente o mesmo de Vendas:
 const normCode = (v: any) => {
   let s = String(v ?? "").replace(/\u00A0/g, " ").trim();
   if (/^\d+(?:\.0+)?$/.test(s)) s = s.replace(/\.0+$/, "");
-  s = s.replace(/[^\d]/g, "");
-  s = s.replace(/^0+/, "");
-  return s;
+  return s.replace(/[^\p{L}\p{N}]/gu, "").toUpperCase(); // mantém letras e números
 };
 
 // Converte "R$ 1.234,56" -> 1234.56
@@ -329,8 +367,7 @@ export default function DashboardPage() {
 
         const totalDescontos = sales.reduce((acc, s) => acc + (Number(s.valorDescontos) || 0), 0);
         
-        const faturamentoLiquido = orderRevenue - totalDescontos;
-        summary.faturamento += faturamentoLiquido;
+        summary.faturamento += orderRevenue;
         summary.descontos += totalDescontos;
         
         const custoTotalDeclarado = sales
@@ -446,7 +483,7 @@ export default function DashboardPage() {
         };
         
         if (itemRows.length === 0) {
-            addVendorSlice(mainSale.vendedor, code, faturamentoLiquido, totalItems);
+            addVendorSlice(mainSale.vendedor, code, orderRevenue, totalItems);
         } else {
             let totalItemBruto = 0;
             const porVendedor: Record<string, { bruto: number; itens: number }> = {};
@@ -466,11 +503,12 @@ export default function DashboardPage() {
         
             Object.entries(porVendedor).forEach(([vend, agg]) => {
             const descontoRateado = totalItemBruto > 0 ? (agg.bruto / totalItemBruto) * totalDescontos : 0;
-            const liquidoVend = agg.bruto - descontoRateado;
-            addVendorSlice(vend, code, liquidoVend, agg.itens);
+            const faturamentoBrutoVendedor = agg.bruto;
+            addVendorSlice(vend, code, faturamentoBrutoVendedor, agg.itens);
             });
         }
         
+        const faturamentoLiquido = orderRevenue - totalDescontos;
         const customerName = mainSale.nomeCliente || "Cliente não identificado";
         if (!customers[customerName]) {
             customers[customerName] = { revenue: 0, orders: new Set() };
@@ -825,6 +863,8 @@ export default function DashboardPage() {
       </div>
   );
 }
+
+    
 
     
 
