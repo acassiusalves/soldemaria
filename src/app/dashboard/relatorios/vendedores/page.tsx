@@ -128,40 +128,70 @@ const calculateVendorMetrics = (data: VendaDetalhada[]) => {
 
   const vendors: Record<string, { revenue: number; orders: number; itemsSold: number; dailySales: Record<string, number> }> = {};
 
-  for (const [, rows] of salesGroups.entries()) {
+  for (const [code, rows] of salesGroups.entries()) {
     const detailRows = rows.filter(isDetailRow);
-    const vendorName = pickFromGroup(rows, VENDOR_KEYS) || "Sem Vendedor";
+    const headerRows = rows.filter(r => !isDetailRow(r));
+    const mainSale = headerRows.length > 0 ? headerRows[0] : (detailRows.length > 0 ? detailRows[0] : rows[0]);
     const saleDate = toDate(pickFromGroup(rows, ["data"]));
 
+    const itemsSum = detailRows.reduce((acc, item) => {
+        const lineTotal = (Number(item.final) || 0) > 0
+            ? Number(item.final) || 0
+            : (Number(item.valorUnitario) || 0) * (Number(item.quantidade) || 1);
+        return acc + lineTotal;
+    }, 0);
+    
+    const headerFinal = headerRows
+        .map(r => Number(r.final) || 0)
+        .filter(v => v > 0)
+        .reduce((max, v) => Math.max(max, v), 0);
+
     let orderRevenue = 0;
-    let totalItems = 0;
-
-    if (detailRows.length > 0) {
-      for (const s of detailRows) {
-        const qty = numBR(pick(s, QTY_KEYS));
-        const unit = numBR(pick(s, UNIT_KEYS));
-        const line = (unit && qty) ? unit * qty : numBR(pick(s, FINAL_KEYS));
-        orderRevenue += Math.max(0, line);
-        totalItems += qty || (line > 0 ? 1 : 0);
-      }
+    if (headerFinal > 0) {
+        orderRevenue = headerFinal;
+    } else if (itemsSum > 0) {
+        orderRevenue = itemsSum;
     } else {
-      orderRevenue = numBR(pickFromGroup(rows, FINAL_KEYS));
-      totalItems = numBR(pickFromGroup(rows, QTY_KEYS)) || (orderRevenue > 0 ? 1 : 0);
+        orderRevenue = Number(mainSale.final) || 0;
     }
     
-    orderRevenue = Math.max(0, orderRevenue);
-    totalItems = Math.max(0, totalItems);
-
-    if (!vendors[vendorName]) {
-      vendors[vendorName] = { revenue: 0, orders: 0, itemsSold: 0, dailySales: {} };
-    }
-    vendors[vendorName].revenue += orderRevenue;
-    vendors[vendorName].orders += 1;
-    vendors[vendorName].itemsSold += totalItems;
+    const totalItems = detailRows.reduce((acc, s) => acc + (Number(s.quantidade) || 0), 0);
     
-    if (saleDate) {
-        const dateKey = format(saleDate, "yyyy-MM-dd");
-        vendors[vendorName].dailySales[dateKey] = (vendors[vendorName].dailySales[dateKey] || 0) + orderRevenue;
+    const addVendorSlice = (vendor: string, revenue: number, items: number) => {
+        const key = vendor?.trim() || "Sem Vendedor";
+        if (!vendors[key]) vendors[key] = { revenue: 0, orders: 0, itemsSold: 0, dailySales: {} };
+        vendors[key].revenue += revenue;
+        vendors[key].orders += 1;
+        vendors[key].itemsSold += items;
+        if (saleDate) {
+            const dateKey = format(saleDate, "yyyy-MM-dd");
+            vendors[key].dailySales[dateKey] = (vendors[key].dailySales[dateKey] || 0) + revenue;
+        }
+    };
+    
+    if (detailRows.length === 0) {
+        addVendorSlice(mainSale.vendedor, orderRevenue, totalItems);
+    } else {
+        const totalDescontos = rows.reduce((acc, s) => acc + (Number(s.valorDescontos) || 0), 0);
+        let totalItemBruto = 0;
+        const porVendedor: Record<string, { bruto: number; itens: number }> = {};
+    
+        for (const r of detailRows) {
+            const vend = (r.vendedor || mainSale.vendedor || "Sem Vendedor") as string;
+            const qtd = Number(r.quantidade) || 0;
+            const bruto = (Number(r.final) || 0) > 0
+                ? Number(r.final)
+                : (Number(r.valorUnitario) || 0) * qtd;
+    
+            totalItemBruto += bruto;
+            if (!porVendedor[vend]) porVendedor[vend] = { bruto: 0, itens: 0 };
+            porVendedor[vend].bruto += bruto;
+            porVendedor[vend].itens += qtd;
+        }
+    
+        Object.entries(porVendedor).forEach(([vend, agg]) => {
+            addVendorSlice(vend, agg.bruto, agg.itens);
+        });
     }
   }
 
@@ -603,3 +633,5 @@ export default function VendedoresPage() {
     </div>
   );
 }
+
+    
