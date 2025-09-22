@@ -459,17 +459,12 @@ export default function DashboardPage() {
         
         const isDelivery = tipoPedido === 'delivery';
         
-        let valorFinalPedido = extractValorFinalPedido(mainSale);
-        if (!valorFinalPedido || valorFinalPedido === 0) {
-            valorFinalPedido = orderRevenue;
-        }
-        
         if (isDelivery) {
-            deliveryMetrics.revenue += valorFinalPedido;
+            deliveryMetrics.revenue += orderRevenue;
             deliveryMetrics.orders += 1;
             deliveryMetrics.cost += custoTotal;
         } else {
-            storeMetrics.revenue += valorFinalPedido;
+            storeMetrics.revenue += orderRevenue;
             storeMetrics.orders += 1;
             storeMetrics.cost += custoTotal;
         }
@@ -502,7 +497,6 @@ export default function DashboardPage() {
             }
         
             Object.entries(porVendedor).forEach(([vend, agg]) => {
-            const descontoRateado = totalItemBruto > 0 ? (agg.bruto / totalItemBruto) * totalDescontos : 0;
             const faturamentoBrutoVendedor = agg.bruto;
             addVendorSlice(vend, code, faturamentoBrutoVendedor, agg.itens);
             });
