@@ -156,49 +156,71 @@ const getField = (row: any, keys: string[]): any => {
   return undefined;
 };
 
-// Normaliza o "Tipo" (ou canal/origem/logística) para checar Delivery
-const extractTipo = (row: any): string => {
-  const raw = String(
-    getField(row, [
-      'tipo', 'Tipo',
-      'canal', 'canal_venda', 'canalVenda',
-    ]) ?? ''
-  );
-
-  const normalized = normalizeText(raw);
-
-  if (!normalized) return '';
-  
-  if (normalized.includes('loja') || normalized.includes('funcionario')) {
-    return 'loja';
-  }
-
-  // sinônimos que contam como delivery
-  if (
-    normalized.includes('delivery') || normalized.includes('entrega') ||
-    normalized.includes('ifood') || normalized.includes('uber') ||
-    normalized.includes('99food') || normalized.includes('rappi')
-  ) return 'delivery';
-
-  return '';
-};
-
-// Pega o "Valor Final" de um cabeçalho (com fallbacks de nomes)
-const extractValorFinalPedido = (row: any): number => {
-  const v = getField(row, [
-    'valorFinal', 'Valor Final', 'valor_final',
-    'final', 'valorTotal', 'valor_total',
-    'totalFinal', 'total'
-  ]);
-  return toNumberBR(v);
-};
-
 const normalizeText = (s: unknown) =>
   String(s ?? "")
     .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .replace(/\s+/g, " ")
     .trim();
+
+const getOrderKey = (row: any): string => {
+  const raw =
+    getField(row, [
+      'codigo', 'codigoPedido', 'codigo_pedido',
+      'numeroPedido', 'numero_pedido',
+      'idPedido', 'id_pedido', 'pedido',
+      'orderCode', 'order_id'
+    ]) ?? row?.id; // fallback pro doc.id
+  const s = String(raw ?? '').trim();
+  // Se vier vazio, usa o doc.id mesmo
+  return s || String(row?.id ?? '');
+};
+
+const extractTipo = (row: any): string => {
+  const raw = String(
+    getField(row, [
+      // campos comuns
+      'tipo', 'Tipo',
+      'canal', 'canal_venda', 'canalVenda',
+      // campos que faltavam
+      'origem', 'origem_venda', 'origemVenda',
+      'tipo_pedido', 'tipoPedido',
+      'modalidade',
+      'logistica'
+    ]) ?? ''
+  );
+
+  const n = normalizeText(raw); // tira acento, caixa, etc.
+  if (!n) return '';
+
+  // “Venda Loja” e similares
+  const ehLoja =
+    n.includes('venda loja') ||
+    n.includes('loja') ||
+    n.includes('retira') ||      // “retira na loja”, “retirada”
+    n.includes('balcao') ||      // às vezes chamam de “balcão”
+    n.includes('ponto de retirada') ||
+    n.includes('funcionario') || // “Venda Funcionário” conta como LOJA
+    n.includes('colaborador') ||
+    /\bfunc\b/.test(n);          // “func.” abreviado
+
+  if (ehLoja) return 'loja';
+
+  // Delivery e afins
+  const ehDelivery =
+    n.includes('delivery') ||
+    n.includes('entrega') ||
+    n.includes('ifood') ||
+    n.includes('uber') ||
+    n.includes('99food') ||
+    n.includes('rappi') ||
+    n.includes('motoboy') ||
+    n.includes('logistica'); // quando logistica vem com nome do app
+
+  if (ehDelivery) return 'delivery';
+
+  return '';
+};
 
 
 const isDetailRow = (row: Record<string, any>) =>
@@ -325,13 +347,13 @@ export default function DashboardPage() {
     const salesGroups = new Map<string, VendaDetalhada[]>();
     const custosByCode = new Map<string, VendaDetalhada[]>();
     custosData.forEach(c => {
-        const code = normCode(c.codigo);
+        const code = getOrderKey(c);
         if(!custosByCode.has(code)) custosByCode.set(code, []);
         custosByCode.get(code)!.push(c);
     });
 
     for (const sale of filteredData) {
-      const code = normCode(sale.codigo);
+      const code = getOrderKey(sale);
       if (!code) continue;
       if (!salesGroups.has(code)) {
         salesGroups.set(code, []);
@@ -454,7 +476,7 @@ export default function DashboardPage() {
         let tipoPedido = extractTipo(mainSale);
         if (!tipoPedido || tipoPedido === '') {
             const linhaComTipo = sales.find(s => !!extractTipo(s));
-            tipoPedido = extractTipo(linhaComTipo);
+            tipoPedido = extractTipo(linhaComTipo || null);
         }
         
         if (tipoPedido === 'delivery') {
@@ -860,4 +882,5 @@ export default function DashboardPage() {
     
 
     
+
 
