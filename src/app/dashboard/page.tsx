@@ -162,23 +162,23 @@ const extractTipo = (row: any): string => {
     getField(row, [
       'tipo', 'Tipo',
       'canal', 'canal_venda', 'canalVenda',
-      'origem', 'origem_venda', 'origemVenda',
-      'logistica'
     ]) ?? ''
-  ).toLowerCase();
+  );
 
-  if (!raw) return '';
+  const normalized = normalizeText(raw);
+
+  if (!normalized) return '';
+  
+  if (normalized.includes('loja') || normalized.includes('funcionario')) {
+    return 'loja';
+  }
 
   // sinônimos que contam como delivery
   if (
-    raw.includes('delivery') || raw.includes('entrega') ||
-    raw.includes('ifood') || raw.includes('i-food') ||
-    raw.includes('uber') || raw.includes('uber eats') ||
-    raw.includes('99') || raw.includes('99food') ||
-    raw.includes('rappi')
+    normalized.includes('delivery') || normalized.includes('entrega') ||
+    normalized.includes('ifood') || normalized.includes('uber') ||
+    normalized.includes('99food') || normalized.includes('rappi')
   ) return 'delivery';
-  
-  if (raw === 'venda loja' || raw === 'venda funcionario') return 'loja';
 
   return '';
 };
@@ -499,12 +499,12 @@ export default function DashboardPage() {
             });
         }
         
-        const faturamentoLiquido = orderRevenue - totalDescontos;
+        const faturamentoBruto = orderRevenue;
         const customerName = mainSale.nomeCliente || "Cliente não identificado";
         if (!customers[customerName]) {
             customers[customerName] = { revenue: 0, orders: new Set() };
         }
-        customers[customerName].revenue += faturamentoLiquido;
+        customers[customerName].revenue += faturamentoBruto;
         customers[customerName].orders.add(code);
         
         sales.forEach(item => {
@@ -860,3 +860,4 @@ export default function DashboardPage() {
     
 
     
+
