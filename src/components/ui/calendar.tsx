@@ -45,23 +45,13 @@ function Calendar({
       onSelect(presetRange, undefined as any, {} as any, undefined as any)
     }
   }
-  
-  const monthContainerRef = React.useRef<HTMLDivElement>(null)
-  const [presetsHeight, setPresetsHeight] = React.useState<number>()
-  
-  React.useEffect(() => {
-    if (monthContainerRef.current) {
-        setPresetsHeight(monthContainerRef.current.offsetHeight)
-    }
-  }, [monthContainerRef.current?.offsetHeight])
-
 
   return (
     <div className="flex flex-col sm:flex-row">
       {presets && (
-        <div className="flex flex-col items-start border-r border-border pr-4 mr-4 mb-4 sm:mb-0">
+        <div className="flex flex-col items-start border-r border-border pr-4 mr-4 mb-4 sm:mb-0 max-h-[290px]">
           <p className="text-sm font-medium text-muted-foreground px-2 py-1.5">Usados recentemente</p>
-          <ScrollArea className="w-full" style={{height: presetsHeight ? `${presetsHeight}px` : 'auto'}}>
+          <ScrollArea className="w-full">
             <div className="flex flex-col items-start">
               {presets.map(({ label, range }) => (
                 <Button
@@ -77,7 +67,7 @@ function Calendar({
           </ScrollArea>
         </div>
       )}
-      <div ref={monthContainerRef}>
+      <div>
         <DayPicker
           showOutsideDays={showOutsideDays}
           className={cn("p-3", className)}
