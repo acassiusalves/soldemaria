@@ -36,8 +36,7 @@ const toDate = (value: unknown): Date | null => {
 const normCode = (v: any) => {
   let s = String(v ?? "").replace(/\u00A0/g, " ").trim();
   if (/^\d+(?:\.0+)?$/.test(s)) s = s.replace(/\.0+$/, "");
-  s = s.replace(/[^\d]/g, "");
-  s = s.replace(/^0+/, "");
+  s = s.replace(/[^\p{L}\p{N}]/gu, "").toUpperCase(); // mantém letras e números
   return s;
 };
 
@@ -53,82 +52,100 @@ const isEmptyCell = (v: any) => {
 const isDetailRow = (row: Record<string, any>) =>
   !isEmptyCell(row.item) || !isEmptyCell(row.descricao);
 
-const numBR = (v: any): number => {
-  if (v == null) return 0;
-  if (typeof v === "number") return v;
-  if (typeof v === "string") {
-    const s = v
-      .replace(/\u00A0/g, " ")
-      .replace(/[R$\s]/g, "")
-      .replace(/\./g, "")
-      .replace(",", ".")
-      .trim();
-    const n = Number(s);
-    return Number.isFinite(n) ? n : 0;
-  }
-  return 0;
-};
-
-const pick = (obj: any, keys: string[]) => {
+const getField = (row: any, keys: string[]): any => {
+  if (!row) return undefined;
   for (const k of keys) {
-    const v = obj?.[k];
-    if (!isEmptyCell(v)) return v;
+    const val = row?.[k];
+    if (val !== undefined && val !== null && val !== '') return val;
   }
   return undefined;
 };
 
-const pickFromGroup = (rows: any[], keys: string[]) => {
-  const headers = rows.filter(r => !isDetailRow(r));
-  for (const r of headers) { const v = pick(r, keys); if (!isEmptyCell(v)) return v; }
-  for (const r of rows)    { const v = pick(r, keys); if (!isEmptyCell(v)) return v; }
-  return undefined;
+const getOrderKey = (row: any): string => {
+  const raw =
+    getField(row, [
+      'codigo', 'codigoPedido', 'codigo_pedido',
+      'numeroPedido', 'numero_pedido',
+      'idPedido', 'id_pedido', 'pedido',
+      'orderCode', 'order_id'
+    ]) ?? row?.id; // fallback pro doc.id
+  const s = String(raw ?? '').trim();
+  // Se vier vazio, usa o doc.id mesmo
+  return s || String(row?.id ?? '');
 };
 
-const CODE_KEYS  = ["codigo","pedido","n_pedido","numero","num_pedido","id"];
-const FINAL_KEYS = ["final","valor final","valor_final","valorFinal","total","valor total","valor_total"];
-const UNIT_KEYS  = ["valorUnitario","valor unitario","preco_unitario","preço unitário","preco","preço","unitario"];
-const QTY_KEYS   = ["quantidade","qtd","qtde","qte","itens","itens_total"];
 const VENDOR_KEYS = ["vendedor", "Vendedor"];
 
 
 const calculateVendorMetrics = (data: VendaDetalhada[], monthlyGoals: Record<string, Record<string, VendorGoal>>) => {
   const salesGroups = new Map<string, VendaDetalhada[]>();
   data.forEach((row) => {
-    const codeRaw = pick(row, CODE_KEYS);
-    const code = normCode(codeRaw) || String((row as any).id || "");
+    const code = getOrderKey(row);
     if (!code) return;
     if (!salesGroups.has(code)) salesGroups.set(code, []);
     salesGroups.get(code)!.push(row);
   });
 
-  const vendors: Record<string, { revenue: number; orders: number; itemsSold: number; }> = {};
+  const vendors: Record<string, { revenue: number; orders: Set<string>; itemsSold: number; }> = {};
 
-  for (const [, rows] of salesGroups.entries()) {
-    const detailRows = rows.filter(isDetailRow);
-    const vendorName = pickFromGroup(rows, VENDOR_KEYS) || "Sem Vendedor";
+  for (const [code, rows] of salesGroups.entries()) {
+    const itemRows = rows.filter(isDetailRow);
+    const headerRows = rows.filter(r => !isDetailRow(r));
+    const mainSale = headerRows.length > 0 ? headerRows[0] : (itemRows.length > 0 ? itemRows[0] : rows[0]);
+
+    const itemsSum = itemRows.reduce((acc, item) => {
+        const lineTotal = (Number(item.final) || 0) > 0
+            ? Number(item.final) || 0
+            : (Number(item.valorUnitario) || 0) * (Number(item.quantidade) || 1);
+        return acc + lineTotal;
+    }, 0);
+    
+    const headerFinal = headerRows
+        .map(r => Number(r.final) || 0)
+        .filter(v => v > 0)
+        .reduce((max, v) => Math.max(max, v), 0);
 
     let orderRevenue = 0;
-    let totalItems = 0;
-
-    if (detailRows.length > 0) {
-      for (const s of detailRows) {
-        const qty = numBR(pick(s, QTY_KEYS));
-        const unit = numBR(pick(s, UNIT_KEYS));
-        const line = (unit && qty) ? unit * qty : numBR(pick(s, FINAL_KEYS));
-        orderRevenue += Math.max(0, line);
-        totalItems += qty || (line > 0 ? 1 : 0);
-      }
+    if (headerFinal > 0) {
+        orderRevenue = headerFinal;
+    } else if (itemsSum > 0) {
+        orderRevenue = itemsSum;
     } else {
-      orderRevenue = numBR(pickFromGroup(rows, FINAL_KEYS));
-      totalItems = numBR(pickFromGroup(rows, QTY_KEYS)) || (orderRevenue > 0 ? 1 : 0);
+        orderRevenue = Number(mainSale.final) || 0;
     }
-
-    if (!vendors[vendorName]) {
-      vendors[vendorName] = { revenue: 0, orders: 0, itemsSold: 0 };
+    
+    const totalItems = itemRows.reduce((acc, s) => acc + (Number(s.quantidade) || 0), 0);
+    
+    const addVendorSlice = (vendor: string, orderCode: string, revenue: number, items: number) => {
+        const key = vendor?.trim() || "Sem Vendedor";
+        if (!vendors[key]) vendors[key] = { revenue: 0, orders: new Set(), itemsSold: 0 };
+        vendors[key].revenue += revenue;
+        vendors[key].orders.add(orderCode);
+        vendors[key].itemsSold += items;
+    };
+    
+    if (itemRows.length === 0) {
+        const vendorName = getField(mainSale, VENDOR_KEYS);
+        addVendorSlice(vendorName, code, orderRevenue, totalItems);
+    } else {
+        const porVendedor: Record<string, { bruto: number; itens: number }> = {};
+    
+        for (const r of itemRows) {
+            const vend = (getField(r, VENDOR_KEYS) || getField(mainSale, VENDOR_KEYS) || "Sem Vendedor") as string;
+            const qtd = Number(r.quantidade) || 0;
+            const bruto = (Number(r.final) || 0) > 0
+                ? Number(r.final)
+                : (Number(r.valorUnitario) || 0) * qtd;
+    
+            if (!porVendedor[vend]) porVendedor[vend] = { bruto: 0, itens: 0 };
+            porVendedor[vend].bruto += bruto;
+            porVendedor[vend].itens += qtd;
+        }
+    
+        Object.entries(porVendedor).forEach(([vend, agg]) => {
+            addVendorSlice(vend, code, agg.bruto, agg.itens);
+        });
     }
-    vendors[vendorName].revenue += orderRevenue;
-    vendors[vendorName].orders += 1;
-    vendors[vendorName].itemsSold += totalItems;
   }
   
   const currentPeriodKey = format(new Date(), 'yyyy-MM');
@@ -136,13 +153,14 @@ const calculateVendorMetrics = (data: VendaDetalhada[], monthlyGoals: Record<str
 
   return Object.entries(vendors).map(([name, data]) => {
     const goals = vendorGoalsForPeriod[name] || {};
+    const ordersCount = data.orders.size;
     return {
         name,
         revenue: data.revenue,
-        orders: data.orders,
+        orders: ordersCount,
         itemsSold: data.itemsSold,
-        averageTicket: data.orders > 0 ? data.revenue / data.orders : 0,
-        averageItemsPerOrder: data.orders > 0 ? data.itemsSold / data.orders : 0,
+        averageTicket: ordersCount > 0 ? data.revenue / ordersCount : 0,
+        averageItemsPerOrder: ordersCount > 0 ? data.itemsSold / ordersCount : 0,
         goalFaturamento: goals.faturamento,
         goalTicketMedio: goals.ticketMedio,
         goalItensPorPedido: goals.itensPorPedido,
