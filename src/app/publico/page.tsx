@@ -17,7 +17,7 @@ import VendorPerformanceTable from "@/components/vendor-performance-table";
 import type { VendaDetalhada, VendorGoal } from "@/lib/data";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { getMonth, getYear, format, startOfMonth, endOfMonth, isValid, parseISO } from 'date-fns';
+import { getMonth, getYear, format, startOfMonth, endOfMonth, isValid, parseISO, subDays } from 'date-fns';
 import { DateRange } from "react-day-picker";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
@@ -275,6 +275,13 @@ export default function PublicoPage() {
                                   selected={date}
                                   onSelect={setDate}
                                   numberOfMonths={2}
+                                  presets={[
+                                    { label: 'Hoje', range: { from: new Date(), to: new Date() } },
+                                    { label: 'Ontem', range: { from: subDays(new Date(), 1), to: subDays(new Date(), 1) } },
+                                    { label: 'Últimos 7 dias', range: { from: subDays(new Date(), 6), to: new Date() } },
+                                    { label: 'Últimos 30 dias', range: { from: subDays(new Date(), 29), to: new Date() } },
+                                    { label: 'Este mês', range: { from: startOfMonth(new Date()), to: endOfMonth(new Date()) } },
+                                ]}
                               />
                           </PopoverContent>
                       </Popover>
