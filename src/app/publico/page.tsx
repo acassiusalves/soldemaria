@@ -17,7 +17,14 @@ import VendorPerformanceTable from "@/components/vendor-performance-table";
 import type { VendaDetalhada, VendorGoal } from "@/lib/data";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { getMonth, getYear, format, startOfMonth, endOfMonth } from 'date-fns';
+import { getMonth, getYear, format, startOfMonth, endOfMonth, isValid, parseISO } from 'date-fns';
+import { DateRange } from "react-day-picker";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Button } from "@/components/ui/button";
+import { Calendar as CalendarIcon } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { Calendar } from "@/components/ui/calendar";
+import { ptBR } from "date-fns/locale";
 
 // Funções de ajuda para processar os dados
 const toDate = (value: unknown): Date | null => {
@@ -26,31 +33,13 @@ const toDate = (value: unknown): Date | null => {
   if (value instanceof Timestamp) return value.toDate();
   if (typeof value === "string") {
     try {
-      const d = new Date(value);
+      const d = parseISO(value);
       if (!isNaN(d.getTime())) return d;
     } catch (e) { /* ignora */ }
   }
   return null;
 };
 
-const normCode = (v: any) => {
-  let s = String(v ?? "").replace(/\u00A0/g, " ").trim();
-  if (/^\d+(?:\.0+)?$/.test(s)) s = s.replace(/\.0+$/, "");
-  s = s.replace(/[^\p{L}\p{N}]/gu, "").toUpperCase(); // mantém letras e números
-  return s;
-};
-
-const isEmptyCell = (v: any) => {
-  if (v === null || v === undefined) return true;
-  if (typeof v === "string") {
-    const s = v.replace(/\u00A0/g, " ").trim().toLowerCase();
-    return s === "" || s === "n/a" || s === "na" || s === "-" || s === "--";
-  }
-  return false;
-};
-
-const isDetailRow = (row: Record<string, any>) =>
-  !isEmptyCell(row.item) || !isEmptyCell(row.descricao);
 
 const getField = (row: any, keys: string[]): any => {
   if (!row) return undefined;
@@ -75,6 +64,9 @@ const getOrderKey = (row: any): string => {
 };
 
 const VENDOR_KEYS = ["vendedor", "Vendedor"];
+
+const isDetailRow = (row: Record<string, any>) =>
+  !getField(row, ['item', 'descricao']);
 
 
 const calculateVendorMetrics = (data: VendaDetalhada[], monthlyGoals: Record<string, Record<string, VendorGoal>>) => {
@@ -174,25 +166,29 @@ export default function PublicoPage() {
   const [isLoading, setIsLoading] = React.useState(true);
   const [showGoals, setShowGoals] = React.useState(false);
   const [monthlyGoals, setMonthlyGoals] = React.useState<Record<string, Record<string, VendorGoal>>>({});
+  const [date, setDate] = React.useState<DateRange | undefined>({
+    from: startOfMonth(new Date()),
+    to: endOfMonth(new Date()),
+  });
 
   React.useEffect(() => {
     let salesUnsub: () => void;
     let goalsUnsub: () => void;
     (async () => {
+      setIsLoading(true);
       const db = await getDbClient();
       if (!db) {
         setIsLoading(false);
         return;
       };
       
-      const now = new Date();
-      const startOfCurrentMonth = startOfMonth(now);
-      const endOfCurrentMonth = endOfMonth(now);
+      const fromDate = date?.from ? Timestamp.fromDate(date.from) : Timestamp.fromDate(startOfMonth(new Date()));
+      const toDateFilter = date?.to ? Timestamp.fromDate(endOfMonth(date.to)) : Timestamp.fromDate(endOfMonth(new Date()));
 
       const salesQuery = query(
         collection(db, "vendas"),
-        where("data", ">=", Timestamp.fromDate(startOfCurrentMonth)),
-        where("data", "<=", Timestamp.fromDate(endOfCurrentMonth))
+        where("data", ">=", fromDate),
+        where("data", "<=", toDateFilter)
       );
       salesUnsub = onSnapshot(salesQuery, (snapshot) => {
         if (snapshot.metadata.hasPendingWrites) return;
@@ -202,7 +198,7 @@ export default function PublicoPage() {
         setIsLoading(false);
       });
       
-      const periodKey = format(new Date(), 'yyyy-MM');
+      const periodKey = date?.from ? format(date.from, 'yyyy-MM') : format(new Date(), 'yyyy-MM');
       const metasRef = doc(db, "metas-vendedores", periodKey);
       goalsUnsub = onSnapshot(metasRef, (docSnap) => {
           if (docSnap.exists()) {
@@ -218,7 +214,7 @@ export default function PublicoPage() {
       if (salesUnsub) salesUnsub();
       if (goalsUnsub) goalsUnsub();
     };
-  }, [monthlyGoals]);
+  }, [date, monthlyGoals]);
 
   return (
     <div className="flex min-h-screen w-full flex-col">
@@ -236,21 +232,48 @@ export default function PublicoPage() {
       <main className="flex flex-1 flex-col gap-4 p-4 md:gap-8 md:p-8">
         <Card>
             <CardHeader>
-              <div className="flex justify-between items-center">
+              <div className="flex justify-between items-center flex-wrap gap-4">
                 <div>
-                  <CardTitle>Ranking de Vendedores (Mês Atual)</CardTitle>
-                  <CardDescription>Performance de vendas por vendedor no mês corrente.</CardDescription>
+                  <CardTitle>Ranking de Vendedores</CardTitle>
+                  <CardDescription>Performance de vendas por vendedor no período selecionado.</CardDescription>
                 </div>
-                <div className="flex items-center space-x-2">
-                    <Label htmlFor="show-goals" className="text-sm font-normal">
-                        Mostrar Metas
-                    </Label>
-                    <Switch
-                        id="show-goals"
-                        checked={showGoals}
-                        onCheckedChange={setShowGoals}
-                    />
-                </div>
+                 <div className="flex items-center space-x-4">
+                     <Popover>
+                        <PopoverTrigger asChild>
+                            <Button
+                            id="date"
+                            variant={"outline"}
+                            className={cn("w-[300px] justify-start text-left font-normal", !date && "text-muted-foreground")}
+                            >
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {date?.from ? (
+                                date.to ? (<>{format(date.from, "dd/MM/y")} - {format(date.to, "dd/MM/y")}</>) : (format(date.from, "dd/MM/y"))
+                            ) : (<span>Selecione uma data</span>)}
+                            </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="end">
+                            <Calendar
+                                locale={ptBR}
+                                initialFocus
+                                mode="range"
+                                defaultMonth={date?.from}
+                                selected={date}
+                                onSelect={setDate}
+                                numberOfMonths={2}
+                            />
+                        </PopoverContent>
+                    </Popover>
+                    <div className="flex items-center space-x-2">
+                        <Label htmlFor="show-goals" className="text-sm font-normal">
+                            Mostrar Metas
+                        </Label>
+                        <Switch
+                            id="show-goals"
+                            checked={showGoals}
+                            onCheckedChange={setShowGoals}
+                        />
+                    </div>
+                 </div>
               </div>
             </CardHeader>
             <CardContent>
