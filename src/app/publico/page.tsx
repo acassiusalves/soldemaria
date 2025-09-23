@@ -166,12 +166,20 @@ export default function PublicoPage() {
   const [isLoading, setIsLoading] = React.useState(true);
   const [showGoals, setShowGoals] = React.useState(false);
   const [monthlyGoals, setMonthlyGoals] = React.useState<Record<string, Record<string, VendorGoal>>>({});
-  const [date, setDate] = React.useState<DateRange | undefined>({
-    from: startOfMonth(new Date()),
-    to: endOfMonth(new Date()),
-  });
+  const [date, setDate] = React.useState<DateRange | undefined>(undefined);
+  const [mounted, setMounted] = React.useState(false);
 
   React.useEffect(() => {
+    setMounted(true);
+    setDate({
+      from: startOfMonth(new Date()),
+      to: endOfMonth(new Date()),
+    })
+  }, [])
+
+  React.useEffect(() => {
+    if (!mounted) return;
+
     let salesUnsub: () => void;
     let goalsUnsub: () => void;
     (async () => {
@@ -214,7 +222,7 @@ export default function PublicoPage() {
       if (salesUnsub) salesUnsub();
       if (goalsUnsub) goalsUnsub();
     };
-  }, [date, monthlyGoals]);
+  }, [date, monthlyGoals, mounted]);
 
   return (
     <div className="flex min-h-screen w-full flex-col">
@@ -238,31 +246,33 @@ export default function PublicoPage() {
                   <CardDescription>Performance de vendas por vendedor no período selecionado.</CardDescription>
                 </div>
                  <div className="flex items-center space-x-4">
-                     <Popover>
-                        <PopoverTrigger asChild>
-                            <Button
-                            id="date"
-                            variant={"outline"}
-                            className={cn("w-[300px] justify-start text-left font-normal", !date && "text-muted-foreground")}
-                            >
-                            <CalendarIcon className="mr-2 h-4 w-4" />
-                            {date?.from ? (
-                                date.to ? (<>{format(date.from, "dd/MM/y")} - {format(date.to, "dd/MM/y")}</>) : (format(date.from, "dd/MM/y"))
-                            ) : (<span>Selecione uma data</span>)}
-                            </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="end">
-                            <Calendar
-                                locale={ptBR}
-                                initialFocus
-                                mode="range"
-                                defaultMonth={date?.from}
-                                selected={date}
-                                onSelect={setDate}
-                                numberOfMonths={2}
-                            />
-                        </PopoverContent>
-                    </Popover>
+                     {mounted && (
+                      <Popover>
+                          <PopoverTrigger asChild>
+                              <Button
+                              id="date"
+                              variant={"outline"}
+                              className={cn("w-[300px] justify-start text-left font-normal", !date && "text-muted-foreground")}
+                              >
+                              <CalendarIcon className="mr-2 h-4 w-4" />
+                              {date?.from ? (
+                                  date.to ? (<>{format(date.from, "dd/MM/y")} - {format(date.to, "dd/MM/y")}</>) : (format(date.from, "dd/MM/y"))
+                              ) : (<span>Selecione uma data</span>)}
+                              </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0" align="end">
+                              <Calendar
+                                  locale={ptBR}
+                                  initialFocus
+                                  mode="range"
+                                  defaultMonth={date?.from}
+                                  selected={date}
+                                  onSelect={setDate}
+                                  numberOfMonths={2}
+                              />
+                          </PopoverContent>
+                      </Popover>
+                     )}
                     <div className="flex items-center space-x-2">
                         <Label htmlFor="show-goals" className="text-sm font-normal">
                             Mostrar Metas
@@ -277,7 +287,7 @@ export default function PublicoPage() {
               </div>
             </CardHeader>
             <CardContent>
-                {isLoading ? (
+                {isLoading || !mounted ? (
                     <div className="flex h-64 w-full items-center justify-center text-muted-foreground">
                         <p>Carregando dados...</p>
                     </div>
