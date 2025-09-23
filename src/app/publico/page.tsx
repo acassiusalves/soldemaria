@@ -69,7 +69,7 @@ const isDetailRow = (row: Record<string, any>) =>
   !!getField(row, ['item', 'descricao']);
 
 
-const calculateVendorMetrics = (data: VendaDetalhada[], monthlyGoals: Record<string, Record<string, VendorGoal>>) => {
+const calculateVendorMetrics = (data: VendaDetalhada[], monthlyGoals: Record<string, Record<string, VendorGoal>>, periodDate?: Date) => {
   const salesGroups = new Map<string, VendaDetalhada[]>();
   data.forEach((row) => {
     const code = getOrderKey(row);
@@ -140,7 +140,7 @@ const calculateVendorMetrics = (data: VendaDetalhada[], monthlyGoals: Record<str
     }
   }
   
-  const currentPeriodKey = format(new Date(), 'yyyy-MM');
+  const currentPeriodKey = format(periodDate || new Date(), 'yyyy-MM');
   const vendorGoalsForPeriod = monthlyGoals[currentPeriodKey] || {};
 
   return Object.entries(vendors).map(([name, data]) => {
@@ -178,10 +178,11 @@ export default function PublicoPage() {
   }, [])
 
   React.useEffect(() => {
-    if (!mounted || !date) return;
+    if (!mounted || !date?.from) return;
 
     let salesUnsub: () => void;
     let goalsUnsub: () => void;
+    
     (async () => {
       setIsLoading(true);
       const db = await getDbClient();
@@ -190,8 +191,8 @@ export default function PublicoPage() {
         return;
       };
       
-      const fromDate = date?.from ? Timestamp.fromDate(date.from) : Timestamp.fromDate(startOfMonth(new Date()));
-      const toDateFilter = date?.to ? Timestamp.fromDate(endOfMonth(date.to)) : Timestamp.fromDate(endOfMonth(new Date()));
+      const fromDate = date.from;
+      const toDateFilter = date.to || date.from;
 
       const salesQuery = query(
         collection(db, "vendas"),
@@ -201,12 +202,12 @@ export default function PublicoPage() {
       salesUnsub = onSnapshot(salesQuery, (snapshot) => {
         if (snapshot.metadata.hasPendingWrites) return;
         const sales = snapshot.docs.map(d => ({ ...d.data(), id: d.id })) as VendaDetalhada[];
-        const metrics = calculateVendorMetrics(sales, monthlyGoals);
+        const metrics = calculateVendorMetrics(sales, monthlyGoals, date.from);
         setVendorData(metrics);
         setIsLoading(false);
       });
       
-      const periodKey = date?.from ? format(date.from, 'yyyy-MM') : format(new Date(), 'yyyy-MM');
+      const periodKey = format(date.from, 'yyyy-MM');
       const metasRef = doc(db, "metas-vendedores", periodKey);
       goalsUnsub = onSnapshot(metasRef, (docSnap) => {
           if (docSnap.exists()) {
@@ -222,7 +223,7 @@ export default function PublicoPage() {
       if (salesUnsub) salesUnsub();
       if (goalsUnsub) goalsUnsub();
     };
-  }, [date, mounted]);
+  }, [date, mounted, monthlyGoals]);
 
   return (
     <div className="flex min-h-screen w-full flex-col">
