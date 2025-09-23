@@ -25,6 +25,8 @@ import { Calendar as CalendarIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Calendar } from "@/components/ui/calendar";
 import { ptBR } from "date-fns/locale";
+import CustomerPerformanceList from "@/components/customer-performance-list";
+import TopProductsChart from "@/components/top-products-chart";
 
 // Funções de ajuda para processar os dados
 const toDate = (value: unknown): Date | null => {
@@ -69,7 +71,7 @@ const isDetailRow = (row: Record<string, any>) =>
   !!getField(row, ['item', 'descricao']);
 
 
-const calculateVendorMetrics = (data: VendaDetalhada[], monthlyGoals: Record<string, Record<string, VendorGoal>>, periodDate?: Date) => {
+const calculateMetrics = (data: VendaDetalhada[], monthlyGoals: Record<string, Record<string, VendorGoal>>, periodDate?: Date) => {
   const salesGroups = new Map<string, VendaDetalhada[]>();
   data.forEach((row) => {
     const code = getOrderKey(row);
@@ -79,6 +81,8 @@ const calculateVendorMetrics = (data: VendaDetalhada[], monthlyGoals: Record<str
   });
 
   const vendors: Record<string, { revenue: number; orders: Set<string>; itemsSold: number; }> = {};
+  const products: Record<string, { quantity: number; revenue: number }> = {};
+  const customers: Record<string, { revenue: number, orders: Set<string> }> = {};
 
   for (const [code, rows] of salesGroups.entries()) {
     const itemRows = rows.filter(isDetailRow);
@@ -138,12 +142,31 @@ const calculateVendorMetrics = (data: VendaDetalhada[], monthlyGoals: Record<str
             addVendorSlice(vend, code, agg.bruto, agg.itens);
         });
     }
+
+    const customerName = mainSale.nomeCliente || "Cliente não identificado";
+    if (!customers[customerName]) {
+        customers[customerName] = { revenue: 0, orders: new Set() };
+    }
+    customers[customerName].revenue += orderRevenue;
+    customers[customerName].orders.add(code);
+
+    rows.forEach(item => {
+        if(item.descricao) {
+            if (!products[item.descricao]) {
+                products[item.descricao] = { quantity: 0, revenue: 0 };
+            }
+            const quantity = Number(item.quantidade) || 0;
+            const revenue = (Number(item.final) || 0) > 0 ? (Number(item.final) || 0) : ((Number(item.valorUnitario) || 0) * quantity);
+            products[item.descricao].quantity += quantity;
+            products[item.descricao].revenue += revenue;
+        }
+    });
   }
   
   const currentPeriodKey = format(periodDate || new Date(), 'yyyy-MM');
   const vendorGoalsForPeriod = monthlyGoals[currentPeriodKey] || {};
 
-  const metrics = Object.entries(vendors).map(([name, data]) => {
+  const vendorMetrics = Object.entries(vendors).map(([name, data]) => {
     const goals = vendorGoalsForPeriod[name] || {};
     const ordersCount = data.orders.size;
     return {
@@ -159,12 +182,24 @@ const calculateVendorMetrics = (data: VendaDetalhada[], monthlyGoals: Record<str
     }
   }).sort((a, b) => b.revenue - a.revenue);
   
-  return metrics;
+  const topProducts = Object.entries(products)
+    .map(([name, data]) => ({ name, quantity: data.quantity, revenue: data.revenue }))
+    .sort((a, b) => b.revenue - a.revenue)
+    .slice(0, 10);
+
+  const topCustomers = Object.entries(customers)
+    .map(([name, data]) => ({ name, orders: data.orders.size, revenue: data.revenue }))
+    .sort((a, b) => b.revenue - a.revenue)
+    .slice(0, 5);
+  
+  return { vendorMetrics, topProducts, topCustomers };
 };
 
 
 export default function PublicoPage() {
   const [vendorData, setVendorData] = React.useState<any[]>([]);
+  const [topProducts, setTopProducts] = React.useState<any[]>([]);
+  const [topCustomers, setTopCustomers] = React.useState<any[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
   const [showGoals, setShowGoals] = React.useState(false);
   const [monthlyGoals, setMonthlyGoals] = React.useState<Record<string, Record<string, VendorGoal>>>({});
@@ -216,8 +251,10 @@ export default function PublicoPage() {
           salesUnsub = onSnapshot(salesQuery, (snapshot) => {
             if (snapshot.metadata.hasPendingWrites) return;
             const sales = snapshot.docs.map(d => ({ ...d.data(), id: d.id })) as VendaDetalhada[];
-            const metrics = calculateVendorMetrics(sales, updatedMonthlyGoals, date.from);
-            setVendorData(metrics);
+            const { vendorMetrics, topProducts: calculatedProducts, topCustomers: calculatedCustomers } = calculateMetrics(sales, updatedMonthlyGoals, date.from);
+            setVendorData(vendorMetrics);
+            setTopProducts(calculatedProducts);
+            setTopCustomers(calculatedCustomers);
             setIsLoading(false);
           }, (error) => {
             console.error("Error fetching sales:", error);
@@ -234,8 +271,10 @@ export default function PublicoPage() {
           salesUnsub = onSnapshot(salesQuery, (snapshot) => {
             if (snapshot.metadata.hasPendingWrites) return;
             const sales = snapshot.docs.map(d => ({ ...d.data(), id: d.id })) as VendaDetalhada[];
-            const metrics = calculateVendorMetrics(sales, monthlyGoals, date.from);
-            setVendorData(metrics);
+            const { vendorMetrics, topProducts: calculatedProducts, topCustomers: calculatedCustomers } = calculateMetrics(sales, monthlyGoals, date.from);
+            setVendorData(vendorMetrics);
+            setTopProducts(calculatedProducts);
+            setTopCustomers(calculatedCustomers);
             setIsLoading(false);
           });
       });
@@ -336,6 +375,32 @@ export default function PublicoPage() {
                 )}
             </CardContent>
         </Card>
+
+        <div className="grid gap-4 md:gap-8 lg:grid-cols-2">
+            <Card className="lg:col-span-1">
+              <CardHeader>
+                <CardTitle>Produtos Mais Vendidos</CardTitle>
+                <CardDescription>
+                  Os 10 produtos que mais se destacaram em vendas.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <TopProductsChart data={topProducts} />
+              </CardContent>
+            </Card>
+             <Card className="flex flex-col lg:col-span-1">
+              <CardHeader>
+                <CardTitle>Top Clientes</CardTitle>
+                <CardDescription>
+                  O ranking dos clientes que mais compraram no período.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="flex-grow p-0">
+                  <CustomerPerformanceList data={topCustomers} />
+              </CardContent>
+            </Card>
+        </div>
+
       </main>
     </div>
   );
