@@ -66,7 +66,7 @@ const getOrderKey = (row: any): string => {
 const VENDOR_KEYS = ["vendedor", "Vendedor"];
 
 const isDetailRow = (row: Record<string, any>) =>
-  !getField(row, ['item', 'descricao']);
+  !!getField(row, ['item', 'descricao']);
 
 
 const calculateVendorMetrics = (data: VendaDetalhada[], monthlyGoals: Record<string, Record<string, VendorGoal>>) => {
@@ -118,7 +118,7 @@ const calculateVendorMetrics = (data: VendaDetalhada[], monthlyGoals: Record<str
     
     if (itemRows.length === 0) {
         const vendorName = getField(mainSale, VENDOR_KEYS);
-        addVendorSlice(vendorName, code, orderRevenue, totalItems);
+        addVendorSlice(vendorName || 'Sem Vendedor', code, orderRevenue, totalItems);
     } else {
         const porVendedor: Record<string, { bruto: number; itens: number }> = {};
     
@@ -178,7 +178,7 @@ export default function PublicoPage() {
   }, [])
 
   React.useEffect(() => {
-    if (!mounted) return;
+    if (!mounted || !date) return;
 
     let salesUnsub: () => void;
     let goalsUnsub: () => void;
@@ -222,7 +222,7 @@ export default function PublicoPage() {
       if (salesUnsub) salesUnsub();
       if (goalsUnsub) goalsUnsub();
     };
-  }, [date, monthlyGoals, mounted]);
+  }, [date, mounted]);
 
   return (
     <div className="flex min-h-screen w-full flex-col">
