@@ -223,7 +223,7 @@ export default function PublicoPage() {
       if (salesUnsub) salesUnsub();
       if (goalsUnsub) goalsUnsub();
     };
-  }, [date, mounted, monthlyGoals]);
+  }, [date, mounted]);
 
   return (
     <div className="flex min-h-screen w-full flex-col">
