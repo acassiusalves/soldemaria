@@ -194,27 +194,32 @@ export default function PublicoPage() {
       const fromDate = date.from;
       const toDateFilter = date.to || date.from;
 
-      const salesQuery = query(
-        collection(db, "vendas"),
-        where("data", ">=", fromDate),
-        where("data", "<=", toDateFilter)
-      );
-      salesUnsub = onSnapshot(salesQuery, (snapshot) => {
-        if (snapshot.metadata.hasPendingWrites) return;
-        const sales = snapshot.docs.map(d => ({ ...d.data(), id: d.id })) as VendaDetalhada[];
-        const metrics = calculateVendorMetrics(sales, monthlyGoals, date.from);
-        setVendorData(metrics);
-        setIsLoading(false);
-      });
-      
+      // First, fetch goals for the period
       const periodKey = format(date.from, 'yyyy-MM');
       const metasRef = doc(db, "metas-vendedores", periodKey);
+
       goalsUnsub = onSnapshot(metasRef, (docSnap) => {
-          if (docSnap.exists()) {
-              setMonthlyGoals(prev => ({ ...prev, [periodKey]: docSnap.data() as Record<string, VendorGoal> }));
-          } else {
-              setMonthlyGoals(prev => ({ ...prev, [periodKey]: {} }));
-          }
+          const newGoals = docSnap.exists() ? docSnap.data() as Record<string, VendorGoal> : {};
+          const updatedMonthlyGoals = { ...monthlyGoals, [periodKey]: newGoals };
+          setMonthlyGoals(updatedMonthlyGoals);
+
+          // Now that goals are loaded, query sales
+          const salesQuery = query(
+            collection(db, "vendas"),
+            where("data", ">=", fromDate),
+            where("data", "<=", toDateFilter)
+          );
+          
+          // Unsubscribe from previous sales listener if it exists
+          if (salesUnsub) salesUnsub(); 
+          
+          salesUnsub = onSnapshot(salesQuery, (snapshot) => {
+            if (snapshot.metadata.hasPendingWrites) return;
+            const sales = snapshot.docs.map(d => ({ ...d.data(), id: d.id })) as VendaDetalhada[];
+            const metrics = calculateVendorMetrics(sales, updatedMonthlyGoals, date.from);
+            setVendorData(metrics);
+            setIsLoading(false);
+          });
       });
 
     })();
