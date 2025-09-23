@@ -17,7 +17,7 @@ import VendorPerformanceTable from "@/components/vendor-performance-table";
 import type { VendaDetalhada, VendorGoal } from "@/lib/data";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { getMonth, getYear, format, startOfMonth, endOfMonth, isValid, parseISO, subDays } from 'date-fns';
+import { getMonth, getYear, format, startOfMonth, endOfMonth, isValid, parseISO, subDays, startOfWeek, endOfWeek, subMonths } from 'date-fns';
 import { DateRange } from "react-day-picker";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
@@ -143,7 +143,7 @@ const calculateVendorMetrics = (data: VendaDetalhada[], monthlyGoals: Record<str
   const currentPeriodKey = format(periodDate || new Date(), 'yyyy-MM');
   const vendorGoalsForPeriod = monthlyGoals[currentPeriodKey] || {};
 
-  return Object.entries(vendors).map(([name, data]) => {
+  const metrics = Object.entries(vendors).map(([name, data]) => {
     const goals = vendorGoalsForPeriod[name] || {};
     const ordersCount = data.orders.size;
     return {
@@ -158,6 +158,8 @@ const calculateVendorMetrics = (data: VendaDetalhada[], monthlyGoals: Record<str
         goalItensPorPedido: goals.itensPorPedido,
     }
   }).sort((a, b) => b.revenue - a.revenue);
+  
+  return metrics;
 };
 
 
@@ -194,29 +196,45 @@ export default function PublicoPage() {
       const fromDate = date.from;
       const toDateFilter = date.to || date.from;
 
-      // First, fetch goals for the period
       const periodKey = format(date.from, 'yyyy-MM');
       const metasRef = doc(db, "metas-vendedores", periodKey);
-
+      
+      if (goalsUnsub) goalsUnsub(); // Unsubscribe from previous goals listener
       goalsUnsub = onSnapshot(metasRef, (docSnap) => {
           const newGoals = docSnap.exists() ? docSnap.data() as Record<string, VendorGoal> : {};
           const updatedMonthlyGoals = { ...monthlyGoals, [periodKey]: newGoals };
           setMonthlyGoals(updatedMonthlyGoals);
+          
+          if (salesUnsub) salesUnsub(); // Unsubscribe from previous sales listener
 
-          // Now that goals are loaded, query sales
           const salesQuery = query(
             collection(db, "vendas"),
             where("data", ">=", fromDate),
             where("data", "<=", toDateFilter)
           );
           
-          // Unsubscribe from previous sales listener if it exists
-          if (salesUnsub) salesUnsub(); 
-          
           salesUnsub = onSnapshot(salesQuery, (snapshot) => {
             if (snapshot.metadata.hasPendingWrites) return;
             const sales = snapshot.docs.map(d => ({ ...d.data(), id: d.id })) as VendaDetalhada[];
             const metrics = calculateVendorMetrics(sales, updatedMonthlyGoals, date.from);
+            setVendorData(metrics);
+            setIsLoading(false);
+          }, (error) => {
+            console.error("Error fetching sales:", error);
+            setIsLoading(false);
+          });
+      }, (error) => {
+          console.error("Error fetching goals:", error);
+          // If goals fail, still try to fetch sales
+          const salesQuery = query(
+            collection(db, "vendas"),
+            where("data", ">=", fromDate),
+            where("data", "<=", toDateFilter)
+          );
+          salesUnsub = onSnapshot(salesQuery, (snapshot) => {
+            if (snapshot.metadata.hasPendingWrites) return;
+            const sales = snapshot.docs.map(d => ({ ...d.data(), id: d.id })) as VendaDetalhada[];
+            const metrics = calculateVendorMetrics(sales, monthlyGoals, date.from);
             setVendorData(metrics);
             setIsLoading(false);
           });
@@ -229,6 +247,8 @@ export default function PublicoPage() {
       if (goalsUnsub) goalsUnsub();
     };
   }, [date, mounted]);
+
+  const today = new Date();
 
   return (
     <div className="flex min-h-screen w-full flex-col">
@@ -276,11 +296,18 @@ export default function PublicoPage() {
                                   onSelect={setDate}
                                   numberOfMonths={2}
                                   presets={[
-                                    { label: 'Hoje', range: { from: new Date(), to: new Date() } },
-                                    { label: 'Ontem', range: { from: subDays(new Date(), 1), to: subDays(new Date(), 1) } },
-                                    { label: 'Últimos 7 dias', range: { from: subDays(new Date(), 6), to: new Date() } },
-                                    { label: 'Últimos 30 dias', range: { from: subDays(new Date(), 29), to: new Date() } },
-                                    { label: 'Este mês', range: { from: startOfMonth(new Date()), to: endOfMonth(new Date()) } },
+                                    { label: 'Hoje', range: { from: today, to: today } },
+                                    { label: 'Ontem', range: { from: subDays(today, 1), to: subDays(today, 1) } },
+                                    { label: 'Hoje e ontem', range: { from: subDays(today, 1), to: today } },
+                                    { label: 'Últimos 7 dias', range: { from: subDays(today, 6), to: today } },
+                                    { label: 'Últimos 14 dias', range: { from: subDays(today, 13), to: today } },
+                                    { label: 'Últimos 28 dias', range: { from: subDays(today, 27), to: today } },
+                                    { label: 'Últimos 30 dias', range: { from: subDays(today, 29), to: today } },
+                                    { label: 'Esta semana', range: { from: startOfWeek(today), to: endOfWeek(today) } },
+                                    { label: 'Semana passada', range: { from: startOfWeek(subDays(today, 7)), to: endOfWeek(subDays(today, 7)) } },
+                                    { label: 'Este mês', range: { from: startOfMonth(today), to: endOfMonth(today) } },
+                                    { label: 'Mês passado', range: { from: startOfMonth(subMonths(today, 1)), to: endOfMonth(subMonths(today, 1)) } },
+                                    { label: 'Máximo', range: { from: new Date(2023, 0, 1), to: today } },
                                 ]}
                               />
                           </PopoverContent>
