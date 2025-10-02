@@ -296,7 +296,9 @@ export default function VendedoresPage() {
         const currentPeriodKey = date?.from ? format(date.from, 'yyyy-MM') : '';
         const vendorGoalsForPeriod = monthlyGoals[currentPeriodKey] || {};
         
-        const allVendors = Array.from(new Set([...Object.keys(currentVendors), ...Object.keys(previousVendors), ...Object.keys(vendorGoalsForPeriod)]));
+        // Get all unique vendors from sales data + goals data
+        const vendorsFromAllSales = Array.from(new Set(allSales.map(s => s.vendedor).filter(Boolean)));
+        const allVendors = Array.from(new Set([...vendorsFromAllSales, ...Object.keys(currentVendors), ...Object.keys(previousVendors), ...Object.keys(vendorGoalsForPeriod)]));
 
         const totalRevenueAllVendors = Object.values(currentVendors).reduce((sum, v) => sum + v.revenue, 0);
 
@@ -348,7 +350,7 @@ export default function VendedoresPage() {
         }
         
         return { tableData: combinedTableData, chartData: finalChartData, allVendorNames: allVendors };
-    }, [filteredData, comparisonData, date, selectedVendors, compareDate, monthlyGoals]);
+    }, [filteredData, comparisonData, date, selectedVendors, compareDate, monthlyGoals, allSales]);
 
     const handleSaveGoals = async () => {
         setIsSavingGoals(true);
@@ -633,5 +635,7 @@ export default function VendedoresPage() {
     </div>
   );
 }
+
+    
 
     
