@@ -21,12 +21,20 @@ import { getMonth, getYear, format, startOfMonth, endOfMonth, isValid, parseISO,
 import { DateRange } from "react-day-picker";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
-import { Calendar as CalendarIcon } from "lucide-react";
+import { Calendar as CalendarIcon, Check, ChevronsUpDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Calendar } from "@/components/ui/calendar";
 import { ptBR } from "date-fns/locale";
 import CustomerPerformanceList from "@/components/customer-performance-list";
 import TopProductsChart from "@/components/top-products-chart";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 
 // Funções de ajuda para processar os dados
 const toDate = (value: unknown): Date | null => {
@@ -166,7 +174,10 @@ const calculateMetrics = (data: VendaDetalhada[], monthlyGoals: Record<string, R
   const currentPeriodKey = format(periodDate || new Date(), 'yyyy-MM');
   const vendorGoalsForPeriod = monthlyGoals[currentPeriodKey] || {};
 
-  const vendorMetrics = Object.entries(vendors).map(([name, data]) => {
+  const allVendorNames = Array.from(new Set([...Object.keys(vendors), ...Object.keys(vendorGoalsForPeriod)]));
+
+  const vendorMetrics = allVendorNames.map((name) => {
+    const data = vendors[name] || { revenue: 0, orders: new Set(), itemsSold: 0 };
     const goals = vendorGoalsForPeriod[name] || {};
     const ordersCount = data.orders.size;
     return {
@@ -197,6 +208,7 @@ const calculateMetrics = (data: VendaDetalhada[], monthlyGoals: Record<string, R
 
 
 export default function PublicoPage() {
+  const [allSales, setAllSales] = React.useState<VendaDetalhada[]>([]);
   const [vendorData, setVendorData] = React.useState<any[]>([]);
   const [topProducts, setTopProducts] = React.useState<any[]>([]);
   const [topCustomers, setTopCustomers] = React.useState<any[]>([]);
@@ -205,14 +217,24 @@ export default function PublicoPage() {
   const [monthlyGoals, setMonthlyGoals] = React.useState<Record<string, Record<string, VendorGoal>>>({});
   const [date, setDate] = React.useState<DateRange | undefined>(undefined);
   const [mounted, setMounted] = React.useState(false);
+  const [selectedVendors, setSelectedVendors] = React.useState<string[]>([
+    "Ana Paula de Farias",
+    "Raissa Dandara (Colaboradora)",
+    "Regiane Alves da Silva (Colaboradora)",
+  ]);
 
   React.useEffect(() => {
     setMounted(true);
-    setDate({
-      from: startOfMonth(new Date()),
-      to: endOfMonth(new Date()),
-    })
   }, [])
+  
+  React.useEffect(() => {
+    if (mounted) {
+        setDate({
+            from: startOfMonth(new Date()),
+            to: endOfMonth(new Date()),
+        });
+    }
+  }, [mounted]);
 
   React.useEffect(() => {
     if (!mounted || !date?.from) return;
@@ -237,8 +259,7 @@ export default function PublicoPage() {
       if (goalsUnsub) goalsUnsub(); // Unsubscribe from previous goals listener
       goalsUnsub = onSnapshot(metasRef, (docSnap) => {
           const newGoals = docSnap.exists() ? docSnap.data() as Record<string, VendorGoal> : {};
-          const updatedMonthlyGoals = { ...monthlyGoals, [periodKey]: newGoals };
-          setMonthlyGoals(updatedMonthlyGoals);
+          setMonthlyGoals(prev => ({ ...prev, [periodKey]: newGoals }));
           
           if (salesUnsub) salesUnsub(); // Unsubscribe from previous sales listener
 
@@ -251,10 +272,7 @@ export default function PublicoPage() {
           salesUnsub = onSnapshot(salesQuery, (snapshot) => {
             if (snapshot.metadata.hasPendingWrites) return;
             const sales = snapshot.docs.map(d => ({ ...d.data(), id: d.id })) as VendaDetalhada[];
-            const { vendorMetrics, topProducts: calculatedProducts, topCustomers: calculatedCustomers } = calculateMetrics(sales, updatedMonthlyGoals, date.from);
-            setVendorData(vendorMetrics);
-            setTopProducts(calculatedProducts);
-            setTopCustomers(calculatedCustomers);
+            setAllSales(sales);
             setIsLoading(false);
           }, (error) => {
             console.error("Error fetching sales:", error);
@@ -271,10 +289,7 @@ export default function PublicoPage() {
           salesUnsub = onSnapshot(salesQuery, (snapshot) => {
             if (snapshot.metadata.hasPendingWrites) return;
             const sales = snapshot.docs.map(d => ({ ...d.data(), id: d.id })) as VendaDetalhada[];
-            const { vendorMetrics, topProducts: calculatedProducts, topCustomers: calculatedCustomers } = calculateMetrics(sales, monthlyGoals, date.from);
-            setVendorData(vendorMetrics);
-            setTopProducts(calculatedProducts);
-            setTopCustomers(calculatedCustomers);
+            setAllSales(sales);
             setIsLoading(false);
           });
       });
@@ -286,6 +301,16 @@ export default function PublicoPage() {
       if (goalsUnsub) goalsUnsub();
     };
   }, [date, mounted]);
+  
+  const { filteredVendorData, allVendorNames } = React.useMemo(() => {
+    const { vendorMetrics, topProducts, topCustomers } = calculateMetrics(allSales, monthlyGoals, date?.from);
+    const filtered = vendorMetrics.filter(v => selectedVendors.length === 0 || selectedVendors.includes(v.name));
+    setTopProducts(topProducts);
+    setTopCustomers(topCustomers);
+    const allNames = Array.from(new Set(allSales.map(s => s.vendedor).filter(Boolean)));
+    return { filteredVendorData: filtered, allVendorNames: allNames };
+  }, [allSales, selectedVendors, monthlyGoals, date]);
+
 
   const today = new Date();
 
@@ -311,7 +336,7 @@ export default function PublicoPage() {
                   <CardDescription>Performance de vendas por vendedor no período selecionado.</CardDescription>
                 </div>
                  <div className="flex items-center space-x-4">
-                     {mounted && (
+                     {mounted && date && (
                       <Popover>
                           <PopoverTrigger asChild>
                               <Button
@@ -352,6 +377,43 @@ export default function PublicoPage() {
                           </PopoverContent>
                       </Popover>
                      )}
+                      <Popover>
+                        <PopoverTrigger asChild>
+                            <Button
+                                variant="outline"
+                                role="combobox"
+                                className="w-[250px] justify-between"
+                            >
+                                {selectedVendors.length > 0 ? `${selectedVendors.length} vendedor(es) selecionado(s)` : "Filtrar por vendedor..."}
+                                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                            </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-[250px] p-0">
+                            <Command>
+                                <CommandInput placeholder="Pesquisar vendedor..." />
+                                <CommandList>
+                                    <CommandEmpty>Nenhum vendedor encontrado.</CommandEmpty>
+                                    <CommandGroup>
+                                        {allVendorNames.map((vendor) => (
+                                            <CommandItem
+                                                key={vendor}
+                                                onSelect={() => {
+                                                    setSelectedVendors(current => 
+                                                        current.includes(vendor)
+                                                            ? current.filter(v => v !== vendor)
+                                                            : [...current, vendor]
+                                                    )
+                                                }}
+                                            >
+                                                <Check className={cn("mr-2 h-4 w-4", selectedVendors.includes(vendor) ? "opacity-100" : "opacity-0")} />
+                                                {vendor}
+                                            </CommandItem>
+                                        ))}
+                                    </CommandGroup>
+                                </CommandList>
+                            </Command>
+                        </PopoverContent>
+                    </Popover>
                     <div className="flex items-center space-x-2">
                         <Label htmlFor="show-goals" className="text-sm font-normal">
                             Mostrar Metas
@@ -371,7 +433,7 @@ export default function PublicoPage() {
                         <p>Carregando dados...</p>
                     </div>
                 ) : (
-                    <VendorPerformanceTable data={vendorData} showGoals={showGoals} />
+                    <VendorPerformanceTable data={filteredVendorData} showGoals={showGoals} />
                 )}
             </CardContent>
         </Card>
