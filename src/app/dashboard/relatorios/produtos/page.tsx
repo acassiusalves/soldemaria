@@ -20,7 +20,7 @@ import type { VendaDetalhada } from "@/lib/data";
 import { useSalesData } from "@/hooks/use-firestore-data-v2";
 import { RefreshButton } from "@/components/refresh-button";
 import { DateRange } from "react-day-picker";
-import { endOfDay, format, isValid, parseISO, startOfMonth, endOfMonth } from "date-fns";
+import { endOfDay, format, isValid, parseISO, startOfMonth, endOfMonth, subDays, startOfWeek, endOfWeek, subMonths } from "date-fns";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -114,6 +114,7 @@ const calculateProductMetrics = (data: VendaDetalhada[]) => {
 
 export default function ProdutosPage() {
     const [mounted, setMounted] = React.useState(false);
+    const today = new Date();
     const [date, setDate] = React.useState<DateRange | undefined>({
       from: startOfMonth(new Date()),
       to: endOfMonth(new Date()),
@@ -195,13 +196,34 @@ export default function ProdutosPage() {
                     <CalendarIcon className="mr-2 h-4 w-4" />
                     <span suppressHydrationWarning>
                     {date.to
-                        ? `${format(date.from, "dd/MM/y", { locale: ptBR })} - ${format(date.to, "dd/MM/y", { locale: ptBR })}`
-                        : format(date.from, "dd/MM/y", { locale: ptBR })}
+                        ? `${format(date.from!, "dd/MM/y", { locale: ptBR })} - ${format(date.to!, "dd/MM/y", { locale: ptBR })}`
+                        : format(date.from!, "dd/MM/y", { locale: ptBR })}
                     </span>
                 </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-0" align="start">
-                <Calendar locale={ptBR} initialFocus mode="range" defaultMonth={date.from} selected={date} onSelect={setDate} numberOfMonths={2} />
+                <Calendar 
+                  locale={ptBR} 
+                  initialFocus mode="range" 
+                  defaultMonth={date.from} 
+                  selected={date} 
+                  onSelect={setDate} 
+                  numberOfMonths={2}
+                  presets={[
+                    { label: 'Hoje', range: { from: today, to: today } },
+                    { label: 'Ontem', range: { from: subDays(today, 1), to: subDays(today, 1) } },
+                    { label: 'Hoje e ontem', range: { from: subDays(today, 1), to: today } },
+                    { label: 'Últimos 7 dias', range: { from: subDays(today, 6), to: today } },
+                    { label: 'Últimos 14 dias', range: { from: subDays(today, 13), to: today } },
+                    { label: 'Últimos 28 dias', range: { from: subDays(today, 27), to: today } },
+                    { label: 'Últimos 30 dias', range: { from: subDays(today, 29), to: today } },
+                    { label: 'Esta semana', range: { from: startOfWeek(today), to: endOfWeek(today) } },
+                    { label: 'Semana passada', range: { from: startOfWeek(subDays(today, 7)), to: endOfWeek(subDays(today, 7)) } },
+                    { label: 'Este mês', range: { from: startOfMonth(today), to: endOfMonth(today) } },
+                    { label: 'Mês passado', range: { from: startOfMonth(subMonths(today, 1)), to: endOfMonth(subMonths(today, 1)) } },
+                    { label: 'Máximo', range: { from: new Date(2023, 0, 1), to: today } },
+                ]}
+                />
                 </PopoverContent>
             </Popover>
              <Popover>
@@ -212,7 +234,28 @@ export default function ProdutosPage() {
                 </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-0" align="start">
-                <Calendar locale={ptBR} initialFocus mode="range" defaultMonth={compareDate?.from} selected={compareDate} onSelect={setCompareDate} numberOfMonths={2} />
+                <Calendar 
+                  locale={ptBR} 
+                  initialFocus mode="range" 
+                  defaultMonth={compareDate?.from} 
+                  selected={compareDate} 
+                  onSelect={setCompareDate} 
+                  numberOfMonths={2} 
+                  presets={[
+                    { label: 'Hoje', range: { from: today, to: today } },
+                    { label: 'Ontem', range: { from: subDays(today, 1), to: subDays(today, 1) } },
+                    { label: 'Hoje e ontem', range: { from: subDays(today, 1), to: today } },
+                    { label: 'Últimos 7 dias', range: { from: subDays(today, 6), to: today } },
+                    { label: 'Últimos 14 dias', range: { from: subDays(today, 13), to: today } },
+                    { label: 'Últimos 28 dias', range: { from: subDays(today, 27), to: today } },
+                    { label: 'Últimos 30 dias', range: { from: subDays(today, 29), to: today } },
+                    { label: 'Esta semana', range: { from: startOfWeek(today), to: endOfWeek(today) } },
+                    { label: 'Semana passada', range: { from: startOfWeek(subDays(today, 7)), to: endOfWeek(subDays(today, 7)) } },
+                    { label: 'Este mês', range: { from: startOfMonth(today), to: endOfMonth(today) } },
+                    { label: 'Mês passado', range: { from: startOfMonth(subMonths(today, 1)), to: endOfMonth(subMonths(today, 1)) } },
+                    { label: 'Máximo', range: { from: new Date(2023, 0, 1), to: today } },
+                ]}
+                />
                 </PopoverContent>
             </Popover>
             {hasComparison && (
@@ -243,4 +286,3 @@ export default function ProdutosPage() {
     </div>
   );
 }
-

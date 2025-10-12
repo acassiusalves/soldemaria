@@ -3,7 +3,7 @@
 "use client";
 
 import * as React from "react";
-import { format, parse, parseISO, endOfDay, isValid, subDays, startOfMonth, endOfMonth } from "date-fns";
+import { format, parse, parseISO, endOfDay, isValid, subDays, startOfMonth, endOfMonth, startOfWeek, endOfWeek, subMonths } from "date-fns";
 import { ptBR } from 'date-fns/locale';
 import type { DateRange } from "react-day-picker";
 import {
@@ -296,6 +296,7 @@ export default function LogisticaPage() {
   const [columns, setColumns] = React.useState<ColumnDef[]>([]);
   const [uploadedFileNames, setUploadedFileNames] = React.useState<string[]>([]);
   const { toast } = useToast();
+  const today = new Date();
 
   const [date, setDate] = React.useState<DateRange | undefined>({
     from: startOfMonth(new Date()),
@@ -501,18 +502,18 @@ export default function LogisticaPage() {
       }
 
       // Optimistic update
-      setLogisticaData(prev => {
-          const map = new Map(prev.map(s => [s.id, s]));
-          dataToSave.forEach(s => {
-              const newRecord = { ...s };
-              // We assign a real ID after saving, so this might be tricky
-              // For now, let's just add them, Firestore listener will sync eventually
-              if (!map.has(s.id)) {
-                  map.set(s.id, newRecord);
-              }
-          });
-          return Array.from(map.values());
-      });
+      // setLogisticaData(prev => {
+      //     const map = new Map(prev.map(s => [s.id, s]));
+      //     dataToSave.forEach(s => {
+      //         const newRecord = { ...s };
+      //         // We assign a real ID after saving, so this might be tricky
+      //         // For now, let's just add them, Firestore listener will sync eventually
+      //         if (!map.has(s.id)) {
+      //             map.set(s.id, newRecord);
+      //         }
+      //     });
+      //     return Array.from(map.values());
+      // });
 
 
       const allKeys = new Set<string>();
@@ -598,7 +599,7 @@ export default function LogisticaPage() {
       const metaRef = doc(db, "metadata", "logistica");
       await setDoc(metaRef, { uploadedFileNames: [], columns: [] }, { merge: true });
 
-      setLogisticaData([]);
+      // setLogisticaData([]);
       _t({ title: "Limpeza Concluída!", description: "Todos os dados de logística foram apagados do banco de dados." });
     } catch (error) {
       console.error("Error clearing all data:", error);
@@ -631,7 +632,9 @@ export default function LogisticaPage() {
              <DropdownMenuContent align="end">
                 <DropdownMenuLabel>Minha Conta</DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem disabled>Configurações</DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href="/dashboard/configuracoes">Configurações</Link>
+                </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={handleLogout}>
                   <LogOut className="mr-2 h-4 w-4" />
@@ -737,7 +740,7 @@ export default function LogisticaPage() {
                 >
                   <CalendarIcon className="mr-2 h-4 w-4" />
                   {date?.from ? (
-                    date.to ? (<>{format(date.from, "dd/MM/y")} - {format(date.to, "dd/MM/y")}</>) : (format(date.from, "dd/MM/y"))
+                    date.to ? (<>{format(date.from, "dd/MM/y", { locale: ptBR })} - {format(date.to, "dd/MM/y", { locale: ptBR })}</>) : (format(date.from, "dd/MM/y", { locale: ptBR }))
                   ) : (<span>Selecione uma data</span>)}
                 </Button>
               </PopoverTrigger>
@@ -751,11 +754,18 @@ export default function LogisticaPage() {
                     onSelect={setDate}
                     numberOfMonths={2}
                     presets={[
-                        { label: 'Hoje', range: { from: new Date(), to: new Date() } },
-                        { label: 'Ontem', range: { from: subDays(new Date(), 1), to: subDays(new Date(), 1) } },
-                        { label: 'Últimos 7 dias', range: { from: subDays(new Date(), 6), to: new Date() } },
-                        { label: 'Últimos 30 dias', range: { from: subDays(new Date(), 29), to: new Date() } },
-                        { label: 'Este mês', range: { from: startOfMonth(new Date()), to: endOfMonth(new Date()) } },
+                        { label: 'Hoje', range: { from: today, to: today } },
+                        { label: 'Ontem', range: { from: subDays(today, 1), to: subDays(today, 1) } },
+                        { label: 'Hoje e ontem', range: { from: subDays(today, 1), to: today } },
+                        { label: 'Últimos 7 dias', range: { from: subDays(today, 6), to: today } },
+                        { label: 'Últimos 14 dias', range: { from: subDays(today, 13), to: today } },
+                        { label: 'Últimos 28 dias', range: { from: subDays(today, 27), to: today } },
+                        { label: 'Últimos 30 dias', range: { from: subDays(today, 29), to: today } },
+                        { label: 'Esta semana', range: { from: startOfWeek(today), to: endOfWeek(today) } },
+                        { label: 'Semana passada', range: { from: startOfWeek(subDays(today, 7)), to: endOfWeek(subDays(today, 7)) } },
+                        { label: 'Este mês', range: { from: startOfMonth(today), to: endOfMonth(today) } },
+                        { label: 'Mês passado', range: { from: startOfMonth(subMonths(today, 1)), to: endOfMonth(subMonths(today, 1)) } },
+                        { label: 'Máximo', range: { from: new Date(2023, 0, 1), to: today } },
                     ]}
                 />
               </PopoverContent>
