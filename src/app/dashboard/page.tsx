@@ -709,7 +709,9 @@ export default function DashboardPage() {
                 <DropdownMenuContent align="end">
                   <DropdownMenuLabel>Minha Conta</DropdownMenuLabel>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem disabled>Configurações</DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link href="/dashboard/configuracoes">Configurações</Link>
+                  </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={handleLogout}>
                     <LogOut className="mr-2 h-4 w-4" />
@@ -855,6 +857,7 @@ export default function DashboardPage() {
     
 
     
+
 
 
 

@@ -68,6 +68,7 @@ import { saveAppSettings, loadAppSettings, loadUsersWithRoles, updateUserRole } 
 import type { AppUser } from "@/lib/types";
 import { NewUserDialog } from "@/components/new-user-dialog";
 import { NavMenu } from '@/components/nav-menu';
+import Link from 'next/link';
 
 
 export default function ConfiguracoesPage() {
@@ -274,7 +275,9 @@ export default function ConfiguracoesPage() {
             <DropdownMenuContent align="end">
               <DropdownMenuLabel>Minha Conta</DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem disabled>Configurações</DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link href="/dashboard/configuracoes">Configurações</Link>
+              </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={handleLogout}>
                 <LogOut className="mr-2 h-4 w-4" />

@@ -14,6 +14,7 @@ import {
 import { useRouter } from "next/navigation";
 import { getAuthClient } from "@/lib/firebase";
 import { NavMenu } from '@/components/nav-menu';
+import Link from 'next/link';
 
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -151,7 +152,9 @@ export default function ConexoesPage() {
              <DropdownMenuContent align="end">
                 <DropdownMenuLabel>Minha Conta</DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem disabled>Configurações</DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href="/dashboard/configuracoes">Configurações</Link>
+                </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={handleLogout}>
                   <LogOut className="mr-2 h-4 w-4" />
