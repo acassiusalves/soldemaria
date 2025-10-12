@@ -8,6 +8,7 @@ type CustomerData = {
   name: string;
   orders: number;
   revenue: number;
+  averageTicket: number;
 };
 
 interface CustomerPerformanceListProps {
@@ -52,10 +53,15 @@ export default function CustomerPerformanceList({ data }: CustomerPerformanceLis
                 <span className="font-medium text-sm truncate" title={customer.name}>{customer.name}</span>
             </div>
             <div className="flex items-center gap-4">
-                <span className="font-semibold tabular-nums text-sm">
-                    {formatRevenue(customer.revenue)}
-                </span>
-                <span className="font-semibold tabular-nums text-sm text-muted-foreground">
+                <div className="flex flex-col items-end">
+                    <span className="font-semibold tabular-nums text-sm">
+                        {formatRevenue(customer.revenue)}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                        {formatRevenue(customer.averageTicket)} Ticket Médio
+                    </span>
+                </div>
+                <span className="font-semibold tabular-nums text-sm text-muted-foreground w-20 text-right">
                     {formatOrders(customer.orders)}
                 </span>
             </div>
