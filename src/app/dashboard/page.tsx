@@ -75,6 +75,7 @@ import {
 } from "@/components/ui/command";
 import VendorPerformanceList from "@/components/vendor-performance-list";
 import CustomerPerformanceList from "@/components/customer-performance-list";
+import { NavMenu } from "@/components/nav-menu";
 
 
 const toDate = (value: unknown): Date | null => {
@@ -785,6 +786,7 @@ export default function DashboardPage() {
     
 
     
+
 
 
 
