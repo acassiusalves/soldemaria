@@ -39,7 +39,7 @@ const navLinks = [
     ],
   },
   { href: '/dashboard/conexoes', label: 'Conexões' },
-  { href: '/dashboard/permissoes', label: 'Permissões' },
+  { href: '/dashboard/configuracoes', label: 'Configurações' },
   { href: '/publico', label: 'Público' },
 ];
 
@@ -129,3 +129,5 @@ export function NavMenu() {
     </nav>
   );
 }
+
+    

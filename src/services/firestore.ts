@@ -49,7 +49,7 @@ export async function loadAppSettings(): Promise<AppSettings | null> {
     const db = await getDbClient();
     if (!db) return null;
     
-    const settingsRef = doc(db, "app_settings", "main");
+    const settingsRef = doc(db, "configuracoes", "main");
     const settingsSnap = await getDoc(settingsRef);
 
     if (settingsSnap.exists()) {
@@ -67,6 +67,8 @@ export async function saveAppSettings(settings: AppSettings) {
     const db = await getDbClient();
     if (!db) return;
 
-    const settingsRef = doc(db, "app_settings", "main");
+    const settingsRef = doc(db, "configuracoes", "main");
     await setDoc(settingsRef, settings, { merge: true });
 }
+
+    

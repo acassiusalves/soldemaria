@@ -18,6 +18,7 @@ export const pagePermissions: Record<string, Role[]> = {
   '/dashboard/taxas': ['admin', 'socio', 'financeiro'],
   '/dashboard/conexoes': ['admin'],
   '/dashboard/permissoes': ['admin'],
+  '/dashboard/configuracoes': ['admin'],
 };
 
 // You can add more pages here with their default roles
@@ -29,4 +30,7 @@ export const allPages = [
     '/dashboard/taxas',
     '/dashboard/conexoes',
     '/dashboard/permissoes',
+    '/dashboard/configuracoes',
 ];
+
+    

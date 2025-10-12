@@ -42,7 +42,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           return;
         }
         
-        const settingsRef = doc(db, "app_settings", "main");
+        const settingsRef = doc(db, "configuracoes", "main");
         const unsubSettings = onSnapshot(settingsRef, (settingsSnap) => {
             const settingsData = settingsSnap.exists() ? settingsSnap.data() as AppSettings : { permissions: pagePermissions, inactivePages: [] };
             setAppSettings(settingsData);
@@ -120,3 +120,5 @@ export function useApp() {
   }
   return context;
 }
+
+    
