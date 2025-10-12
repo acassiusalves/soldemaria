@@ -41,14 +41,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           // Handle DB client not available
           return;
         }
-        
+
         const settingsRef = doc(db, "configuracoes", "main");
         const unsubSettings = onSnapshot(settingsRef, (settingsSnap) => {
             const settingsData = settingsSnap.exists() ? settingsSnap.data() as AppSettings : { permissions: pagePermissions, inactivePages: [] };
             setAppSettings(settingsData);
         });
         unsubs.push(unsubSettings);
-        
+
         const authUnsub = auth.onAuthStateChanged(async (user) => {
           if (!user) {
             setUserRole(null);
@@ -62,27 +62,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               const userData = userSnap.exists() ? userSnap.data() as AppUser : null;
               const role = userData?.role || 'vendedor';
               setUserRole(role);
-
-              if (appSettings) {
-                const pageKey = Object.keys(appSettings.permissions).find(p => pathname.startsWith(p) && p !== '/dashboard');
-                const mainDashboardKey = '/dashboard';
-                const isMainDashboard = pathname === mainDashboardKey;
-
-                let hasAccess = role === 'admin';
-                if (!hasAccess) {
-                    if (isMainDashboard) {
-                        hasAccess = appSettings.permissions[mainDashboardKey]?.includes(role) ?? false;
-                    } else if (pageKey) {
-                        const isPageActive = !appSettings.inactivePages?.includes(pageKey);
-                        const hasPagePermission = appSettings.permissions[pageKey]?.includes(role) ?? false;
-                        hasAccess = isPageActive && hasPagePermission;
-                    }
-                }
-                
-                if (!hasAccess && pathname.startsWith('/dashboard')) {
-                    router.replace('/dashboard');
-                }
-              }
               setIsLoading(false);
           });
           unsubs.push(unsubUser);
@@ -100,7 +79,41 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return () => {
       unsubs.forEach(unsub => unsub());
     };
-  }, [pathname, router, appSettings]);
+  }, [pathname, router]);
+
+  // Separate effect for permission checking
+  useEffect(() => {
+    if (!userRole || !appSettings || isLoading) return;
+
+    // Skip permission check for non-dashboard pages and public pages
+    if (!pathname.startsWith('/dashboard') || pathname === '/dashboard/configuracoes') return;
+
+    // Admin always has access
+    if (userRole === 'admin') return;
+
+    // Find the most specific page key that matches current pathname
+    const pageKeys = Object.keys(appSettings.permissions).filter(p => pathname.startsWith(p));
+    const pageKey = pageKeys.sort((a, b) => b.length - a.length)[0]; // Get most specific match
+
+    if (!pageKey) {
+      // No permission rule found, redirect to main dashboard
+      router.replace('/dashboard');
+      return;
+    }
+
+    // Check if page is active
+    const isPageActive = !appSettings.inactivePages?.includes(pageKey);
+    if (!isPageActive) {
+      router.replace('/dashboard');
+      return;
+    }
+
+    // Check if user has permission
+    const hasPermission = appSettings.permissions[pageKey]?.includes(userRole) ?? false;
+    if (!hasPermission) {
+      router.replace('/dashboard');
+    }
+  }, [userRole, appSettings, pathname, router, isLoading]);
 
   return (
     <AppContext.Provider value={{ userRole, appSettings, isLoading }}>

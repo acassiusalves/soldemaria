@@ -112,31 +112,3 @@ export const authUserMirror = onUserCreated(
       }
     });
   });
-
-/* ========== Backfill: Auth -> Firestore (rodar 1x) ========== */
-export const syncAuthUsers = onCall(
-  {region: "southamerica-east1"},
-  async () => {
-    const auth = getAuth();
-    const db = getFirestore();
-    let token: string|undefined = undefined;
-    let count = 0;
-
-    do {
-      const page = await auth.listUsers(1000, token);
-      for (const ur of page.users) {
-        const email = (ur.email || "").toLowerCase();
-        await db.collection("users").doc(ur.uid).set({
-          email,
-          role: "vendedor",
-          createdAt: FieldValue.serverTimestamp(),
-          updatedAt: FieldValue.serverTimestamp(),
-        }, {merge: true});
-        count++;
-      }
-      token = page.pageToken;
-    } while (token);
-
-    return {ok: true, synced: count};
-  }
-);

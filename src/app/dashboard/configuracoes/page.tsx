@@ -9,7 +9,6 @@ import {
   Users,
   Loader2,
   Save,
-  RefreshCw,
   Trash2,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -64,7 +63,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
 import { pagePermissions as defaultPagePermissions, availableRoles } from "@/lib/permissions";
-import { saveAppSettings, loadAppSettings, loadUsersWithRoles, updateUserRole } from "@/services/firestore";
+import { saveAppSettings, loadAppSettings, loadUsersWithRoles, updateUserRole, deleteUser } from "@/services/firestore";
 import type { AppUser } from "@/lib/types";
 import { NewUserDialog } from "@/components/new-user-dialog";
 import { NavMenu } from '@/components/nav-menu';
@@ -78,7 +77,6 @@ export default function ConfiguracoesPage() {
     const [isSavingPermissions, setIsSavingPermissions] = useState(false);
     const [isSavingUsers, setIsSavingUsers] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
-    const [isSyncing, setIsSyncing] = useState(false);
     const [isNewUserDialogOpen, setIsNewUserDialogOpen] = useState(false);
     const { toast } = useToast();
     const router = useRouter();
@@ -220,34 +218,21 @@ export default function ConfiguracoesPage() {
         }
     }
     
-    const handleSyncAuthUsers = async () => {
-        setIsSyncing(true);
+    const handleDeleteUser = async (userId: string) => {
         try {
-            const region = process.env.NEXT_PUBLIC_FIREBASE_FUNCTIONS_REGION || "southamerica-east1";
-            const fn = httpsCallable(getFunctions(app, region), "syncAuthUsers");
-            const result: any = await fn();
+            await deleteUser(userId);
             toast({
-                title: "Sincronização Concluída",
-                description: result?.data?.message || "Usuários sincronizados."
+                title: "Usuário Excluído",
+                description: "O usuário foi removido permanentemente do sistema."
             });
-        } catch (error: any) {
-             console.error("Erro ao sincronizar usuários:", error);
-             toast({
+        } catch (error) {
+            console.error("Erro ao excluir usuário:", error);
+            toast({
                 variant: "destructive",
-                title: "Erro na Sincronização",
-                description: `${error?.code || 'internal'} — ${error?.message || 'Ocorreu um erro desconhecido.'}`
-             })
-        } finally {
-            setIsSyncing(false);
+                title: "Erro ao Excluir",
+                description: "Não foi possível excluir o usuário do sistema."
+            });
         }
-    };
-    
-    const handleDeleteUser = (userId: string) => {
-        setUsers(currentUsers => currentUsers.filter(u => u.id !== userId));
-        toast({
-            title: "Usuário Removido da Lista",
-            description: "O usuário foi removido da visualização. Ele ainda existe no sistema."
-        });
     };
     
   return (
@@ -429,10 +414,6 @@ export default function ConfiguracoesPage() {
                                 <UserPlus className="mr-2" />
                                 Adicionar Novo Usuário
                             </Button>
-                             <Button variant="secondary" onClick={handleSyncAuthUsers} disabled={isSyncing}>
-                                {isSyncing ? <Loader2 className="mr-2 animate-spin" /> : <RefreshCw className="mr-2" />}
-                                Sincronizar Usuários do Auth
-                            </Button>
                         </div>
                         <Button onClick={handleSaveUsers} disabled={isSavingUsers}>
                             {isSavingUsers && <Loader2 className="animate-spin mr-2"/>}
@@ -455,5 +436,3 @@ export default function ConfiguracoesPage() {
     </>
   );
 }
-
-    
