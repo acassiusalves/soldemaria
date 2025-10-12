@@ -5,6 +5,7 @@ export type AppUser = {
   id: string;
   email: string;
   role: Role;
+  requirePasswordChange?: boolean;
 };
 
 export type AppSettings = {

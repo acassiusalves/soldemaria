@@ -1,6 +1,6 @@
 
 import { getDbClient } from "@/lib/firebase";
-import { collection, getDocs, doc, getDoc, setDoc, query, where, updateDoc, onSnapshot, deleteDoc } from "firebase/firestore";
+import { collection, getDocs, doc, getDoc, setDoc, query, where, updateDoc, onSnapshot } from "firebase/firestore";
 import type { AppUser, AppSettings, Role } from "@/lib/types";
 import { availableRoles, pagePermissions } from "@/lib/permissions";
 
@@ -69,13 +69,5 @@ export async function saveAppSettings(settings: AppSettings) {
 
     const settingsRef = doc(db, "configuracoes", "main");
     await setDoc(settingsRef, settings, { merge: true });
-}
-
-export async function deleteUser(userId: string) {
-    const db = await getDbClient();
-    if (!db) return;
-
-    const userRef = doc(db, "users", userId);
-    await deleteDoc(userRef);
 }
 

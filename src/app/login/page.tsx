@@ -5,7 +5,8 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { signInWithEmailAndPassword } from "firebase/auth";
-import { getAuthClient } from "@/lib/firebase"; 
+import { getAuthClient, getDbClient } from "@/lib/firebase";
+import { doc, getDoc } from "firebase/firestore"; 
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -63,7 +64,20 @@ export default function LoginPage() {
 
     setIsLoggingIn(true);
     try {
-      await signInWithEmailAndPassword(auth, email, password);
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+
+      // Verificar se o usuário precisa trocar a senha
+      const db = await getDbClient();
+      if (db) {
+        const userDoc = await getDoc(doc(db, "users", userCredential.user.uid));
+        const userData = userDoc.data();
+
+        if (userData?.requirePasswordChange) {
+          router.push("/trocar-senha");
+          return;
+        }
+      }
+
       router.push("/");
     } catch (error: any) {
       console.error("Erro de login:", error);

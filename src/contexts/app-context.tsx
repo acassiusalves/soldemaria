@@ -42,12 +42,30 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           return;
         }
 
+        // Carregar configurações uma vez (não precisa real-time)
         const settingsRef = doc(db, "configuracoes", "main");
-        const unsubSettings = onSnapshot(settingsRef, (settingsSnap) => {
-            const settingsData = settingsSnap.exists() ? settingsSnap.data() as AppSettings : { permissions: pagePermissions, inactivePages: [] };
-            setAppSettings(settingsData);
-        });
-        unsubs.push(unsubSettings);
+
+        // Tentar cache primeiro
+        const cachedSettings = sessionStorage.getItem('app-settings');
+        if (cachedSettings) {
+          try {
+            setAppSettings(JSON.parse(cachedSettings));
+          } catch (e) {
+            console.error('Error parsing cached settings:', e);
+          }
+        }
+
+        // Buscar do Firestore
+        const settingsSnap = await (await import('firebase/firestore')).getDoc(settingsRef);
+        const settingsData = settingsSnap.exists() ? settingsSnap.data() as AppSettings : { permissions: pagePermissions, inactivePages: [] };
+        setAppSettings(settingsData);
+
+        // Salvar no cache
+        try {
+          sessionStorage.setItem('app-settings', JSON.stringify(settingsData));
+        } catch (e) {
+          console.error('Error caching settings:', e);
+        }
 
         const authUnsub = auth.onAuthStateChanged(async (user) => {
           if (!user) {
@@ -62,6 +80,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               const userData = userSnap.exists() ? userSnap.data() as AppUser : null;
               const role = userData?.role || 'vendedor';
               setUserRole(role);
+
+              // Verificar se precisa trocar senha
+              if (userData?.requirePasswordChange && pathname !== '/trocar-senha') {
+                router.replace('/trocar-senha');
+                return;
+              }
+
               setIsLoading(false);
           });
           unsubs.push(unsubUser);
@@ -83,22 +108,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   // Separate effect for permission checking
   useEffect(() => {
+    // Evita loop infinito - só executa se tiver dados completos
     if (!userRole || !appSettings || isLoading) return;
 
-    // Skip permission check for non-dashboard pages and public pages
-    if (!pathname.startsWith('/dashboard') || pathname === '/dashboard/configuracoes') return;
+    // Skip permission check for non-dashboard pages
+    if (!pathname.startsWith('/dashboard')) return;
+
+    // Skip para configurações e dashboard principal
+    if (pathname === '/dashboard/configuracoes' || pathname === '/dashboard') return;
 
     // Admin always has access
     if (userRole === 'admin') return;
 
     // Find the most specific page key that matches current pathname
     const pageKeys = Object.keys(appSettings.permissions).filter(p => pathname.startsWith(p));
-    const pageKey = pageKeys.sort((a, b) => b.length - a.length)[0]; // Get most specific match
+    const pageKey = pageKeys.sort((a, b) => b.length - a.length)[0];
 
     if (!pageKey) {
-      // No permission rule found, redirect to main dashboard
-      router.replace('/dashboard');
-      return;
+      return; // Sem regra = permitir acesso ao dashboard
     }
 
     // Check if page is active
@@ -113,7 +140,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (!hasPermission) {
       router.replace('/dashboard');
     }
-  }, [userRole, appSettings, pathname, router, isLoading]);
+  }, [userRole, appSettings, pathname, isLoading]); // Removi 'router' das dependências
 
   return (
     <AppContext.Provider value={{ userRole, appSettings, isLoading }}>

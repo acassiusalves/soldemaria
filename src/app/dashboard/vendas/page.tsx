@@ -48,6 +48,7 @@ import {
   arrayRemove,
   query,
   where,
+  getDocs,
   getDocsFromServer,
 } from "firebase/firestore";
 import { motion } from "framer-motion";
@@ -96,6 +97,8 @@ import { Progress } from "@/components/ui/progress";
 import { Logo } from "@/components/icons";
 import { CalculationDialog } from "@/components/calculation-dialog";
 import SummaryCard from "@/components/summary-card";
+import { useSalesData, useTaxasData, useCustosData, useCustosEmbalagemData, useLogisticsData } from "@/hooks/use-firestore-data-v2";
+import { RefreshButton } from "@/components/refresh-button";
 import { NavMenu } from '@/components/nav-menu';
 import { cn, stripUndefinedDeep } from "@/lib/utils";
 
@@ -486,18 +489,59 @@ async function persistCalcColumns(calcs: CustomCalculation[]) {
 
 
 export default function VendasPage() {
-  const [vendasData, setVendasData] = React.useState<VendaDetalhada[]>([]);
-  const [logisticaData, setLogisticaData] = React.useState<VendaDetalhada[]>([]);
-  const [custosData, setCustosData] = React.useState<VendaDetalhada[]>([]);
-  const [custosEmbalagem, setCustosEmbalagem] = React.useState<Embalagem[]>([]);
   const [stagedData, setStagedData] = React.useState<VendaDetalhada[]>([]);
   const [stagedFileNames, setStagedFileNames] = React.useState<string[]>([]);
   const [columns, setColumns] = React.useState<ColumnDef[]>([]);
   const [uploadedFileNames, setUploadedFileNames] = React.useState<string[]>([]);
-  const [taxasOperadoras, setTaxasOperadoras] = React.useState<Operadora[]>([]);
   const { toast } = useToast();
 
-  const [date, setDate] = React.useState<DateRange | undefined>(undefined);
+  const [date, setDate] = React.useState<DateRange | undefined>({
+    from: startOfMonth(new Date()),
+    to: endOfMonth(new Date()),
+  });
+
+  // Usar hooks otimizados com cache e filtros de data
+  const {
+    data: vendasData,
+    isLoading: vendasLoading,
+    refetch: refetchVendas,
+    lastUpdated: vendasLastUpdated
+  } = useSalesData(date?.from, date?.to || date?.from);
+
+  const {
+    data: logisticaData,
+    isLoading: logisticaLoading,
+    refetch: refetchLogistica
+  } = useLogisticsData(date?.from, date?.to || date?.from);
+
+  const {
+    data: taxasOperadoras,
+    isLoading: taxasLoading,
+    refetch: refetchTaxas
+  } = useTaxasData();
+
+  const {
+    data: custosData,
+    isLoading: custosLoading,
+    refetch: refetchCustos
+  } = useCustosData();
+
+  const {
+    data: custosEmbalagem,
+    isLoading: embalagemLoading,
+    refetch: refetchEmbalagem
+  } = useCustosEmbalagemData();
+
+  // Função para atualizar todos os dados
+  const handleRefreshAll = React.useCallback(() => {
+    refetchVendas();
+    refetchLogistica();
+    refetchTaxas();
+    refetchCustos();
+    refetchEmbalagem();
+  }, [refetchVendas, refetchLogistica, refetchTaxas, refetchCustos, refetchEmbalagem]);
+
+  const isLoadingData = vendasLoading || logisticaLoading || taxasLoading || custosLoading || embalagemLoading;
   const [isSaving, setIsSaving] = React.useState(false);
   const [saveProgress, setSaveProgress] = React.useState(0);
   const router = useRouter();
@@ -510,23 +554,14 @@ export default function VendasPage() {
   const [isLoadingPreferences, setIsLoadingPreferences] = React.useState(true);
   const [isSavingPreferences, setIsSavingPreferences] = React.useState(false);
 
-  const [loadingStatus, setLoadingStatus] = React.useState({
-    vendas: false,
-    logistica: false,
-    custos: false,
-    custosEmbalagem: false,
-    taxas: false,
-  });
-  
+  // LoadingStatus não é mais necessário - usamos isLoadingData dos hooks
+  const areAllDataSourcesLoaded = !isLoadingData;
+
   const [filter, setFilter] = React.useState('');
   const [vendorFilter, setVendorFilter] = React.useState<Set<string>>(new Set());
   const [deliverymanFilter, setDeliverymanFilter] = React.useState<Set<string>>(new Set());
   const [logisticsFilter, setLogisticsFilter] = React.useState<Set<string>>(new Set());
   const [cityFilter, setCityFilter] = React.useState<Set<string>>(new Set());
-
-  const areAllDataSourcesLoaded = React.useMemo(() => {
-    return Object.values(loadingStatus).every(status => status === true);
-  }, [loadingStatus]);
 
 
     const handleLogout = async () => {
@@ -578,58 +613,39 @@ export default function VendasPage() {
   }, [vendasData, logisticaData, custosData, stagedData]);
 
 
+  // Carregar metadados (colunas e arquivos) - mantém onSnapshot pois é dado pequeno
   React.useEffect(() => {
-    const unsubs: (()=>void)[] = [];
+    let metaUnsub: (() => void) | undefined;
+
     (async () => {
         const db = await getDbClient();
         if(!db) return;
 
-        const collectionsToWatch = [
-            { name: "vendas", setter: setVendasData, flag: "vendas" },
-            { name: "logistica", setter: setLogisticaData, flag: "logistica" },
-            { name: "custos", setter: setCustosData, flag: "custos" },
-            { name: "custos-embalagem", setter: setCustosEmbalagem, flag: "custosEmbalagem" },
-            { name: "taxas", setter: setTaxasOperadoras, flag: "taxas" },
-        ];
+        metaUnsub = onSnapshot(doc(db, "metadata", "vendas"), (docSnap) => {
+          if (docSnap.exists()) {
+              const data = docSnap.data();
+              let fetchedColumns = data.columns || [];
 
-        collectionsToWatch.forEach(({ name, setter, flag }) => {
-            const q = query(collection(db, name));
-            const unsub = onSnapshot(q, (snapshot) => {
-                if (snapshot.metadata.hasPendingWrites && loadingStatus[flag as keyof typeof loadingStatus]) return;
-                const data = snapshot.docs.map(d => ({ ...d.data(), id: d.id })) as any[];
-                setter(data);
-                setLoadingStatus(prev => ({...prev, [flag]: true}));
-            });
-            unsubs.push(unsub);
+              const requiredCols = [
+                  { id: 'quantidadeTotal', label: 'Qtd. Total', isSortable: true },
+                  { id: 'custoUnitario', label: 'Custo Unitário', isSortable: true },
+                  { id: 'valorDescontos', label: 'Valor Descontos', isSortable: true },
+              ];
+
+              requiredCols.forEach(reqCol => {
+                  if (!fetchedColumns.some((c: ColumnDef) => c.id === reqCol.id)) {
+                      fetchedColumns.push(reqCol);
+                  }
+              });
+
+              setColumns(fetchedColumns);
+              setUploadedFileNames(data.uploadedFileNames || []);
+          }
         });
-
-        const metaUnsub = onSnapshot(doc(db, "metadata", "vendas"), (docSnap) => {
-        if (docSnap.exists()) {
-            const data = docSnap.data();
-            let fetchedColumns = data.columns || [];
-            
-            const requiredCols = [
-                { id: 'quantidadeTotal', label: 'Qtd. Total', isSortable: true },
-                { id: 'custoUnitario', label: 'Custo Unitário', isSortable: true },
-                { id: 'valorDescontos', label: 'Valor Descontos', isSortable: true },
-            ];
-            
-            requiredCols.forEach(reqCol => {
-                if (!fetchedColumns.some((c: ColumnDef) => c.id === reqCol.id)) {
-                    fetchedColumns.push(reqCol);
-                }
-            });
-
-            setColumns(fetchedColumns);
-            setUploadedFileNames(data.uploadedFileNames || []);
-        }
-        });
-        unsubs.push(metaUnsub);
-
     })();
-    
-    return () => { 
-        unsubs.forEach(unsub => unsub());
+
+    return () => {
+        if (metaUnsub) metaUnsub();
     };
   }, []);
 
@@ -1493,8 +1509,12 @@ React.useEffect(() => {
       <header className="sticky top-0 flex h-16 items-center gap-4 border-b bg-background px-4 md:px-6">
         <NavMenu />
         <div className="flex w-full items-center gap-4 md:ml-auto md:gap-2 lg:gap-4">
-            <div className="ml-auto flex-1 sm:flex-initial">
-              {/* This space is intentionally left blank for now */}
+            <div className="ml-auto flex items-center gap-2">
+              <RefreshButton
+                onRefresh={handleRefreshAll}
+                isLoading={isLoadingData}
+                lastUpdated={vendasLastUpdated}
+              />
             </div>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>

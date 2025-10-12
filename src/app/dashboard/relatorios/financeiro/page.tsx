@@ -25,6 +25,8 @@ import {
 } from "firebase/firestore";
 import { getDbClient } from "@/lib/firebase";
 import type { VendaDetalhada } from "@/lib/data";
+import { useSalesData } from "@/hooks/use-firestore-data-v2";
+import { RefreshButton } from "@/components/refresh-button";
 import { DateRange } from "react-day-picker";
 import { eachDayOfInterval, endOfDay, format, isValid, parseISO, startOfMonth, subDays, differenceInDays } from "date-fns";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -236,45 +238,30 @@ const calculateFinancialMetrics = (
 
 
 export default function FinanceiroPage() {
-  const [allSales, setAllSales] = React.useState<VendaDetalhada[]>([]);
   const [date, setDate] = React.useState<DateRange | undefined>({
     from: startOfMonth(new Date()),
     to: new Date(),
   });
   const [compareDate, setCompareDate] = React.useState<DateRange | undefined>(undefined);
-  
-  React.useEffect(() => {
-    let unsub: () => void;
-    (async () => {
-      const db = await getDbClient();
-      if (!db) return;
 
-      const q = query(collection(db, "vendas"));
-      unsub = onSnapshot(q, (snapshot) => {
-        if (snapshot.metadata.hasPendingWrites) return;
-        setAllSales(snapshot.docs.map((d) => ({ ...d.data(), id: d.id })) as VendaDetalhada[]);
-      });
-    })();
-    return () => unsub && unsub();
-  }, []);
+  const {
+    data: allSales,
+    isLoading: vendasLoading,
+    refetch: refetchVendas,
+    lastUpdated: vendasLastUpdated
+  } = useSalesData(date?.from, date?.to || date?.from);
 
-  const { filteredData, comparisonData } = React.useMemo(() => {
-    const filterByDate = (data: VendaDetalhada[], dateRange?: DateRange) => {
-      if (!dateRange?.from) return [];
-      return data.filter((item) => {
-        const itemDate = toDate(item.data);
-        return itemDate && itemDate >= dateRange.from! && itemDate <= endOfDay(dateRange.to || dateRange.from!);
-      });
-    };
-    return {
-      filteredData: filterByDate(allSales, date),
-      comparisonData: filterByDate(allSales, compareDate),
-    };
-  }, [allSales, date, compareDate]);
+  const comparisonData = React.useMemo(() => {
+    if (!compareDate?.from) return [];
+    return allSales.filter((item) => {
+      const itemDate = toDate(item.data);
+      return itemDate && itemDate >= compareDate.from! && itemDate <= endOfDay(compareDate.to || compareDate.from!);
+    });
+  }, [allSales, compareDate]);
   
   const { kpis, chartData, channelData, originData } = React.useMemo(
-    () => calculateFinancialMetrics(filteredData, comparisonData, date),
-    [filteredData, comparisonData, date]
+    () => calculateFinancialMetrics(allSales, comparisonData, date),
+    [allSales, comparisonData, date]
   );
   
   const hasComparison = !!compareDate;
@@ -283,10 +270,19 @@ export default function FinanceiroPage() {
     <div className="flex flex-col gap-6">
       <Card>
         <CardHeader>
-          <CardTitle>Relatório Financeiro</CardTitle>
-          <CardDescription>
-            Selecione o período para analisar os indicadores financeiros do seu negócio.
-          </CardDescription>
+          <div className="flex justify-between items-center">
+            <div>
+              <CardTitle>Relatório Financeiro</CardTitle>
+              <CardDescription>
+                Selecione o período para analisar os indicadores financeiros do seu negócio.
+              </CardDescription>
+            </div>
+            <RefreshButton
+              onRefresh={refetchVendas}
+              isLoading={vendasLoading}
+              lastUpdated={vendasLastUpdated}
+            />
+          </div>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-4">
           <Popover>

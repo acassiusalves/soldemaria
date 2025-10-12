@@ -32,6 +32,8 @@ import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { getAuthClient, getDbClient } from "@/lib/firebase";
 import { NavMenu } from '@/components/nav-menu';
+import { useLogisticsData } from "@/hooks/use-firestore-data-v2";
+import { RefreshButton } from "@/components/refresh-button";
 
 
 import { cn, stripUndefinedDeep } from "@/lib/utils";
@@ -289,14 +291,24 @@ const API_KEY_STORAGE_KEY = "gemini_api_key";
 
 
 export default function LogisticaPage() {
-  const [logisticaData, setLogisticaData] = React.useState<VendaDetalhada[]>([]);
   const [stagedData, setStagedData] = React.useState<VendaDetalhada[]>([]);
   const [stagedFileNames, setStagedFileNames] = React.useState<string[]>([]);
   const [columns, setColumns] = React.useState<ColumnDef[]>([]);
   const [uploadedFileNames, setUploadedFileNames] = React.useState<string[]>([]);
   const { toast } = useToast();
 
-  const [date, setDate] = React.useState<DateRange | undefined>(undefined);
+  const [date, setDate] = React.useState<DateRange | undefined>({
+    from: startOfMonth(new Date()),
+    to: endOfMonth(new Date()),
+  });
+
+  // Usar hook otimizado com cache e filtros
+  const {
+    data: logisticaData,
+    isLoading: logisticaLoading,
+    refetch: refetchLogistica,
+    lastUpdated: logisticaLastUpdated
+  } = useLogisticsData(date?.from, date?.to || date?.from);
   const [isSaving, setIsSaving] = React.useState(false);
   const [isOrganizing, setIsOrganizing] = React.useState(false);
   const [saveProgress, setSaveProgress] = React.useState(0);
@@ -312,58 +324,30 @@ export default function LogisticaPage() {
   };
 
   /* ======= Realtime listeners ======= */
+  // Carregar apenas metadata (dados pequenos)
   React.useEffect(() => {
-    let unsub: () => void;
     let metaUnsub: () => void;
     (async () => {
         const db = await getDbClient();
         if(!db) return;
 
-        const qy = query(collection(db, "logistica"));
-        unsub = onSnapshot(qy, (snapshot) => {
-        if (snapshot.metadata.hasPendingWrites) return;
-        let newData: VendaDetalhada[] = [];
-        let modifiedData: VendaDetalhada[] = [];
-        snapshot.docChanges().forEach((change) => {
-            if (change.type === "added")
-            newData.push({ ...change.doc.data(), id: change.doc.id } as VendaDetalhada);
-            if (change.type === "modified")
-            modifiedData.push({ ...change.doc.data(), id: change.doc.id } as VendaDetalhada);
-        });
-        if (newData.length || modifiedData.length) {
-            setLogisticaData((curr) => {
-            const map = new Map(curr.map((s) => [s.id, s]));
-            newData.forEach((s) => map.set(s.id, s));
-            modifiedData.forEach((s) => map.set(s.id, s));
-            return Array.from(map.values());
-            });
-        }
-        snapshot.docChanges().forEach((change) => {
-            if (change.type === "removed") {
-            setLogisticaData((curr) => curr.filter((s) => s.id !== change.doc.id));
-            }
-        });
-        });
-
         metaUnsub = onSnapshot(doc(db, "metadata", "logistica"), (docSnap) => {
-        if (docSnap.exists()) {
-            const data = docSnap.data();
-            const filteredColumns = (data.columns || [])
-            .map((col: ColumnDef) => {
-                // força label correto; se faltar label, cai no getLabel por id
-                const label = col.id === 'valor' ? getLabel('valor') : (col.label || getLabel(col.id));
-                return { ...col, label };
-            });
+          if (docSnap.exists()) {
+              const data = docSnap.data();
+              const filteredColumns = (data.columns || [])
+              .map((col: ColumnDef) => {
+                  const label = col.id === 'valor' ? getLabel('valor') : (col.label || getLabel(col.id));
+                  return { ...col, label };
+              });
 
-            setColumns(filteredColumns);
-            setUploadedFileNames(data.uploadedFileNames || []);
-        }
+              setColumns(filteredColumns);
+              setUploadedFileNames(data.uploadedFileNames || []);
+          }
         });
     })();
 
-    return () => { 
-        if (unsub) unsub(); 
-        if (metaUnsub) metaUnsub(); 
+    return () => {
+        if (metaUnsub) metaUnsub();
     };
   }, []);
 
@@ -377,16 +361,8 @@ export default function LogisticaPage() {
     return Array.from(map.values());
   }, [logisticaData, stagedData]);
 
-  /* ======= Filtro por período ======= */
-  const filteredData = React.useMemo(() => {
-    if (!date?.from) return allData;
-    const fromDate = date.from;
-    const toDateVal = date.to ? endOfDay(date.to) : endOfDay(fromDate);
-    return allData.filter((item) => {
-      const itemDate = toDate(item.data);
-      return itemDate && itemDate >= fromDate && itemDate <= toDateVal;
-    });
-  }, [date, allData]);
+  /* ======= Dados já vêm filtrados por data do hook ======= */
+  const filteredData = allData;
 
   /* ======= AGRUPAMENTO por código + subRows ======= */
   const groupedForView = React.useMemo(() => {
@@ -635,8 +611,12 @@ export default function LogisticaPage() {
       <header className="sticky top-0 flex h-16 items-center gap-4 border-b bg-background px-4 md:px-6">
         <NavMenu />
         <div className="flex w-full items-center gap-4 md:ml-auto md:gap-2 lg:gap-4">
-            <div className="ml-auto flex-1 sm:flex-initial">
-              {/* This space is intentionally left blank for now */}
+            <div className="ml-auto flex items-center gap-2">
+              <RefreshButton
+                onRefresh={refetchLogistica}
+                isLoading={logisticaLoading}
+                lastUpdated={logisticaLastUpdated}
+              />
             </div>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>

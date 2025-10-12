@@ -16,6 +16,8 @@ import OriginChart from "@/components/origin-chart";
 import { collection, onSnapshot, query, Timestamp } from "firebase/firestore";
 import { getDbClient } from "@/lib/firebase";
 import type { VendaDetalhada, Embalagem } from "@/lib/data";
+import { useSalesData, useLogisticsData } from "@/hooks/use-firestore-data-v2";
+import { RefreshButton } from "@/components/refresh-button";
 import { DateRange } from "react-day-picker";
 import { endOfDay, format, isValid, parseISO, startOfMonth, differenceInDays, subDays } from "date-fns";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -131,43 +133,29 @@ const calculateMetrics = (data: VendaDetalhada[]) => {
 };
 
 export default function VisaoGeralPage() {
-  const [allSales, setAllSales] = React.useState<VendaDetalhada[]>([]);
-  const [logisticaData, setLogisticaData] = React.useState<VendaDetalhada[]>([]);
-  
   const [mounted, setMounted] = React.useState(false);
-  const [date, setDate] = React.useState<DateRange | undefined>(undefined);
+  const [date, setDate] = React.useState<DateRange | undefined>({
+    from: startOfMonth(new Date()),
+    to: endOfMonth(new Date()),
+  });
   const [compareDate, setCompareDate] = React.useState<DateRange | undefined>(undefined);
 
+  const {
+    data: allSales,
+    isLoading: vendasLoading,
+    refetch: refetchVendas,
+    lastUpdated: vendasLastUpdated
+  } = useSalesData(date?.from, date?.to || date?.from);
+
+  const {
+    data: logisticaData,
+    isLoading: logisticaLoading,
+    refetch: refetchLogistica,
+    lastUpdated: logisticaLastUpdated
+  } = useLogisticsData();
+
   React.useEffect(() => {
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12, 0, 0, 0);
-    const from = startOfMonth(today);
-    setDate({ from, to: today });
     setMounted(true);
-  }, []);
-
-  React.useEffect(() => {
-    const unsubs: (() => void)[] = [];
-    (async () => {
-      const db = await getDbClient();
-      if (!db) return;
-
-      const collectionsToWatch = [
-        { name: "vendas", setter: setAllSales },
-        { name: "logistica", setter: setLogisticaData },
-      ];
-
-      collectionsToWatch.forEach(({ name, setter }) => {
-        const q = query(collection(db, name));
-        const unsub = onSnapshot(q, (snapshot) => {
-          if (snapshot.metadata.hasPendingWrites) return;
-          const data = snapshot.docs.map((d) => ({ ...d.data(), id: d.id })) as any[];
-          setter(data);
-        });
-        unsubs.push(unsub);
-      });
-    })();
-    return () => unsubs.forEach(unsub => unsub());
   }, []);
 
   const consolidatedData = React.useMemo(() => {
@@ -182,24 +170,18 @@ export default function VisaoGeralPage() {
     });
   }, [allSales, logisticaData]);
 
-  const { filteredData, comparisonData } = React.useMemo(() => {
-    const filterByDate = (data: VendaDetalhada[], dateRange?: DateRange) => {
-      if (!dateRange?.from) return [];
-      const fromDate = dateRange.from;
-      const toDateVal = dateRange.to ? endOfDay(dateRange.to) : endOfDay(fromDate);
-      return data.filter((item) => {
-        const itemDate = toDate(item.data);
-        return itemDate && itemDate >= fromDate && itemDate <= toDateVal;
-      });
-    };
-    return {
-      filteredData: filterByDate(consolidatedData, date),
-      comparisonData: filterByDate(consolidatedData, compareDate),
-    };
-  }, [consolidatedData, date, compareDate]);
+  const comparisonData = React.useMemo(() => {
+    if (!compareDate?.from) return [];
+    const fromDate = compareDate.from;
+    const toDateVal = compareDate.to ? endOfDay(compareDate.to) : endOfDay(fromDate);
+    return consolidatedData.filter((item) => {
+      const itemDate = toDate(item.data);
+      return itemDate && itemDate >= fromDate && itemDate <= toDateVal;
+    });
+  }, [consolidatedData, compareDate]);
 
   const { kpis, logisticsChartData, originChartData, citySalesData } = React.useMemo(() => {
-    const currentMetrics = calculateMetrics(filteredData);
+    const currentMetrics = calculateMetrics(consolidatedData);
     const previousMetrics = comparisonData.length > 0 ? calculateMetrics(comparisonData) : null;
 
     const calcChange = (current: number, previous?: number) => {
@@ -255,7 +237,7 @@ export default function VisaoGeralPage() {
     }).sort((a, b) => b.revenue - a.revenue).slice(0, 10);
 
     return { kpis: kpisResult, logisticsChartData, originChartData, citySalesData };
-  }, [filteredData, comparisonData]);
+  }, [consolidatedData, comparisonData]);
 
   const hasComparison = !!compareDate;
 
@@ -276,10 +258,22 @@ export default function VisaoGeralPage() {
     <div className="flex flex-col gap-6">
       <Card>
         <CardHeader>
-          <CardTitle>Visão Geral (Executiva)</CardTitle>
-          <CardDescription>
-            Selecione o período para analisar os indicadores chave do seu negócio.
-          </CardDescription>
+          <div className="flex justify-between items-center">
+            <div>
+              <CardTitle>Visão Geral (Executiva)</CardTitle>
+              <CardDescription>
+                Selecione o período para analisar os indicadores chave do seu negócio.
+              </CardDescription>
+            </div>
+            <RefreshButton
+              onRefresh={() => {
+                refetchVendas();
+                refetchLogistica();
+              }}
+              isLoading={vendasLoading || logisticaLoading}
+              lastUpdated={vendasLastUpdated}
+            />
+          </div>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-4">
           <Popover>

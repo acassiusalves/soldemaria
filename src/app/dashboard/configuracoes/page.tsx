@@ -63,11 +63,12 @@ import { useToast } from "@/hooks/use-toast";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
 import { pagePermissions as defaultPagePermissions, availableRoles } from "@/lib/permissions";
-import { saveAppSettings, loadAppSettings, loadUsersWithRoles, updateUserRole, deleteUser } from "@/services/firestore";
+import { saveAppSettings, loadAppSettings, loadUsersWithRoles } from "@/services/firestore";
 import type { AppUser } from "@/lib/types";
 import { NewUserDialog } from "@/components/new-user-dialog";
 import { NavMenu } from '@/components/nav-menu';
 import Link from 'next/link';
+import { useApp } from '@/contexts/app-context';
 
 
 export default function ConfiguracoesPage() {
@@ -80,6 +81,7 @@ export default function ConfiguracoesPage() {
     const [isNewUserDialogOpen, setIsNewUserDialogOpen] = useState(false);
     const { toast } = useToast();
     const router = useRouter();
+    const { userRole } = useApp();
 
     useEffect(() => {
         async function loadInitialSettings() {
@@ -132,6 +134,27 @@ export default function ConfiguracoesPage() {
       };
 
     const handleRoleChange = (userId: string, newRole: string) => {
+        // Apenas admins podem promover usuários para admin
+        if (newRole === 'admin' && userRole !== 'admin') {
+            toast({
+                variant: "destructive",
+                title: "Acesso Negado",
+                description: "Apenas administradores podem promover usuários para Admin."
+            });
+            return;
+        }
+
+        // Verificar se está tentando remover admin de um usuário admin
+        const user = users.find(u => u.id === userId);
+        if (user?.role === 'admin' && newRole !== 'admin' && userRole !== 'admin') {
+            toast({
+                variant: "destructive",
+                title: "Acesso Negado",
+                description: "Apenas administradores podem alterar a função de outro administrador."
+            });
+            return;
+        }
+
         setUsers(currentUsers =>
             currentUsers.map(u => (u.id === userId ? { ...u, role: newRole as any } : u))
         );
@@ -183,26 +206,53 @@ export default function ConfiguracoesPage() {
     const handleSaveUsers = async () => {
         setIsSavingUsers(true);
         try {
-            const updatePromises = users.map(user => updateUserRole(user.id, user.role));
+            const region = process.env.NEXT_PUBLIC_FIREBASE_FUNCTIONS_REGION || "southamerica-east1";
+            const functions = getFunctions(app, region);
+            const updateUserRoleFn = httpsCallable(functions, 'updateUserRole');
+
+            const updatePromises = users.map(user =>
+                updateUserRoleFn({ userId: user.id, newRole: user.role })
+            );
             await Promise.all(updatePromises);
             toast({
                 title: "Funções Salvas!",
                 description: "As funções dos usuários foram atualizadas com sucesso."
             });
-        } catch (e) {
-             toast({ variant: "destructive", title: "Erro", description: "Não foi possível salvar as funções dos usuários."})
+        } catch (e: any) {
+             toast({
+                variant: "destructive",
+                title: "Erro",
+                description: e?.message || "Não foi possível salvar as funções dos usuários."
+            })
         } finally {
             setIsSavingUsers(false);
         }
     }
     
     const handleCreateUser = async (email: string, role: string) => {
+        // Apenas admins podem criar novos admins
+        if (role === 'admin' && userRole !== 'admin') {
+            toast({
+                variant: "destructive",
+                title: "Acesso Negado",
+                description: "Apenas administradores podem criar novos usuários Admin."
+            });
+            return;
+        }
+
         const region = process.env.NEXT_PUBLIC_FIREBASE_FUNCTIONS_REGION || "southamerica-east1";
         const functions = getFunctions(app, region);
         const inviteUser = httpsCallable(functions, 'inviteUser');
         try {
             const result = await inviteUser({ email, role });
-            const message = (result.data as any)?.resetLink ? `Convite para ${email} enviado.` : `Convite para ${email} gerado com sucesso.`;
+            const data = result.data as any;
+
+            let message = data?.message || "Usuário criado com sucesso.";
+
+            if (data?.isNewUser && data?.defaultPassword) {
+                message = `Usuário ${email} criado!\n\nSenha padrão: ${data.defaultPassword}\n\nO usuário será forçado a trocar a senha no primeiro acesso.`;
+            }
+
             toast({
                 title: "Sucesso!",
                 description: message,
@@ -220,17 +270,20 @@ export default function ConfiguracoesPage() {
     
     const handleDeleteUser = async (userId: string) => {
         try {
-            await deleteUser(userId);
+            const region = process.env.NEXT_PUBLIC_FIREBASE_FUNCTIONS_REGION || "southamerica-east1";
+            const functions = getFunctions(app, region);
+            const deleteUserFn = httpsCallable(functions, 'deleteUser');
+            await deleteUserFn({ uid: userId });
             toast({
                 title: "Usuário Excluído",
-                description: "O usuário foi removido permanentemente do sistema."
+                description: "O usuário foi removido permanentemente do sistema (Auth e Firestore)."
             });
-        } catch (error) {
+        } catch (error: any) {
             console.error("Erro ao excluir usuário:", error);
             toast({
                 variant: "destructive",
                 title: "Erro ao Excluir",
-                description: "Não foi possível excluir o usuário do sistema."
+                description: `${error?.code || 'internal'} — ${error?.message || 'Não foi possível excluir o usuário.'}`
             });
         }
     };

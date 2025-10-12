@@ -4,7 +4,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { format, subDays, startOfMonth, endOfMonth, isValid, parseISO, endOfDay, eachDayOfInterval, differenceInDays } from "date-fns";
+import { format, subDays, startOfMonth, endOfMonth, isValid, parseISO, endOfDay, eachDayOfInterval, differenceInDays, startOfWeek, endOfWeek, subMonths } from "date-fns";
 import { ptBR } from 'date-fns/locale';
 import type { DateRange } from "react-day-picker";
 import {
@@ -32,6 +32,8 @@ import {
 import { useRouter } from "next/navigation";
 import { User } from "firebase/auth";
 import { collection, onSnapshot, query, Timestamp } from "firebase/firestore";
+import { useSalesData, useTaxasData, useCustosData, useCustosEmbalagemData, useLogisticsData } from "@/hooks/use-firestore-data-v2";
+import { RefreshButton } from "@/components/refresh-button";
 
 import { getAuthClient, getDbClient } from "@/lib/firebase";
 import { cn } from "@/lib/utils";
@@ -208,13 +210,8 @@ export default function DashboardPage() {
     to: endOfMonth(new Date()),
   });
 
-  const [allSales, setAllSales] = React.useState<VendaDetalhada[]>([]);
-  const [allLogistics, setAllLogistics] = React.useState<VendaDetalhada[]>([]);
-  const [taxasOperadoras, setTaxasOperadoras] = React.useState<Operadora[]>([]);
-  const [custosData, setCustosData] = React.useState<VendaDetalhada[]>([]);
-  const [custosEmbalagem, setCustosEmbalagem,
-] = React.useState<Embalagem[]>([]);
-  
+  // States removidos - agora gerenciados pelos hooks otimizados
+
   React.useEffect(() => {
     (async () => {
       const auth = await getAuthClient();
@@ -230,58 +227,51 @@ export default function DashboardPage() {
     })();
   }, [router]);
   
-  React.useEffect(() => {
-    const unsubs: (()=>void)[] = [];
-    (async () => {
-      const db = await getDbClient();
-      if(!db) return;
-      
-      const salesQuery = query(collection(db, "vendas"));
-      const unsubSales = onSnapshot(salesQuery, snapshot => {
-        const sales = snapshot.docs.map(doc => ({...doc.data(), id: doc.id} as VendaDetalhada));
-        setAllSales(sales);
-      });
-      unsubs.push(unsubSales);
-      
-      const logisticsQuery = query(collection(db, "logistica"));
-      const unsubLogistics = onSnapshot(logisticsQuery, snapshot => {
-        const logistics = snapshot.docs.map(doc => ({...doc.data(), id: doc.id} as VendaDetalhada));
-        setAllLogistics(logistics);
-      });
-      unsubs.push(unsubLogistics);
-      
-      const taxasUnsub = onSnapshot(collection(db, "taxas"), (snapshot) => {
-        const data = snapshot.docs.map(d => ({ ...d.data(), id: d.id })) as Operadora[];
-        setTaxasOperadoras(data);
-      });
-      unsubs.push(taxasUnsub);
+  // Usar hooks otimizados com cache e filtros de data
+  const {
+    data: allSales,
+    isLoading: salesLoading,
+    refetch: refetchSales,
+    lastUpdated: salesLastUpdated
+  } = useSalesData(date?.from, date?.to || date?.from);
 
-      const custosUnsub = onSnapshot(collection(db, "custos"), (snapshot) => {
-        const data = snapshot.docs.map(d => ({ ...d.data(), id: d.id })) as VendaDetalhada[];
-        setCustosData(data);
-      });
-      unsubs.push(custosUnsub);
-      
-      const embalagemUnsub = onSnapshot(collection(db, "custos-embalagem"), (snapshot) => {
-          const data = snapshot.docs.map(d => ({ ...d.data(), id: d.id })) as Embalagem[];
-          setCustosEmbalagem(data);
-      });
-      unsubs.push(embalagemUnsub);
+  const {
+    data: allLogistics,
+    isLoading: logisticsLoading,
+    refetch: refetchLogistics
+  } = useLogisticsData(date?.from, date?.to || date?.from);
 
-    })();
-    return () => unsubs.forEach(unsub => unsub());
-  }, []);
+  const {
+    data: taxasOperadoras,
+    isLoading: taxasLoading,
+    refetch: refetchTaxas
+  } = useTaxasData();
 
-  const filteredData = React.useMemo(() => {
-    if (!date?.from) return [];
-    const fromDate = date.from;
-    const toDateVal = date.to ? endOfDay(date.to) : endOfDay(fromDate);
+  const {
+    data: custosData,
+    isLoading: custosLoading,
+    refetch: refetchCustos
+  } = useCustosData();
 
-    return allSales.filter((item) => {
-      const itemDate = toDate(item.data);
-      return itemDate && itemDate >= fromDate && itemDate <= toDateVal;
-    });
-  }, [date, allSales]);
+  const {
+    data: custosEmbalagem,
+    isLoading: embalagemLoading,
+    refetch: refetchEmbalagem
+  } = useCustosEmbalagemData();
+
+  // Função para atualizar todos os dados
+  const handleRefreshAll = React.useCallback(() => {
+    refetchSales();
+    refetchLogistics();
+    refetchTaxas();
+    refetchCustos();
+    refetchEmbalagem();
+  }, [refetchSales, refetchLogistics, refetchTaxas, refetchCustos, refetchEmbalagem]);
+
+  const isLoading = salesLoading || logisticsLoading || taxasLoading || custosLoading || embalagemLoading;
+
+  // Os dados já vêm filtrados por data do hook, não precisa filtrar novamente
+  const filteredData = allSales;
 
   const {
     summaryData,
@@ -572,6 +562,8 @@ export default function DashboardPage() {
     }
   };
 
+  const today = new Date();
+
   return (
       <div className="flex min-h-screen w-full flex-col">
         <header className="sticky top-0 flex h-16 items-center gap-4 border-b bg-background px-4 md:px-6">
@@ -662,7 +654,12 @@ export default function DashboardPage() {
             </Link>
           </nav>
           <div className="flex w-full items-center gap-4 md:ml-auto md:gap-2 lg:gap-4">
-              <div className="ml-auto flex-1 sm:flex-initial">
+              <div className="ml-auto flex items-center gap-2">
+                 <RefreshButton
+                   onRefresh={handleRefreshAll}
+                   isLoading={isLoading}
+                   lastUpdated={salesLastUpdated}
+                 />
                  <Popover>
                     <PopoverTrigger asChild>
                         <Button
@@ -672,7 +669,7 @@ export default function DashboardPage() {
                         >
                         <CalendarIcon className="mr-2 h-4 w-4" />
                         {date?.from ? (
-                            date.to ? (<>{format(date.from, "dd/MM/y")} - {format(date.to, "dd/MM/y")}</>) : (format(date.from, "dd/MM/y"))
+                            date.to ? (<>{format(date.from, "dd/MM/y", { locale: ptBR })} - {format(date.to, "dd/MM/y", { locale: ptBR })}</>) : (format(date.from, "dd/MM/y", { locale: ptBR }))
                         ) : (<span>Selecione uma data</span>)}
                         </Button>
                     </PopoverTrigger>
@@ -686,11 +683,18 @@ export default function DashboardPage() {
                             onSelect={setDate}
                             numberOfMonths={2}
                             presets={[
-                                { label: 'Hoje', range: { from: new Date(), to: new Date() } },
-                                { label: 'Ontem', range: { from: subDays(new Date(), 1), to: subDays(new Date(), 1) } },
-                                { label: 'Últimos 7 dias', range: { from: subDays(new Date(), 6), to: new Date() } },
-                                { label: 'Últimos 30 dias', range: { from: subDays(new Date(), 29), to: new Date() } },
-                                { label: 'Este mês', range: { from: startOfMonth(new Date()), to: endOfMonth(new Date()) } },
+                                { label: 'Hoje', range: { from: today, to: today } },
+                                { label: 'Ontem', range: { from: subDays(today, 1), to: subDays(today, 1) } },
+                                { label: 'Hoje e ontem', range: { from: subDays(today, 1), to: today } },
+                                { label: 'Últimos 7 dias', range: { from: subDays(today, 6), to: today } },
+                                { label: 'Últimos 14 dias', range: { from: subDays(today, 13), to: today } },
+                                { label: 'Últimos 28 dias', range: { from: subDays(today, 27), to: today } },
+                                { label: 'Últimos 30 dias', range: { from: subDays(today, 29), to: today } },
+                                { label: 'Esta semana', range: { from: startOfWeek(today), to: endOfWeek(today) } },
+                                { label: 'Semana passada', range: { from: startOfWeek(subDays(today, 7)), to: endOfWeek(subDays(today, 7)) } },
+                                { label: 'Este mês', range: { from: startOfMonth(today), to: endOfMonth(today) } },
+                                { label: 'Mês passado', range: { from: startOfMonth(subMonths(today, 1)), to: endOfMonth(subMonths(today, 1)) } },
+                                { label: 'Máximo', range: { from: new Date(2023, 0, 1), to: today } },
                             ]}
                         />
                     </PopoverContent>
@@ -857,6 +861,7 @@ export default function DashboardPage() {
     
 
     
+
 
 
 

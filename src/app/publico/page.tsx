@@ -11,10 +11,12 @@ import {
 } from "@/components/ui/card";
 import { Logo } from "@/components/icons";
 import Link from "next/link";
-import { collection, onSnapshot, query, Timestamp, doc, where } from "firebase/firestore";
+import { collection, onSnapshot, query, Timestamp, doc } from "firebase/firestore";
 import { getDbClient } from "@/lib/firebase";
 import VendorPerformanceTable from "@/components/vendor-performance-table";
 import type { VendaDetalhada, VendorGoal } from "@/lib/data";
+import { useSalesData } from "@/hooks/use-firestore-data-v2";
+import { RefreshButton } from "@/components/refresh-button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { getMonth, getYear, format, startOfMonth, endOfMonth, isValid, parseISO, subDays, startOfWeek, endOfWeek, subMonths } from 'date-fns';
@@ -208,14 +210,15 @@ const calculateMetrics = (data: VendaDetalhada[], monthlyGoals: Record<string, R
 
 
 export default function PublicoPage() {
-  const [allSales, setAllSales] = React.useState<VendaDetalhada[]>([]);
   const [vendorData, setVendorData] = React.useState<any[]>([]);
   const [topProducts, setTopProducts] = React.useState<any[]>([]);
   const [topCustomers, setTopCustomers] = React.useState<any[]>([]);
-  const [isLoading, setIsLoading] = React.useState(true);
   const [showGoals, setShowGoals] = React.useState(false);
   const [monthlyGoals, setMonthlyGoals] = React.useState<Record<string, Record<string, VendorGoal>>>({});
-  const [date, setDate] = React.useState<DateRange | undefined>(undefined);
+  const [date, setDate] = React.useState<DateRange | undefined>({
+    from: startOfMonth(new Date()),
+    to: endOfMonth(new Date()),
+  });
   const [mounted, setMounted] = React.useState(false);
   const [selectedVendors, setSelectedVendors] = React.useState<string[]>([
     "Ana Paula de Farias",
@@ -223,84 +226,41 @@ export default function PublicoPage() {
     "Regiane Alves da Silva (Colaboradora)",
   ]);
 
+  const {
+    data: allSales,
+    isLoading,
+    refetch: refetchVendas,
+    lastUpdated: vendasLastUpdated
+  } = useSalesData(date?.from, date?.to || date?.from);
+
   React.useEffect(() => {
     setMounted(true);
-  }, [])
-  
-  React.useEffect(() => {
-    if (mounted) {
-        setDate({
-            from: startOfMonth(new Date()),
-            to: endOfMonth(new Date()),
-        });
-    }
-  }, [mounted]);
+  }, []);
 
   React.useEffect(() => {
-    if (!mounted || !date?.from) return;
+    if (!date?.from) return;
 
-    let salesUnsub: () => void;
     let goalsUnsub: () => void;
-    
+
     (async () => {
-      setIsLoading(true);
       const db = await getDbClient();
-      if (!db) {
-        setIsLoading(false);
-        return;
-      };
-      
-      const fromDate = date.from;
-      const toDateFilter = date.to || date.from;
+      if (!db) return;
 
       const periodKey = format(date.from, 'yyyy-MM');
       const metasRef = doc(db, "metas-vendedores", periodKey);
-      
-      if (goalsUnsub) goalsUnsub(); // Unsubscribe from previous goals listener
+
       goalsUnsub = onSnapshot(metasRef, (docSnap) => {
           const newGoals = docSnap.exists() ? docSnap.data() as Record<string, VendorGoal> : {};
           setMonthlyGoals(prev => ({ ...prev, [periodKey]: newGoals }));
-          
-          if (salesUnsub) salesUnsub(); // Unsubscribe from previous sales listener
-
-          const salesQuery = query(
-            collection(db, "vendas"),
-            where("data", ">=", fromDate),
-            where("data", "<=", toDateFilter)
-          );
-          
-          salesUnsub = onSnapshot(salesQuery, (snapshot) => {
-            if (snapshot.metadata.hasPendingWrites) return;
-            const sales = snapshot.docs.map(d => ({ ...d.data(), id: d.id })) as VendaDetalhada[];
-            setAllSales(sales);
-            setIsLoading(false);
-          }, (error) => {
-            console.error("Error fetching sales:", error);
-            setIsLoading(false);
-          });
       }, (error) => {
           console.error("Error fetching goals:", error);
-          // If goals fail, still try to fetch sales
-          const salesQuery = query(
-            collection(db, "vendas"),
-            where("data", ">=", fromDate),
-            where("data", "<=", toDateFilter)
-          );
-          salesUnsub = onSnapshot(salesQuery, (snapshot) => {
-            if (snapshot.metadata.hasPendingWrites) return;
-            const sales = snapshot.docs.map(d => ({ ...d.data(), id: d.id })) as VendaDetalhada[];
-            setAllSales(sales);
-            setIsLoading(false);
-          });
       });
-
     })();
 
     return () => {
-      if (salesUnsub) salesUnsub();
       if (goalsUnsub) goalsUnsub();
     };
-  }, [date, mounted]);
+  }, [date]);
   
   const { filteredVendorData, allVendorNames } = React.useMemo(() => {
     const { vendorMetrics, topProducts, topCustomers } = calculateMetrics(allSales, monthlyGoals, date?.from);
@@ -325,6 +285,11 @@ export default function PublicoPage() {
             <Logo className="size-8 text-primary" />
             <span className="text-xl font-semibold font-headline">Visão de Vendas</span>
           </Link>
+          <RefreshButton
+            onRefresh={refetchVendas}
+            isLoading={isLoading}
+            lastUpdated={vendasLastUpdated}
+          />
         </nav>
       </header>
       <main className="flex flex-1 flex-col gap-4 p-4 md:gap-8 md:p-8">

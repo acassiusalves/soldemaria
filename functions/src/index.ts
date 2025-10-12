@@ -19,40 +19,110 @@ export const inviteUser = onCall(
       throw new HttpsError("invalid-argument",
         "email e role são obrigatórios");
     }
+
+    // Verificar se está tentando criar um admin
+    if (role === "admin") {
+      // Verificar se o chamador é admin
+      if (!req.auth) {
+        throw new HttpsError("unauthenticated", "Usuário não autenticado");
+      }
+
+      const db = getFirestore();
+      const callerDoc = await db.collection("users").doc(req.auth.uid).get();
+      const callerRole = callerDoc.data()?.role;
+
+      if (callerRole !== "admin") {
+        throw new HttpsError("permission-denied",
+          "Apenas administradores podem criar novos usuários Admin");
+      }
+    }
+
     try {
       const auth = getAuth();
       const db = getFirestore();
 
+      const defaultPassword = "123456";
       let user;
+      let isNewUser = false;
+
       try {
         user = await auth.getUserByEmail(email);
       } catch {
         user = await auth.createUser({
           email,
-          password: crypto.randomUUID(),
+          password: defaultPassword,
           emailVerified: false,
         });
+        isNewUser = true;
       }
 
       await db.collection("users").doc(user.uid).set({
         email,
         role,
+        requirePasswordChange: true,
         createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
       }, {merge: true});
 
-      const appUrl = process.env.APP_URL ||
-        "https://soldemaria.vercel.app/auth/finish";
-
-      const resetLink = await auth.generatePasswordResetLink(
-        email, {url: appUrl}
-      );
-
-      return {ok: true, uid: user.uid, role, resetLink};
+      return {
+        ok: true,
+        uid: user.uid,
+        role,
+        isNewUser,
+        defaultPassword: isNewUser ? defaultPassword : undefined,
+        message: isNewUser ?
+          `Usuário criado. Senha padrão: ${defaultPassword}` :
+          "Usuário já existe, role atualizada",
+      };
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Falha ao convidar";
       throw new HttpsError("internal", msg);
     }
+  }
+);
+
+/* ========== updateUserRole (callable) ========== */
+export const updateUserRole = onCall(
+  {region: "southamerica-east1"},
+  async (req) => {
+    const {userId, newRole} = req.data;
+
+    if (!userId || !newRole) {
+      throw new HttpsError("invalid-argument", "userId e newRole são obrigatórios");
+    }
+
+    if (!req.auth) {
+      throw new HttpsError("unauthenticated", "Usuário não autenticado");
+    }
+
+    const db = getFirestore();
+
+    // Buscar informações do chamador
+    const callerDoc = await db.collection("users").doc(req.auth.uid).get();
+    const callerRole = callerDoc.data()?.role;
+
+    // Buscar informações do usuário alvo
+    const targetDoc = await db.collection("users").doc(userId).get();
+    if (!targetDoc.exists) {
+      throw new HttpsError("not-found", "Usuário não encontrado");
+    }
+    const targetRole = targetDoc.data()?.role;
+
+    // Apenas admins podem promover para admin ou alterar role de admin
+    if (newRole === "admin" || targetRole === "admin") {
+      if (callerRole !== "admin") {
+        throw new HttpsError("permission-denied",
+          "Apenas administradores podem alterar funções de/para Admin");
+      }
+    }
+
+    // Atualizar a role
+    await db.collection("users").doc(userId).update({
+      role: newRole,
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+
+    return {ok: true, message: "Role atualizada com sucesso"};
   }
 );
 
@@ -64,12 +134,30 @@ export const deleteUser = onCall(
     if (!uid) {
       throw new HttpsError("invalid-argument", "O UID do usuário é obrigatório.");
     }
-    
-    // TODO: Adicionar verificação se o chamador tem permissão (ex: admin)
-    
+
+    // Verificar se o chamador é admin
+    if (!req.auth) {
+      throw new HttpsError("unauthenticated", "Usuário não autenticado");
+    }
+
+    const db = getFirestore();
+    const callerDoc = await db.collection("users").doc(req.auth.uid).get();
+    const callerRole = callerDoc.data()?.role;
+
+    if (callerRole !== "admin") {
+      throw new HttpsError("permission-denied",
+        "Apenas administradores podem excluir usuários");
+    }
+
+    // Verificar se o usuário alvo é admin
+    const targetDoc = await db.collection("users").doc(uid).get();
+    if (targetDoc.exists && targetDoc.data()?.role === "admin") {
+      throw new HttpsError("permission-denied",
+        "Não é permitido excluir usuários administradores");
+    }
+
     try {
       const auth = getAuth();
-      const db = getFirestore();
 
       // Excluir do Authentication
       await auth.deleteUser(uid);
@@ -81,6 +169,59 @@ export const deleteUser = onCall(
     } catch (error: any) {
       console.error("Erro ao excluir usuário:", error);
       const msg = error instanceof Error ? error.message : "Falha ao excluir usuário.";
+      throw new HttpsError("internal", msg);
+    }
+  }
+);
+
+/* ========== syncAuthUsers (callable) ========== */
+export const syncAuthUsers = onCall(
+  {region: "southamerica-east1"},
+  async (req) => {
+    // Verificar se o chamador é admin
+    if (!req.auth) {
+      throw new HttpsError("unauthenticated", "Usuário não autenticado");
+    }
+
+    const db = getFirestore();
+    const callerDoc = await db.collection("users").doc(req.auth.uid).get();
+    const callerRole = callerDoc.data()?.role;
+
+    if (callerRole !== "admin") {
+      throw new HttpsError("permission-denied",
+        "Apenas administradores podem sincronizar usuários");
+    }
+
+    try {
+      const auth = getAuth();
+      let syncedCount = 0;
+
+      // Listar todos os usuários do Auth
+      const listUsersResult = await auth.listUsers();
+
+      for (const userRecord of listUsersResult.users) {
+        const userRef = db.collection("users").doc(userRecord.uid);
+        const userDoc = await userRef.get();
+
+        if (!userDoc.exists) {
+          // Criar documento no Firestore se não existir
+          await userRef.set({
+            email: userRecord.email?.toLowerCase() || "",
+            role: "vendedor",
+            createdAt: FieldValue.serverTimestamp(),
+            updatedAt: FieldValue.serverTimestamp(),
+          });
+          syncedCount++;
+        }
+      }
+
+      return {
+        ok: true,
+        message: `${syncedCount} usuário(s) sincronizado(s) do Auth para o Firestore.`,
+      };
+    } catch (error: any) {
+      console.error("Erro ao sincronizar usuários:", error);
+      const msg = error instanceof Error ? error.message : "Falha ao sincronizar";
       throw new HttpsError("internal", msg);
     }
   }

@@ -17,8 +17,10 @@ import {
 } from "firebase/firestore";
 import { getDbClient } from "@/lib/firebase";
 import type { VendaDetalhada } from "@/lib/data";
+import { useSalesData } from "@/hooks/use-firestore-data-v2";
+import { RefreshButton } from "@/components/refresh-button";
 import { DateRange } from "react-day-picker";
-import { endOfDay, format, isValid, parseISO, startOfMonth } from "date-fns";
+import { endOfDay, format, isValid, parseISO, startOfMonth, endOfMonth } from "date-fns";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -111,49 +113,34 @@ const calculateProductMetrics = (data: VendaDetalhada[]) => {
 
 
 export default function ProdutosPage() {
-    const [allSales, setAllSales] = React.useState<VendaDetalhada[]>([]);
     const [mounted, setMounted] = React.useState(false);
-    const [date, setDate] = React.useState<DateRange | undefined>(undefined);
+    const [date, setDate] = React.useState<DateRange | undefined>({
+      from: startOfMonth(new Date()),
+      to: endOfMonth(new Date()),
+    });
     const [compareDate, setCompareDate] = React.useState<DateRange | undefined>(undefined);
 
+    const {
+      data: allSales,
+      isLoading: vendasLoading,
+      refetch: refetchVendas,
+      lastUpdated: vendasLastUpdated
+    } = useSalesData(date?.from, date?.to || date?.from);
+
     React.useEffect(() => {
-      const now = new Date();
-      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12, 0, 0, 0);
-      const from = startOfMonth(today);
-      setDate({ from, to: today });
       setMounted(true);
     }, []);
 
-    React.useEffect(() => {
-        let unsub: () => void;
-        (async () => {
-            const db = await getDbClient();
-            if (!db) return;
-            const q = query(collection(db, "vendas"));
-            unsub = onSnapshot(q, (snapshot) => {
-                if (snapshot.metadata.hasPendingWrites) return;
-                setAllSales(snapshot.docs.map((d) => ({ ...d.data(), id: d.id })) as VendaDetalhada[]);
-            });
-        })();
-        return () => unsub && unsub();
-    }, []);
-
-     const { filteredData, comparisonData } = React.useMemo(() => {
-        const filterByDate = (data: VendaDetalhada[], dateRange?: DateRange) => {
-            if (!dateRange?.from) return [];
-            return data.filter((item) => {
-                const itemDate = toDate(item.data);
-                return itemDate && itemDate >= dateRange.from! && itemDate <= endOfDay(dateRange.to || dateRange.from!);
-            });
-        };
-        return {
-            filteredData: filterByDate(allSales, date),
-            comparisonData: filterByDate(allSales, compareDate),
-        };
-    }, [allSales, date, compareDate]);
+     const comparisonData = React.useMemo(() => {
+        if (!compareDate?.from) return [];
+        return allSales.filter((item) => {
+            const itemDate = toDate(item.data);
+            return itemDate && itemDate >= compareDate.from! && itemDate <= endOfDay(compareDate.to || compareDate.from!);
+        });
+    }, [allSales, compareDate]);
 
     const { tableData, abcChartData } = React.useMemo(() => {
-        const { tableData: currentMetrics, abcChartData: currentAbcData } = calculateProductMetrics(filteredData);
+        const { tableData: currentMetrics, abcChartData: currentAbcData } = calculateProductMetrics(allSales);
         if (!compareDate) {
             return { tableData: currentMetrics, abcChartData: currentAbcData };
         }
@@ -164,9 +151,9 @@ export default function ProdutosPage() {
             ...currentProduct,
             previousRevenue: previousMetricsMap.get(currentProduct.name)?.revenue,
         }));
-        
+
         return { tableData: combinedTableData, abcChartData: currentAbcData };
-    }, [filteredData, comparisonData, compareDate]);
+    }, [allSales, comparisonData, compareDate]);
     
     const hasComparison = !!compareDate;
 
@@ -187,10 +174,19 @@ export default function ProdutosPage() {
     <div className="grid grid-cols-1 gap-6">
       <Card>
         <CardHeader>
-          <CardTitle>Relatório de Produtos</CardTitle>
-          <CardDescription>
-            Selecione o período para analisar a performance dos seus produtos.
-          </CardDescription>
+          <div className="flex justify-between items-center">
+            <div>
+              <CardTitle>Relatório de Produtos</CardTitle>
+              <CardDescription>
+                Selecione o período para analisar a performance dos seus produtos.
+              </CardDescription>
+            </div>
+            <RefreshButton
+              onRefresh={refetchVendas}
+              isLoading={vendasLoading}
+              lastUpdated={vendasLastUpdated}
+            />
+          </div>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-4">
              <Popover>
