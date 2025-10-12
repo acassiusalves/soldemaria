@@ -2,18 +2,17 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
-import { Bot, Send, Loader2, X, Sparkles } from "lucide-react";
+import { Send, Loader2, X, Sparkles } from "lucide-react";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Input } from "./ui/input";
 import { AnimatePresence, motion } from "framer-motion";
 import { ScrollArea } from "./ui/scroll-area";
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
-import { salesInsights } from "@/ai/flows/sales-insights";
 import { useToast } from "@/hooks/use-toast";
 
 interface ChatBubbleProps {
-  salesData: any[];
+  salesData: any[]; // Não mais usado, mas mantido para compatibilidade
   pathname: string;
 }
 
@@ -94,26 +93,63 @@ export default function ChatBubble({ salesData, pathname }: ChatBubbleProps) {
     try {
       const apiKey = localStorage.getItem("gemini_api_key");
       if (!apiKey) {
-        toast({ title: "Chave de API não encontrada", description: "Por favor, adicione sua chave de API na página de Conexões.", variant: "destructive" });
+        toast({
+          title: "Chave de API não encontrada",
+          description: "Configure sua chave de API do Google Gemini na página de Conexões.",
+          variant: "destructive"
+        });
+        setMessages(prev => [...prev, {
+          role: 'model',
+          content: '🔑 Não consigo responder pois a chave de API do Gemini não foi configurada.\n\nPor favor, vá em "Conexões" no menu e adicione sua chave de API do Google Gemini para eu poder te ajudar!'
+        }]);
         setIsLoading(false);
-        setMessages(prev => [...prev, {role: 'model', content: 'Não consigo responder pois a chave de API do Gemini não foi configurada.'}]);
         return;
       }
-      
-      const result = await salesInsights({
-        question: input,
-        salesData: JSON.stringify(salesData),
-        apiKey,
-        pathname,
+
+      // Chamar a nova API que consulta o Firebase diretamente
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          question: input,
+          apiKey,
+          pathname,
+        }),
       });
-      
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Erro ao processar pergunta');
+      }
+
+      const result = await response.json();
       const modelMessage: Message = { role: "model", content: result.answer };
       setMessages((prev) => [...prev, modelMessage]);
 
-    } catch (error) {
-      console.error("Error calling salesInsights flow:", error);
-      const errorMessage: Message = { role: "model", content: "Desculpe, ocorreu um erro ao processar sua pergunta." };
+    } catch (error: any) {
+      console.error("Error calling chat API:", error);
+
+      let errorMsg = "Desculpe, ocorreu um erro ao processar sua pergunta. 😔";
+
+      // Tratamento específico de erros
+      if (error?.message?.includes("API key")) {
+        errorMsg = "❌ A chave de API parece estar inválida. Por favor, verifique se você configurou corretamente na página de Conexões.";
+      } else if (error?.message?.includes("quota") || error?.message?.includes("limit")) {
+        errorMsg = "⚠️ Limite de requisições atingido. Por favor, tente novamente em alguns instantes.";
+      } else if (error?.message?.includes("network") || error?.message?.includes("fetch")) {
+        errorMsg = "🌐 Erro de conexão. Verifique sua internet e tente novamente.";
+      }
+
+      const errorMessage: Message = { role: "model", content: errorMsg };
       setMessages((prev) => [...prev, errorMessage]);
+
+      toast({
+        title: "Erro ao processar pergunta",
+        description: error.message || "Verifique os logs do console para mais detalhes.",
+        variant: "destructive"
+      });
     } finally {
       setIsLoading(false);
     }

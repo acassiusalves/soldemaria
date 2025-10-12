@@ -8,7 +8,8 @@
  * - SalesInsightsOutput - The return type for the salesInsights function.
  */
 
-import { ai } from '@/ai/genkit';
+import { genkit } from '@genkit-ai/core';
+import { googleAI } from '@genkit-ai/googleai';
 import { z } from 'zod';
 
 const SalesInsightsInputSchema = z.object({
@@ -25,16 +26,20 @@ const SalesInsightsOutputSchema = z.object({
 export type SalesInsightsOutput = z.infer<typeof SalesInsightsOutputSchema>;
 
 export async function salesInsights(input: SalesInsightsInput): Promise<SalesInsightsOutput> {
-  return salesInsightsFlow(input);
-}
+  // Criar instância do Genkit com a API key fornecida
+  const ai = genkit({
+    plugins: [googleAI({ apiKey: input.apiKey })],
+    model: 'googleai/gemini-1.5-flash',
+  });
 
-const salesInsightsFlow = ai.defineFlow(
-  {
-    name: 'salesInsightsFlow',
-    inputSchema: SalesInsightsInputSchema,
-    outputSchema: SalesInsightsOutputSchema,
-  },
-  async (input) => {
+  // Executar o fluxo diretamente
+  const salesInsightsFlow = ai.defineFlow(
+    {
+      name: 'salesInsightsFlow',
+      inputSchema: SalesInsightsInputSchema,
+      outputSchema: SalesInsightsOutputSchema,
+    },
+    async (input) => {
     
     const salesDataIsEmpty = !input.salesData || input.salesData === '[]' || input.salesData.trim() === '';
     const isGreeting = /^(oi|olá|ola|bom dia|boa tarde|boa noite)\b/i.test(input.question.trim());
@@ -42,23 +47,55 @@ const salesInsightsFlow = ai.defineFlow(
     let promptText: string;
 
     if (isGreeting) {
-        promptText = `Você é a "Maria", uma IA amigável. O usuário disse "${input.question}". Responda com uma saudação curta e simpática.`;
+        promptText = `Você é a "Maria", a assistente virtual inteligente da loja "Sol de Maria".
+        O usuário disse "${input.question}".
+        Responda com uma saudação calorosa e se apresente brevemente, mencionando que você pode ajudar com análises de vendas, informações sobre produtos, clientes e outras métricas do negócio.`;
     } else if (salesDataIsEmpty) {
-        promptText = `Você é a "Maria", uma IA amigável. O usuário perguntou "${input.question}", mas não há dados de vendas para analisar. Informe ao usuário de forma educada que não há dados disponíveis no período selecionado e que ele deve escolher um período com vendas para que você possa ajudar.`;
-    } else {
-        promptText = `Você é a "Maria", uma analista de vendas expert da empresa "Sol de Maria". Sua tarefa é responder a perguntas sobre um conjunto de dados de vendas.
-        Seja concisa, direta e amigável em suas respostas. Aja como uma assistente prestativa.
-        Baseie sua resposta SOMENTE nos dados de vendas fornecidos. Não invente informações.
-        Se a resposta não estiver nos dados, informe que não encontrou a informação.
-        
-        CONTEXTO ATUAL: O usuário está visualizando a página "${input.pathname}". Use isso para entender melhor a pergunta dele.
+        promptText = `Você é a "Maria", a assistente virtual da loja "Sol de Maria".
+        O usuário perguntou "${input.question}", mas não há dados de vendas disponíveis para o período atualmente selecionado.
 
-        Os dados de vendas (referentes ao período selecionado na tela) estão no seguinte formato JSON:
-        ${input.salesData}
-        
-        A pergunta do usuário é: "${input.question}"
-        
-        Analise os dados e forneça uma resposta clara e objetiva.`;
+        Informe ao usuário de forma educada e prestativa que:
+        1. Não há dados disponíveis no período atual
+        2. Ele pode selecionar um período diferente usando o seletor de data no topo da página
+        3. Você estará pronta para ajudar assim que houver dados disponíveis`;
+    } else {
+        promptText = `Você é a "Maria", uma analista de vendas especializada e assistente virtual da loja "Sol de Maria".
+
+## SEU PAPEL:
+- Analista de dados expert em varejo e vendas
+- Amigável, prestativa e objetiva nas respostas
+- Capaz de identificar tendências, padrões e insights nos dados
+- Responde em português do Brasil
+
+## INSTRUÇÕES IMPORTANTES:
+1. Baseie suas respostas EXCLUSIVAMENTE nos dados fornecidos
+2. Se não encontrar a informação nos dados, seja honesta e diga que não tem essa informação
+3. Use formatação clara: bullets, números, quebras de linha quando apropriado
+4. Apresente valores monetários sempre em Real (R$)
+5. Quando falar de produtos, clientes ou vendedores, cite nomes específicos dos dados
+6. Se a pergunta for vaga, faça análises relevantes ao contexto
+
+## CONTEXTO ATUAL:
+- Página: ${input.pathname}
+- Período: Os dados abaixo são referentes ao período selecionado pelo usuário
+- Amostra: Os dados podem estar limitados aos 100 registros mais recentes para otimização
+
+## TIPOS DE ANÁLISES QUE VOCÊ PODE FAZER:
+- Ranking de produtos mais vendidos
+- Performance de vendedores
+- Análise de clientes (top clientes, ticket médio, etc)
+- Métricas financeiras (faturamento, margem, custos)
+- Comparações e tendências
+- Cálculos e totalizações
+
+## DADOS DE VENDAS (JSON):
+${input.salesData}
+
+## PERGUNTA DO USUÁRIO:
+"${input.question}"
+
+## SUA RESPOSTA:
+Analise os dados acima e forneça uma resposta clara, objetiva e útil. Use emojis moderadamente para deixar a resposta mais amigável.`;
     }
 
     const llmResponse = await ai.generate({
@@ -73,3 +110,6 @@ const salesInsightsFlow = ai.defineFlow(
     };
   }
 );
+
+  return salesInsightsFlow(input);
+}

@@ -576,7 +576,7 @@ export default function DashboardPage() {
 
   return (
       <div className="flex min-h-screen w-full flex-col">
-        <header className="sticky top-0 flex h-16 items-center gap-4 border-b bg-background px-4 md:px-6">
+        <header className="sticky top-0 flex h-16 items-center gap-4 border-b bg-background px-4 md:px-6 z-50">
           <NavMenu />
           <div className="flex w-full items-center gap-4 md:ml-auto md:gap-2 lg:gap-4">
               <div className="ml-auto flex items-center gap-2">
@@ -651,42 +651,48 @@ export default function DashboardPage() {
           </div>
         </header>
         <main className="flex flex-1 flex-col gap-4 p-4 md:gap-8 md:p-8">
+          <div className="flex flex-col gap-2">
+            <h1 className="text-3xl font-bold text-primary">Visão de Vendas</h1>
+            <p className="text-sm text-muted-foreground">
+              Panorama completo das vendas e principais indicadores do período selecionado
+            </p>
+          </div>
           <div className="grid gap-4 md:grid-cols-5">
-            <SummaryCard 
-                title="Faturamento" 
-                value={summaryData.faturamento} 
-                icon={<DollarSign className="text-primary" />}
+            <SummaryCard
+                title="Faturamento"
+                value={summaryData.faturamento}
+                icon={<DollarSign className="h-5 w-5 text-primary" />}
                 isCurrency
             />
-            <SummaryCard 
-                title="Custo Total (CMV)" 
+            <SummaryCard
+                title="Custo Total (CMV)"
                 value={summaryData.custoTotal}
-                icon={<Archive className="text-primary" />}
+                icon={<Archive className="h-5 w-5 text-red-500" />}
                 isCurrency
             />
-             <SummaryCard 
-                title="M. de Contribuição" 
+             <SummaryCard
+                title="M. de Contribuição"
                 value={summaryData.margemContribuicao}
-                icon={<Scale className="text-primary" />}
+                icon={<Scale className="h-5 w-5 text-orange-500" />}
                 isCurrency
                 secondaryValue={`(${summaryData.margemContribuicaoPercent.toFixed(2)}%)`}
             />
-            <SummaryCard 
-                title="Ticket Médio" 
+            <SummaryCard
+                title="Ticket Médio"
                 value={summaryData.ticketMedio}
-                icon={<Ticket className="text-primary" />}
+                icon={<Ticket className="h-5 w-5 text-blue-500" />}
                 isCurrency
             />
-            <SummaryCard 
-                title="Qtd. Média Itens/Pedido" 
+            <SummaryCard
+                title="Qtd. Média Itens/Pedido"
                 value={summaryData.qtdMedia}
-                icon={<Package className="text-primary" />}
+                icon={<Package className="h-5 w-5 text-purple-500" />}
             />
           </div>
           <div className="grid gap-4 md:gap-8 lg:grid-cols-2">
-             <Card className="lg:col-span-1">
+             <Card className="lg:col-span-1 shadow-sm">
                <CardHeader>
-                  <CardTitle>Performance por Vendedor</CardTitle>
+                  <CardTitle className="text-xl font-bold">Performance por Vendedor</CardTitle>
                    <CardDescription>
                       Ranking de faturamento dos vendedores no período selecionado.
                   </CardDescription>
@@ -695,9 +701,9 @@ export default function DashboardPage() {
                     <VendorPerformanceList data={vendorPerformanceData} />
                 </CardContent>
              </Card>
-            <Card className="lg:col-span-1">
+            <Card className="lg:col-span-1 shadow-sm">
               <CardHeader>
-                <CardTitle>Produtos Mais Vendidos</CardTitle>
+                <CardTitle className="text-xl font-bold">Produtos Mais Vendidos</CardTitle>
                 <CardDescription>
                   Os 10 produtos que mais se destacaram em vendas.
                 </CardDescription>
@@ -708,7 +714,7 @@ export default function DashboardPage() {
             </Card>
           </div>
           <div className="grid gap-4 md:gap-8 lg:grid-cols-2 xl:grid-cols-3">
-             <Card>
+             <Card className="shadow-sm">
                 <CardHeader>
                     <CardTitle>Resumo do Delivery</CardTitle>
                     <CardDescription>
@@ -716,27 +722,27 @@ export default function DashboardPage() {
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                     <SummaryCard 
-                        title="Faturamento Delivery" 
-                        value={deliverySummary.faturamento} 
-                        icon={<DollarSign className="text-primary" />}
+                     <SummaryCard
+                        title="Faturamento Delivery"
+                        value={deliverySummary.faturamento}
+                        icon={<DollarSign className="h-5 w-5 text-primary" />}
                         isCurrency
                     />
-                    <SummaryCard 
-                        title="Ticket Médio Delivery" 
-                        value={deliverySummary.ticketMedio} 
-                        icon={<Ticket className="text-primary" />}
+                    <SummaryCard
+                        title="Ticket Médio Delivery"
+                        value={deliverySummary.ticketMedio}
+                        icon={<Ticket className="h-5 w-5 text-blue-500" />}
                         isCurrency
                     />
-                     <SummaryCard 
-                        title="Margem Bruta Delivery" 
+                     <SummaryCard
+                        title="Margem Bruta Delivery"
                         value={deliverySummary.margemBruta}
-                        icon={<Scale className="text-primary" />}
+                        icon={<Scale className="h-5 w-5 text-green-500" />}
                         isCurrency
                     />
                 </CardContent>
             </Card>
-            <Card>
+            <Card className="shadow-sm">
                 <CardHeader>
                     <CardTitle>Resumo da Loja</CardTitle>
                     <CardDescription>
@@ -744,29 +750,29 @@ export default function DashboardPage() {
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                     <SummaryCard 
-                        title="Faturamento Loja" 
-                        value={storeSummary.faturamento} 
-                        icon={<DollarSign className="text-primary" />}
+                     <SummaryCard
+                        title="Faturamento Loja"
+                        value={storeSummary.faturamento}
+                        icon={<DollarSign className="h-5 w-5 text-orange-500" />}
                         isCurrency
                     />
-                    <SummaryCard 
-                        title="Ticket Médio Loja" 
-                        value={storeSummary.ticketMedio} 
-                        icon={<Ticket className="text-primary" />}
+                    <SummaryCard
+                        title="Ticket Médio Loja"
+                        value={storeSummary.ticketMedio}
+                        icon={<Ticket className="h-5 w-5 text-blue-500" />}
                         isCurrency
                     />
-                     <SummaryCard 
-                        title="Margem Bruta Loja" 
+                     <SummaryCard
+                        title="Margem Bruta Loja"
                         value={storeSummary.margemBruta}
-                        icon={<Scale className="text-primary" />}
+                        icon={<Scale className="h-5 w-5 text-green-500" />}
                         isCurrency
                     />
                 </CardContent>
             </Card>
-             <Card className="flex flex-col">
+             <Card className="flex flex-col shadow-sm">
               <CardHeader>
-                <CardTitle>Top Clientes</CardTitle>
+                <CardTitle className="text-xl font-bold">Top Clientes</CardTitle>
                 <CardDescription>
                   O ranking dos clientes que mais compraram no período.
                 </CardDescription>

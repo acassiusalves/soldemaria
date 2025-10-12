@@ -22,19 +22,19 @@ export default function TopProductsChart({ data }: TopProductsChartProps) {
 
   return (
     <div className="min-h-[200px] w-full h-[350px] overflow-y-auto">
-      <div className="space-y-4">
+      <ul className="space-y-3 text-sm">
         {data.map((product) => (
-          <div key={product.name} className="flex items-center justify-between gap-4">
-            <span className="text-sm text-muted-foreground truncate flex-1" title={product.name}>
+          <li key={product.name} className="flex justify-between items-center py-2 border-b border-border last:border-b-0">
+            <p className="font-medium pr-4 truncate flex-1" title={product.name}>
               {product.name}
-            </span>
-            <div className="flex items-center gap-4">
-                <span className="font-semibold text-sm text-right w-24">{formatCurrency(product.revenue)}</span>
-                <span className="font-semibold text-sm text-right w-12">{product.quantity} un</span>
+            </p>
+            <div className="text-right flex-shrink-0">
+              <p className="font-bold text-primary">{formatCurrency(product.revenue)}</p>
+              <p className="text-xs text-muted-foreground">{product.quantity} un</p>
             </div>
-          </div>
+          </li>
         ))}
-      </div>
+      </ul>
     </div>
   );
 }

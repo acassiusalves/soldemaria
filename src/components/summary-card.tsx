@@ -25,15 +25,17 @@ const formatValue = (value: number, isCurrency: boolean) => {
 
 export default function SummaryCard({ title, value, icon, isCurrency = false, secondaryValue }: SummaryCardProps) {
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-sm font-medium">{title}</CardTitle>
-        {icon}
-      </CardHeader>
-      <CardContent>
+    <Card className="shadow-sm hover:shadow-md transition-shadow">
+      <CardContent className="p-5">
+        <div className="flex justify-between items-start mb-2">
+          <span className="text-sm font-medium text-muted-foreground">{title}</span>
+          <div className="flex items-center justify-center">
+            {icon}
+          </div>
+        </div>
         <div className="flex items-end gap-2">
-          <div className="text-2xl font-bold font-headline">{formatValue(value, isCurrency)}</div>
-          {secondaryValue && <div className="text-sm font-medium text-muted-foreground pb-1">{secondaryValue}</div>}
+          <div className="text-3xl font-bold font-headline">{formatValue(value, isCurrency)}</div>
+          {secondaryValue && <div className="text-sm font-medium text-green-500 pb-1">{secondaryValue}</div>}
         </div>
       </CardContent>
     </Card>

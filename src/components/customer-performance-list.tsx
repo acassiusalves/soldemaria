@@ -40,34 +40,23 @@ export default function CustomerPerformanceList({ data }: CustomerPerformanceLis
 
   return (
     <div className="w-full space-y-2 p-3">
-      <div className="space-y-1">
-        {data.slice(0, 5).map((customer, index) => (
-          <div
+      <ul className="space-y-3 text-sm">
+        {data.slice(0, 4).map((customer, index) => (
+          <li
             key={customer.name}
-            className="flex items-center justify-between rounded-md p-3 hover:bg-muted/50"
+            className="flex justify-between items-center py-2 border-b border-border last:border-b-0"
           >
-            <div className="flex items-center gap-4">
-                <Badge variant={index < 3 ? "default" : "secondary"} className="w-6 h-6 flex items-center justify-center rounded-full">
-                    {index + 1}
-                </Badge>
-                <span className="font-medium text-sm truncate" title={customer.name}>{customer.name}</span>
+            <div className="flex items-center">
+                <span className="mr-3 text-muted-foreground font-medium">{index + 1}</span>
+                <p className="font-medium">{customer.name}</p>
             </div>
-            <div className="flex items-center gap-4">
-                <div className="flex flex-col items-end">
-                    <span className="font-semibold tabular-nums text-sm">
-                        {formatRevenue(customer.revenue)}
-                    </span>
-                    <span className="text-xs text-muted-foreground">
-                        {formatRevenue(customer.averageTicket)} Ticket Médio
-                    </span>
-                </div>
-                <span className="font-semibold tabular-nums text-sm text-muted-foreground w-20 text-right">
-                    {formatOrders(customer.orders)}
-                </span>
+            <div className="text-right">
+                <p className="font-bold text-primary">{formatRevenue(customer.revenue)}</p>
+                <p className="text-xs text-muted-foreground">Ticket Médio</p>
             </div>
-          </div>
+          </li>
         ))}
-      </div>
+      </ul>
     </div>
   );
 }
