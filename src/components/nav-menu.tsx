@@ -39,7 +39,6 @@ const navLinks = [
     ],
   },
   { href: '/dashboard/conexoes', label: 'Conexões' },
-  { href: '/dashboard/configuracoes', label: 'Configurações' },
   { href: '/publico', label: 'Público' },
 ];
 
