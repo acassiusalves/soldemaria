@@ -3,6 +3,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { format, parse, parseISO, endOfDay, isValid, subDays, startOfMonth, endOfMonth, startOfWeek, endOfWeek, subMonths } from "date-fns";
 import { ptBR } from 'date-fns/locale';
 import type { DateRange } from "react-day-picker";
