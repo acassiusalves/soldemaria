@@ -91,22 +91,8 @@ export default function ChatBubble({ salesData, pathname }: ChatBubbleProps) {
     setIsLoading(true);
 
     try {
-      const apiKey = localStorage.getItem("gemini_api_key");
-      if (!apiKey) {
-        toast({
-          title: "Chave de API não encontrada",
-          description: "Configure sua chave de API do Google Gemini na página de Conexões.",
-          variant: "destructive"
-        });
-        setMessages(prev => [...prev, {
-          role: 'model',
-          content: '🔑 Não consigo responder pois a chave de API do Gemini não foi configurada.\n\nPor favor, vá em "Conexões" no menu e adicione sua chave de API do Google Gemini para eu poder te ajudar!'
-        }]);
-        setIsLoading(false);
-        return;
-      }
-
-      // Chamar a nova API que consulta o Firebase diretamente
+      // Chamar a API que consulta o Firebase diretamente
+      // A chave API do Gemini agora é compartilhada no servidor
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: {
@@ -114,7 +100,6 @@ export default function ChatBubble({ salesData, pathname }: ChatBubbleProps) {
         },
         body: JSON.stringify({
           question: input,
-          apiKey,
           pathname,
         }),
       });

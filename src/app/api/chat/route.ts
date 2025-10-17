@@ -8,7 +8,6 @@ export const dynamic = 'force-dynamic';
 
 interface ChatRequest {
   question: string;
-  apiKey: string;
   pathname: string;
 }
 
@@ -30,15 +29,26 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { question, apiKey, pathname } = body;
+    const { question, pathname } = body;
+
+    // Usa a chave API compartilhada do servidor
+    const apiKey = process.env.GEMINI_API_KEY;
 
     console.log('📝 Dados recebidos:', { question, hasApiKey: !!apiKey, pathname });
 
-    if (!question || !apiKey) {
+    if (!question) {
       console.log('❌ Faltando dados obrigatórios');
       return NextResponse.json(
-        { error: 'Pergunta e API key são obrigatórios' },
+        { error: 'Pergunta é obrigatória' },
         { status: 400 }
+      );
+    }
+
+    if (!apiKey) {
+      console.log('❌ Chave API do Gemini não configurada no servidor');
+      return NextResponse.json(
+        { error: 'Chave API do Gemini não configurada. Entre em contato com o administrador.' },
+        { status: 500 }
       );
     }
 
