@@ -408,18 +408,14 @@ export default function CustosVendasPage() {
 
   /* ======= Organizar com IA ======= */
   const handleOrganizeWithAI = async () => {
-    const apiKey = localStorage.getItem(API_KEY_STORAGE_KEY);
-    if (!apiKey) {
-      toast({ title: "Chave de API não encontrada", description: "Por favor, adicione sua chave de API na página de Conexões.", variant: "destructive" });
-      return;
-    }
     if (stagedData.length === 0) {
       toast({ title: "Nenhum dado para organizar", description: "Adicione dados à área de revisão primeiro.", variant: "default" });
       return;
     }
     setIsOrganizing(true);
     try {
-      const result = await organizeCosts({ costsData: stagedData, apiKey });
+      // A chave API não é mais necessária pois o processamento é feito no servidor
+      const result = await organizeCosts({ costsData: stagedData, apiKey: '' });
       if (result.organizedData) {
         setStagedData(result.organizedData);
         toast({ title: "Sucesso!", description: "Os dados foram organizados." });
