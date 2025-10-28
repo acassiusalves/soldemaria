@@ -35,6 +35,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { ptBR } from "date-fns/locale";
 import KpiCard from "@/components/kpi-card";
 import CustomerPerformanceTable from "@/components/customer-performance-table";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const toDate = (value: unknown): Date | null => {
   if (!value) return null;
@@ -121,6 +122,7 @@ export default function ClientesPage() {
       to: endOfMonth(new Date()),
     });
     const [compareDate, setCompareDate] = React.useState<DateRange | undefined>(undefined);
+    const [selectedVendor, setSelectedVendor] = React.useState<string>("all");
 
     const {
       data: allSales,
@@ -133,16 +135,35 @@ export default function ClientesPage() {
       setMounted(true);
     }, []);
 
+    const vendors = React.useMemo(() => {
+        const vendorSet = new Set<string>();
+        allSales.forEach((sale) => {
+            const vendorName = String(sale.vendedor || '').trim();
+            if (vendorName) {
+                vendorSet.add(vendorName);
+            }
+        });
+        return Array.from(vendorSet).sort();
+    }, [allSales]);
+
+     const filteredSalesByVendor = React.useMemo(() => {
+        if (selectedVendor === "all") return allSales;
+        return allSales.filter((sale) => {
+            const vendorName = String(sale.vendedor || '').trim();
+            return vendorName === selectedVendor;
+        });
+    }, [allSales, selectedVendor]);
+
      const comparisonData = React.useMemo(() => {
         if (!compareDate?.from) return [];
-        return allSales.filter((item) => {
+        return filteredSalesByVendor.filter((item) => {
             const itemDate = toDate(item.data);
             return itemDate && itemDate >= compareDate.from! && itemDate <= endOfDay(compareDate.to || compareDate.from!);
         });
-    }, [allSales, compareDate]);
+    }, [filteredSalesByVendor, compareDate]);
 
     const { tableData, kpis } = React.useMemo(() => {
-        const { performanceData: currentData, summary: currentSummary } = calculateCustomerMetrics(allSales);
+        const { performanceData: currentData, summary: currentSummary } = calculateCustomerMetrics(filteredSalesByVendor);
 
         let previousSummary = { newCustomerRevenue: 0, returningCustomerRevenue: 0 };
         if (compareDate) {
@@ -161,7 +182,7 @@ export default function ClientesPage() {
         };
 
         return { tableData: currentData, kpis: kpiResults };
-    }, [allSales, comparisonData, compareDate]);
+    }, [filteredSalesByVendor, comparisonData, compareDate]);
     
     const hasComparison = !!compareDate;
 
@@ -268,6 +289,19 @@ export default function ClientesPage() {
             {hasComparison && (
               <Button variant="ghost" onClick={() => setCompareDate(undefined)}>Limpar Comparação</Button>
             )}
+            <Select value={selectedVendor} onValueChange={setSelectedVendor}>
+              <SelectTrigger className="w-[300px]">
+                <SelectValue placeholder="Todos os vendedores" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos os vendedores</SelectItem>
+                {vendors.map((vendor) => (
+                  <SelectItem key={vendor} value={vendor}>
+                    {vendor}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
         </CardContent>
       </Card>
       
