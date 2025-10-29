@@ -58,7 +58,7 @@ const numBR = (v: any): number => {
 };
 
 const calculateProductMetrics = (data: VendaDetalhada[]) => {
-    const products: Record<string, { revenue: number; quantity: number; orders: Set<string> }> = {};
+    const products: Record<string, { code: string; revenue: number; quantity: number; orders: Set<string> }> = {};
 
     data.forEach(sale => {
         const productName = sale.descricao?.trim();
@@ -66,9 +66,10 @@ const calculateProductMetrics = (data: VendaDetalhada[]) => {
 
         const revenue = numBR(sale.final) || (numBR(sale.valorUnitario) * numBR(sale.quantidade));
         const quantity = numBR(sale.quantidade);
+        const productCode = sale.item ? String(sale.item).trim() : '';
 
         if (!products[productName]) {
-            products[productName] = { revenue: 0, quantity: 0, orders: new Set() };
+            products[productName] = { code: productCode, revenue: 0, quantity: 0, orders: new Set() };
         }
         products[productName].revenue += revenue;
         products[productName].quantity += quantity;
@@ -76,9 +77,10 @@ const calculateProductMetrics = (data: VendaDetalhada[]) => {
     });
 
     const totalRevenue = Object.values(products).reduce((sum, p) => sum + p.revenue, 0);
-    
+
     const sortedProducts = Object.entries(products).map(([name, metrics]) => ({
         name,
+        code: metrics.code,
         revenue: metrics.revenue,
         quantity: metrics.quantity,
         orders: metrics.orders.size,

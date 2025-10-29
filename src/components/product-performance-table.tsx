@@ -13,13 +13,15 @@ import {
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { ArrowDownRight, ArrowUpRight, ArrowUpDown, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, ArrowUpDown, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight, Search } from "lucide-react";
 import { Button } from "./ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
+import { Input } from "./ui/input";
 
 
 type ProductMetric = {
   name: string;
+  code: string;
   revenue: number;
   quantity: number;
   orders: number;
@@ -54,6 +56,7 @@ export default function ProductPerformanceTable({ data, hasComparison }: Product
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [searchTerm, setSearchTerm] = useState("");
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -65,13 +68,23 @@ export default function ProductPerformanceTable({ data, hasComparison }: Product
     setCurrentPage(1); // Reset page on new sort
   }
 
+  const filteredData = useMemo(() => {
+    if (!searchTerm.trim()) return data;
+
+    const normalizedSearch = searchTerm.toLowerCase().trim();
+    return data.filter(product =>
+      product.name.toLowerCase().includes(normalizedSearch) ||
+      product.code.toLowerCase().includes(normalizedSearch)
+    );
+  }, [data, searchTerm]);
+
   const sortedData = useMemo(() => {
-    return [...data].sort((a,b) => {
+    return [...filteredData].sort((a,b) => {
         if(a[sortKey] < b[sortKey]) return sortDirection === 'asc' ? -1 : 1;
         if(a[sortKey] > b[sortKey]) return sortDirection === 'asc' ? 1 : -1;
         return 0;
     })
-  }, [data, sortKey, sortDirection]);
+  }, [filteredData, sortKey, sortDirection]);
 
   const totalPages = Math.ceil(sortedData.length / itemsPerPage);
 
@@ -101,11 +114,26 @@ export default function ProductPerformanceTable({ data, hasComparison }: Product
 
   return (
     <div className="w-full">
+        <div className="mb-4">
+            <div className="relative max-w-sm">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                    placeholder="Buscar por nome ou código do produto..."
+                    value={searchTerm}
+                    onChange={(e) => {
+                        setSearchTerm(e.target.value);
+                        setCurrentPage(1); // Reset to first page on search
+                    }}
+                    className="pl-9"
+                />
+            </div>
+        </div>
         <div className="rounded-md border">
             <Table>
                 <TableHeader>
                 <TableRow>
                     <TableHead className="w-12">#</TableHead>
+                    <SortableHeader tkey="code" label="Código" />
                     <TableHead>Produto</TableHead>
                     <SortableHeader tkey="revenue" label="Faturamento" className="text-right" />
                     {hasComparison && <TableHead className="text-right">% Variação</TableHead>}
@@ -126,6 +154,7 @@ export default function ProductPerformanceTable({ data, hasComparison }: Product
                         <TableCell>
                             <Badge variant={absoluteIndex < 3 ? "default" : "secondary"}>{absoluteIndex + 1}</Badge>
                         </TableCell>
+                        <TableCell className="font-mono text-sm">{product.code || '-'}</TableCell>
                         <TableCell className="font-medium">{product.name}</TableCell>
                         <TableCell className="text-right font-semibold">{formatCurrency(product.revenue)}</TableCell>
                         {hasComparison && (
@@ -157,7 +186,13 @@ export default function ProductPerformanceTable({ data, hasComparison }: Product
         </div>
         <div className="flex items-center justify-between py-4">
             <div className="text-sm text-muted-foreground">
-                Total de {data.length} produtos.
+                {searchTerm ? (
+                    <>
+                        Mostrando {sortedData.length} de {data.length} produtos
+                    </>
+                ) : (
+                    <>Total de {data.length} produtos.</>
+                )}
             </div>
             <div className="flex items-center space-x-6 lg:space-x-8">
                  <div className="flex items-center space-x-2">

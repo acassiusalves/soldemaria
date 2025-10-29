@@ -22,6 +22,7 @@ const navLinks = [
   {
     label: 'Relatórios',
     subLinks: [
+      { href: '/dashboard/relatorios/geral', label: 'Geral' },
       { href: '/dashboard/relatorios/visao-geral', label: 'Visão Geral' },
       { href: '/dashboard/relatorios/financeiro', label: 'Financeiro' },
       { href: '/dashboard/relatorios/canais-e-origens', label: 'Canais & Origens' },
