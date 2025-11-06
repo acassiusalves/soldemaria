@@ -4,12 +4,9 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { format, parse, parseISO, endOfDay, isValid, subDays, startOfMonth, endOfMonth, startOfWeek, endOfWeek, subMonths } from "date-fns";
-import { ptBR } from 'date-fns/locale';
-import type { DateRange } from "react-day-picker";
+import { parse, parseISO, isValid } from "date-fns";
 import {
   AlertTriangle,
-  Calendar as CalendarIcon,
   LogOut,
   Save,
   Settings,
@@ -33,7 +30,7 @@ import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { getAuthClient, getDbClient } from "@/lib/firebase";
 import { NavMenu } from '@/components/nav-menu';
-import { useLogisticsData } from "@/hooks/use-firestore-data-v2";
+import { useLogisticsData, clearFirestoreCache } from "@/hooks/use-firestore-data-v2";
 import { RefreshButton } from "@/components/refresh-button";
 
 
@@ -51,7 +48,6 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Calendar } from "@/components/ui/calendar";
 import {
   Card,
   CardContent,
@@ -67,11 +63,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 import DetailedSalesHistoryTable, { ColumnDef } from "@/components/detailed-sales-history-table";
 import type { VendaDetalhada } from "@/lib/data";
 import { SupportDataDialog } from "@/components/support-data-dialog";
@@ -297,20 +288,14 @@ export default function LogisticaPage() {
   const [columns, setColumns] = React.useState<ColumnDef[]>([]);
   const [uploadedFileNames, setUploadedFileNames] = React.useState<string[]>([]);
   const { toast } = useToast();
-  const today = new Date();
 
-  const [date, setDate] = React.useState<DateRange | undefined>({
-    from: startOfMonth(new Date()),
-    to: endOfMonth(new Date()),
-  });
-
-  // Usar hook otimizado com cache e filtros
+  // Hook para dados de logística (sem filtros de data)
   const {
     data: logisticaData,
     isLoading: logisticaLoading,
     refetch: refetchLogistica,
     lastUpdated: logisticaLastUpdated
-  } = useLogisticsData(date?.from, date?.to || date?.from);
+  } = useLogisticsData();
   const [isSaving, setIsSaving] = React.useState(false);
   const [isOrganizing, setIsOrganizing] = React.useState(false);
   const [saveProgress, setSaveProgress] = React.useState(0);
@@ -355,32 +340,72 @@ export default function LogisticaPage() {
 
   /* ======= Mescla banco + staged (staged tem prioridade) ======= */
   const allData = React.useMemo(() => {
+    console.log('🔀 MESCLANDO DADOS:', {
+      doBanco: logisticaData.length,
+      staged: stagedData.length
+    });
+
     const map = new Map(logisticaData.map(s => [s.id, s]));
     stagedData.forEach(s => {
         const existing = map.get(s.id) || {};
         map.set(s.id, { ...existing, ...s });
     });
-    return Array.from(map.values());
+
+    const resultado = Array.from(map.values());
+    console.log('✅ Dados mesclados:', {
+      total: resultado.length,
+      amostra: resultado.slice(0, 2).map(d => ({ id: d.id, codigo: (d as any).codigo, data: (d as any).data }))
+    });
+
+    return resultado;
   }, [logisticaData, stagedData]);
 
-  /* ======= Dados já vêm filtrados por data do hook ======= */
+  /* ======= Logística não usa filtros de data ======= */
   const filteredData = allData;
 
   /* ======= AGRUPAMENTO por código + subRows ======= */
   const groupedForView = React.useMemo(() => {
+    console.log('📊 AGRUPANDO DADOS PARA VISUALIZAÇÃO:', {
+      totalRegistrosFiltrados: filteredData.length,
+      amostraRegistros: filteredData.slice(0, 2).map(r => ({
+        codigo: (r as any).codigo,
+        data: (r as any).data,
+        valor: (r as any).valor
+      }))
+    });
+
     const groups = new Map<string, any>();
+    let registrosComCodigo = 0;
+    let registrosSemCodigo = 0;
+    let registrosDetalhe = 0;
+
     for (const row of filteredData) {
       const code = normCode((row as any).codigo);
-      if (!code) continue;
+      if (!code) {
+        registrosSemCodigo++;
+        continue;
+      }
+
+      registrosComCodigo++;
 
       if (!groups.has(code)) {
         groups.set(code, { header: { ...row, subRows: [] as any[] } });
       }
       const g = groups.get(code);
 
-      if (isDetailRow(row)) g.header.subRows.push(row); // detalhe
+      if (isDetailRow(row)) {
+        g.header.subRows.push(row); // detalhe
+        registrosDetalhe++;
+      }
       g.header = mergeForHeader(g.header, row);         // enriquece header
     }
+
+    console.log('🔢 Estatísticas do agrupamento:', {
+      registrosComCodigo,
+      registrosSemCodigo,
+      registrosDetalhe,
+      totalGruposCriados: groups.size
+    });
 
     for (const g of groups.values()) {
       g.header.subRows.sort((a: any, b: any) =>
@@ -388,12 +413,45 @@ export default function LogisticaPage() {
       );
     }
 
-    return Array.from(groups.values()).map(g => g.header);
+    const resultado = Array.from(groups.values()).map(g => g.header);
+
+    console.log('✅ Agrupamento concluído:', {
+      totalGrupos: resultado.length,
+      amostraGrupos: resultado.slice(0, 2).map(g => ({
+        codigo: g.codigo,
+        quantidadeSubRows: g.subRows?.length || 0,
+        data: g.data,
+        valor: g.valor
+      }))
+    });
+
+    return resultado;
   }, [filteredData]);
+
+  /* ======= Log final antes de renderizar ======= */
+  React.useEffect(() => {
+    console.log('🎨 RENDERIZANDO TABELA:', {
+      totalRegistros: groupedForView.length,
+      totalColunas: columns.length,
+      primeirosRegistros: groupedForView.slice(0, 3).map(r => ({
+        codigo: r.codigo,
+        subRows: r.subRows?.length || 0,
+        primeirosCampos: Object.keys(r).slice(0, 5)
+      }))
+    });
+  }, [groupedForView, columns]);
 
   /* ======= UPLOAD / PROCESSAMENTO ======= */
   const handleDataUpload = async (datasets: IncomingDataset[]) => {
-    if (!datasets || datasets.length === 0) return;
+    console.log('📥 UPLOAD INICIADO:', {
+      quantidadeDatasets: datasets?.length || 0,
+      nomes: datasets?.map(d => d.fileName)
+    });
+
+    if (!datasets || datasets.length === 0) {
+      console.warn('⚠️ Nenhum dataset para processar');
+      return;
+    }
 
     const uploadTimestamp = Date.now();
     const stagedInserts: any[] = [];
@@ -401,9 +459,25 @@ export default function LogisticaPage() {
 
     for (const ds of datasets) {
       const { rows, fileName } = ds;
-      if (!rows?.length) continue;
+      console.log(`📄 Processando arquivo: ${fileName}`, { totalLinhas: rows?.length || 0 });
+
+      if (!rows?.length) {
+        console.warn(`⚠️ Arquivo ${fileName} não tem linhas`);
+        continue;
+      }
 
       const mapped = rows.map(mapRowToSystem);
+      console.log(`🔄 Mapeamento concluído para ${fileName}:`, {
+        linhasOriginais: rows.length,
+        linhasMapeadas: mapped.length,
+        amostra: mapped[0],
+        campoDataPrimeiraLinha: {
+          valorOriginal: rows[0]?.['Data'] || rows[0]?.['data'] || rows[0]?.['DATE'],
+          valorMapeado: mapped[0]?.data,
+          tipoMapeado: typeof mapped[0]?.data,
+          todasAsChavesOriginais: Object.keys(rows[0] || {}).slice(0, 10)
+        }
+      });
 
       for (let i = 0; i < mapped.length; i++) {
         const mappedRow = mapped[i];
@@ -413,7 +487,21 @@ export default function LogisticaPage() {
       }
     }
 
-    setStagedData(prev => [...prev, ...stagedInserts]);
+    console.log('✅ Processamento concluído:', {
+      totalProcessado: processedCount,
+      totalStaged: stagedInserts.length,
+      amostraDados: stagedInserts.slice(0, 2)
+    });
+
+    setStagedData(prev => {
+      const novoDados = [...prev, ...stagedInserts];
+      console.log('📦 Estado stagedData atualizado:', {
+        anterior: prev.length,
+        novo: novoDados.length
+      });
+      return novoDados;
+    });
+
     setStagedFileNames(prev => [...new Set([...prev, ...datasets.map(d => d.fileName)])]);
 
     toast({
@@ -448,12 +536,18 @@ export default function LogisticaPage() {
 
   /* ======= Salvar no Firestore ======= */
   const handleSaveChangesToDb = async () => {
+    console.log('💾 INICIANDO SALVAMENTO:', { totalRegistros: stagedData.length });
+
     if (stagedData.length === 0) {
+      console.warn('⚠️ Nenhum dado para salvar');
       toast({ title: "Nenhum dado novo para salvar", variant: "default" });
       return;
     }
     const db = await getDbClient();
-    if(!db) return;
+    if(!db) {
+      console.error('❌ Banco de dados não disponível');
+      return;
+    }
 
     setIsSaving(true);
     setSaveProgress(0);
@@ -461,31 +555,48 @@ export default function LogisticaPage() {
     try {
       const chunks = [];
       const dataToSave = [...stagedData];
+      console.log('📦 Dados a serem salvos:', {
+        total: dataToSave.length,
+        amostra: dataToSave.slice(0, 2)
+      });
+
       for (let i = 0; i < dataToSave.length; i += 450) {
         chunks.push(dataToSave.slice(i, i + 450));
       }
+      console.log(`📊 Dividido em ${chunks.length} chunks de até 450 registros`);
 
       for (let i = 0; i < chunks.length; i++) {
         const chunk = chunks[i];
         const batch = writeBatch(db);
+        console.log(`🔄 Processando chunk ${i + 1}/${chunks.length} (${chunk.length} registros)`);
 
-        chunk.forEach((item) => {
+        chunk.forEach((item, idx) => {
           const docId = doc(collection(db, "logistica")).id;
           const logisticaRef = doc(db, "logistica", docId);
           const { id, ...payload } = item;
-          
+
           let cleanPayload = stripUndefinedDeep(payload);
           cleanPayload.id = docId;
 
           const dateObject = toDate(cleanPayload.data);
           if (dateObject) {
             cleanPayload.data = Timestamp.fromDate(dateObject);
+            if (idx === 0) {
+              console.log(`📅 Data do primeiro registro do chunk: ${dateObject.toISOString()}`);
+            }
           } else if (cleanPayload.data && typeof (cleanPayload.data as any).toDate === 'function') {
             // já é Timestamp-like, mantém
+            if (idx === 0) {
+              console.log(`📅 Data do primeiro registro (já é Timestamp)`);
+            }
           } else {
+            // Dados de logística não possuem campo 'data', então deletamos
+            if (idx === 0) {
+              console.log(`ℹ️ Primeiro registro sem data - removendo campo (normal para dados de logística)`);
+            }
             delete (cleanPayload as any).data;
           }
-          
+
           const uploadTimestampObject = toDate(cleanPayload.uploadTimestamp);
           if (uploadTimestampObject) {
             cleanPayload.uploadTimestamp = Timestamp.fromDate(uploadTimestampObject);
@@ -495,8 +606,11 @@ export default function LogisticaPage() {
         });
 
         await batch.commit();
+        console.log(`✅ Chunk ${i + 1} salvo com sucesso`);
         setSaveProgress(((i + 1) / chunks.length) * 100);
       }
+
+      console.log('✅ SALVAMENTO COMPLETO - Todos os chunks foram salvos');
 
       // Optimistic update
       // setLogisticaData(prev => {
@@ -540,7 +654,26 @@ export default function LogisticaPage() {
       setStagedData([]);
       setStagedFileNames([]);
 
-      toast({ title: "Sucesso!", description: "Os dados foram salvos no banco de dados." });
+      // Limpar cache e forçar atualização dos dados após salvar
+      clearFirestoreCache();
+
+      // Aguardar um pouco para garantir que o Firestore processou tudo
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      await refetchLogistica();
+
+      console.log('📊 Dados após refetch:', {
+        totalRegistros: logisticaData.length,
+        amostraDatas: dataToSave.slice(0, 3).map(d => ({
+          data: d.data,
+          codigo: d.codigo
+        }))
+      });
+
+      toast({
+        title: "Sucesso!",
+        description: `${dataToSave.length} registro(s) foram salvos no banco de dados. Atualizando visualização...`
+      });
     } catch (error) {
       console.error("Error saving data to Firestore:", error);
       toast({ title: "Erro ao Salvar", description: "Houve um problema ao salvar os dados. Tente novamente.", variant: "destructive" });
@@ -646,135 +779,94 @@ export default function LogisticaPage() {
         <Card>
           <CardHeader>
             <div className="flex justify-between items-start">
-                <div>
-                  <CardTitle className="font-headline text-h3">Seleção de Período</CardTitle>
-                  <CardDescription>Filtre os dados de logística que você deseja analisar.</CardDescription>
-                </div>
-                 <div className="flex items-center gap-2">
-                    <SupportDataDialog
-                      onProcessData={handleDataUpload}
-                      uploadedFileNames={uploadedFileNames}
-                      onRemoveUploadedFile={handleRemoveUploadedFileName}
-                      stagedFileNames={stagedFileNames}
-                    >
-                       <Button variant="outline">
-                        <Settings className="mr-2 h-4 w-4" />
-                        Dados de Apoio
-                      </Button>
-                    </SupportDataDialog>
-                    {stagedData.length > 0 && (
-                      <Button
-                        onClick={handleOrganizeWithAI}
-                        variant="outline"
-                        disabled={isOrganizing || isSaving}
-                      >
-                        {isOrganizing ? (
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        ) : (
-                          <Wand2 className="mr-2 h-4 w-4" />
-                        )}
-                        {isOrganizing ? "Organizando..." : "Organizar"}
-                      </Button>
-                    )}
-                     {stagedData.length > 0 && (
-                      <Button
-                        onClick={handleClearStagedData}
-                        variant="destructive"
-                        disabled={isSaving || isOrganizing}
-                      >
-                        <Trash2 className="mr-2 h-4 w-4" />
-                        Limpar Revisão
-                      </Button>
-                    )}
-                    <Button
-                      onClick={handleSaveChangesToDb}
-                      disabled={stagedData.length === 0 || isSaving || isOrganizing}
-                      variant={stagedData.length === 0 ? "outline" : "default"}
-                      title={stagedData.length === 0 ? "Carregue planilhas para habilitar" : "Salvar dados no Firestore"}
-                    >
-                      {isSaving ? (
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      ) : (
-                          <Save className="mr-2 h-4 w-4" />
-                      )}
-                      {isSaving ? "Salvando..." : `Salvar no Banco ${stagedData.length > 0 ? `(${stagedData.length})` : ""}`}
-                    </Button>
-                     {logisticaData.length > 0 && uploadedFileNames.length === 0 && (
-                        <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                                <Button variant="destructive">
-                                    <AlertTriangle className="mr-2 h-4 w-4" />
-                                    Apagar Tudo
-                                </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                                <AlertDialogHeader>
-                                    <AlertDialogTitle>Você tem certeza absoluta?</AlertDialogTitle>
-                                    <AlertDialogDescription>
-                                        Esta ação não pode ser desfeita. Isso irá apagar permanentemente
-                                        TODOS os dados de logística do seu banco de dados.
-                                    </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                    <AlertDialogAction onClick={handleClearAllData}>
-                                        Sim, apagar tudo
-                                    </AlertDialogAction>
-                                </AlertDialogFooter>
-                            </AlertDialogContent>
-                        </AlertDialog>
-                     )}
-                 </div>
+              <div>
+                <CardTitle className="font-headline text-h3">Dados de Logística</CardTitle>
+                <CardDescription>Gerencie e visualize os dados de logística importados.</CardDescription>
               </div>
-          </CardHeader>
-          <CardContent>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  id="date"
-                  variant={"outline"}
-                  className={cn("w-[300px] justify-start text-left font-normal", !date && "text-muted-foreground")}
+              <div className="flex items-center gap-2">
+                <SupportDataDialog
+                  onProcessData={handleDataUpload}
+                  uploadedFileNames={uploadedFileNames}
+                  onRemoveUploadedFile={handleRemoveUploadedFileName}
+                  stagedFileNames={stagedFileNames}
                 >
-                  <CalendarIcon className="mr-2 h-4 w-4" />
-                  {date?.from ? (
-                    date.to ? (<>{format(date.from, "dd/MM/y", { locale: ptBR })} - {format(date.to, "dd/MM/y", { locale: ptBR })}</>) : (format(date.from, "dd/MM/y", { locale: ptBR }))
-                  ) : (<span>Selecione uma data</span>)}
+                  <Button variant="outline">
+                    <Settings className="mr-2 h-4 w-4" />
+                    Dados de Apoio
+                  </Button>
+                </SupportDataDialog>
+                {stagedData.length > 0 && (
+                  <Button
+                    onClick={handleOrganizeWithAI}
+                    variant="outline"
+                    disabled={isOrganizing || isSaving}
+                  >
+                    {isOrganizing ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Wand2 className="mr-2 h-4 w-4" />
+                    )}
+                    {isOrganizing ? "Organizando..." : "Organizar"}
+                  </Button>
+                )}
+                {stagedData.length > 0 && (
+                  <Button
+                    onClick={handleClearStagedData}
+                    variant="destructive"
+                    disabled={isSaving || isOrganizing}
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Limpar Revisão
+                  </Button>
+                )}
+                <Button
+                  onClick={handleSaveChangesToDb}
+                  disabled={stagedData.length === 0 || isSaving || isOrganizing}
+                  variant={stagedData.length === 0 ? "outline" : "default"}
+                  title={stagedData.length === 0 ? "Carregue planilhas para habilitar" : "Salvar dados no Firestore"}
+                >
+                  {isSaving ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Save className="mr-2 h-4 w-4" />
+                  )}
+                  {isSaving ? "Salvando..." : `Salvar no Banco ${stagedData.length > 0 ? `(${stagedData.length})` : ""}`}
                 </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
-                <Calendar
-                    locale={ptBR}
-                    initialFocus
-                    mode="range"
-                    defaultMonth={date?.from}
-                    selected={date}
-                    onSelect={setDate}
-                    numberOfMonths={2}
-                    presets={[
-                        { label: 'Hoje', range: { from: today, to: today } },
-                        { label: 'Ontem', range: { from: subDays(today, 1), to: subDays(today, 1) } },
-                        { label: 'Hoje e ontem', range: { from: subDays(today, 1), to: today } },
-                        { label: 'Últimos 7 dias', range: { from: subDays(today, 6), to: today } },
-                        { label: 'Últimos 14 dias', range: { from: subDays(today, 13), to: today } },
-                        { label: 'Últimos 28 dias', range: { from: subDays(today, 27), to: today } },
-                        { label: 'Últimos 30 dias', range: { from: subDays(today, 29), to: today } },
-                        { label: 'Esta semana', range: { from: startOfWeek(today), to: endOfWeek(today) } },
-                        { label: 'Semana passada', range: { from: startOfWeek(subDays(today, 7)), to: endOfWeek(subDays(today, 7)) } },
-                        { label: 'Este mês', range: { from: startOfMonth(today), to: endOfMonth(today) } },
-                        { label: 'Mês passado', range: { from: startOfMonth(subMonths(today, 1)), to: endOfMonth(subMonths(today, 1)) } },
-                        { label: 'Máximo', range: { from: new Date(2023, 0, 1), to: today } },
-                    ]}
-                />
-              </PopoverContent>
-            </Popover>
-          </CardContent>
+                {logisticaData.length > 0 && uploadedFileNames.length === 0 && (
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button variant="destructive">
+                        <AlertTriangle className="mr-2 h-4 w-4" />
+                        Apagar Tudo
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Você tem certeza absoluta?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Esta ação não pode ser desfeita. Isso irá apagar permanentemente
+                          TODOS os dados de logística do seu banco de dados.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleClearAllData}>
+                          Sim, apagar tudo
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                )}
+              </div>
+            </div>
+          </CardHeader>
           {isSaving && (
-            <div className="px-6 pb-4">
+            <CardContent>
               <Progress value={saveProgress} className="w-full" />
               <p className="text-sm text-muted-foreground mt-2 text-center">
                 Salvando {stagedData.length} registros. Isso pode levar um momento...
               </p>
-            </div>
+            </CardContent>
           )}
         </Card>
 

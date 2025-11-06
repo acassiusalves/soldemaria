@@ -122,27 +122,17 @@ export function useSalesData(dateFrom?: Date, dateTo?: Date) {
   );
 }
 
-// Hook para logística
+// Hook para logística - SEM filtros de data (dados de logística não possuem campo 'data')
 export function useLogisticsData(dateFrom?: Date, dateTo?: Date) {
-  const from = dateFrom?.getTime() || 0;
-  const to = dateTo?.getTime() || 0;
-  const cacheKey = `logistica-${from}-${to}`;
+  // Ignora os parâmetros de data, mas mantém a assinatura para compatibilidade
+  const cacheKey = 'logistica-all';
 
   return useFirestoreCollection(
     'logistica',
     cacheKey,
     (collectionRef) => {
-      let q = query(collectionRef);
-
-      if (dateFrom) {
-        q = query(q, where('data', '>=', dateFrom));
-      }
-      if (dateTo) {
-        q = query(q, where('data', '<=', dateTo));
-      }
-
-      q = query(q, orderBy('data', 'desc'), limit(3000));
-      return q;
+      // Query simples sem ordenação por data, já que dados de logística não têm esse campo
+      return query(collectionRef, limit(5000));
     },
     5 * 60 * 1000
   );
