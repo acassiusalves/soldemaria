@@ -220,11 +220,7 @@ export default function PublicoPage() {
     to: endOfMonth(new Date()),
   });
   const [mounted, setMounted] = React.useState(false);
-  const [selectedVendors, setSelectedVendors] = React.useState<string[]>([
-    "Ana Paula de Farias",
-    "Raissa Dandara (Colaboradora)",
-    "Regiane Alves da Silva (Colaboradora)",
-  ]);
+  const [selectedVendors, setSelectedVendors] = React.useState<string[]>([]);
 
   const {
     data: allSales,
@@ -267,7 +263,25 @@ export default function PublicoPage() {
     const filtered = vendorMetrics.filter(v => selectedVendors.length === 0 || selectedVendors.includes(v.name));
     setTopProducts(topProducts);
     setTopCustomers(topCustomers);
-    const allNames = Array.from(new Set(allSales.map(s => s.vendedor).filter(Boolean)));
+
+    // Extract and normalize all unique vendor names
+    const vendorSet = new Set<string>();
+
+    // Add vendors from metrics (already processed)
+    vendorMetrics.forEach(v => {
+      if (v.name && v.name.trim() && v.name !== 'Sem Vendedor') {
+        vendorSet.add(v.name.trim());
+      }
+    });
+
+    // Add vendors directly from sales data
+    allSales.forEach(sale => {
+      if (sale.vendedor && typeof sale.vendedor === 'string' && sale.vendedor.trim() && sale.vendedor.trim() !== 'Sem Vendedor') {
+        vendorSet.add(sale.vendedor.trim());
+      }
+    });
+
+    const allNames = Array.from(vendorSet).sort((a, b) => a.localeCompare(b, 'pt-BR'));
     return { filteredVendorData: filtered, allVendorNames: allNames };
   }, [allSales, selectedVendors, monthlyGoals, date]);
 

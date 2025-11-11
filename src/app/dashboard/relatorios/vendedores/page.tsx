@@ -172,7 +172,7 @@ const calculateVendorMetrics = (data: VendaDetalhada[]) => {
     };
     
     if (detailRows.length === 0) {
-        addVendorSlice(mainSale.vendedor, orderRevenue, totalItems);
+        addVendorSlice(mainSale.vendedor || "Sem Vendedor", orderRevenue, totalItems);
     } else {
         const totalDescontos = rows.reduce((acc, s) => acc + (Number(s.valorDescontos) || 0), 0);
         let totalItemBruto = 0;
@@ -209,11 +209,7 @@ export default function VendedoresPage() {
       to: endOfMonth(new Date()),
     });
     const [compareDate, setCompareDate] = React.useState<DateRange | undefined>(undefined);
-    const [selectedVendors, setSelectedVendors] = React.useState<string[]>([
-        "Ana Paula de Farias",
-        "Raissa Dandara (Colaboradora)",
-        "Regiane Alves da Silva (Colaboradora)",
-    ]);
+    const [selectedVendors, setSelectedVendors] = React.useState<string[]>([]);
     const [monthlyGoals, setMonthlyGoals] = React.useState<Record<string, MonthlyGoals>>({});
     const [isGoalsDialogOpen, setIsGoalsDialogOpen] = React.useState(false);
     const [isSavingGoals, setIsSavingGoals] = React.useState(false);
@@ -282,10 +278,30 @@ export default function VendedoresPage() {
 
         const currentPeriodKey = date?.from ? format(date.from, 'yyyy-MM') : '';
         const vendorGoalsForPeriod = monthlyGoals[currentPeriodKey] || {};
-        
-        // Get all unique vendors from sales data + goals data
-        const vendorsFromAllSales = Array.from(new Set(allSales.map(s => s.vendedor).filter(Boolean)));
-        const allVendors = Array.from(new Set([...vendorsFromAllSales, ...Object.keys(currentVendors), ...Object.keys(previousVendors), ...Object.keys(vendorGoalsForPeriod)]));
+
+        // Get all unique vendors from all sources, normalize and deduplicate
+        const vendorSet = new Set<string>();
+
+        // Add vendors from current sales
+        Object.keys(currentVendors).forEach(v => vendorSet.add(v.trim()));
+
+        // Add vendors from comparison period
+        Object.keys(previousVendors).forEach(v => vendorSet.add(v.trim()));
+
+        // Add vendors from goals
+        Object.keys(vendorGoalsForPeriod).forEach(v => vendorSet.add(v.trim()));
+
+        // Add vendors directly from sales data
+        allSales.forEach(sale => {
+            if (sale.vendedor && typeof sale.vendedor === 'string' && sale.vendedor.trim()) {
+                vendorSet.add(sale.vendedor.trim());
+            }
+        });
+
+        // Convert to sorted array, excluding "Sem Vendedor"
+        const allVendors = Array.from(vendorSet)
+            .filter(v => v && v !== 'Sem Vendedor')
+            .sort((a, b) => a.localeCompare(b, 'pt-BR'));
 
         const totalRevenueAllVendors = Object.values(currentVendors).reduce((sum, v) => sum + v.revenue, 0);
 
