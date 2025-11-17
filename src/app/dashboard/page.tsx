@@ -206,9 +206,28 @@ const isDetailRow = (row: Record<string, any>) =>
 export default function DashboardPage() {
   const router = useRouter();
   const [user, setUser] = React.useState<User | null>(null);
+  const [lastImportDate, setLastImportDate] = React.useState<Date | undefined>();
+
+  // Calcula a data limite para o mês vigente baseado em "Dados Importados Até"
+  const currentMonthLimit = React.useMemo(() => {
+    if (!lastImportDate) return endOfMonth(new Date());
+
+    // Se a data importada for do mês atual, usa ela como limite
+    const currentMonth = new Date();
+    const importMonth = lastImportDate.getMonth();
+    const importYear = lastImportDate.getFullYear();
+
+    if (importMonth === currentMonth.getMonth() && importYear === currentMonth.getFullYear()) {
+      return lastImportDate;
+    }
+
+    // Senão, usa o último dia do mês
+    return endOfMonth(new Date());
+  }, [lastImportDate]);
+
   const [date, setDate] = React.useState<DateRange | undefined>({
     from: startOfMonth(new Date()),
-    to: endOfMonth(new Date()),
+    to: currentMonthLimit,
   });
 
   // States removidos - agora gerenciados pelos hooks otimizados
@@ -227,7 +246,49 @@ export default function DashboardPage() {
       return () => unsub();
     })();
   }, [router]);
-  
+
+  // Carregar "Dados Importados Até" do metadata de vendas
+  React.useEffect(() => {
+    let metaUnsub: () => void;
+    (async () => {
+      const db = await getDbClient();
+      if (!db) return;
+
+      const { doc, onSnapshot } = await import("firebase/firestore");
+      metaUnsub = onSnapshot(doc(db, "metadata", "vendas"), (docSnap) => {
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          if (data.lastImportDate) {
+            const importDate = data.lastImportDate.toDate ? data.lastImportDate.toDate() : new Date(data.lastImportDate);
+            setLastImportDate(importDate);
+          }
+        }
+      });
+    })();
+
+    return () => {
+      if (metaUnsub) metaUnsub();
+    };
+  }, []);
+
+  // Atualiza o filtro de data quando "Dados Importados Até" mudar
+  React.useEffect(() => {
+    setDate(prev => {
+      // Só atualiza se o filtro atual for do mês vigente
+      const isCurrentMonth = prev?.from &&
+        prev.from.getMonth() === new Date().getMonth() &&
+        prev.from.getFullYear() === new Date().getFullYear();
+
+      if (isCurrentMonth) {
+        return {
+          from: startOfMonth(new Date()),
+          to: currentMonthLimit,
+        };
+      }
+      return prev;
+    });
+  }, [currentMonthLimit]);
+
   // Usar hooks otimizados com cache e filtros de data
   const {
     data: allSales,
@@ -563,7 +624,43 @@ export default function DashboardPage() {
         
     return { summaryData: finalSummaryData, topProductsChartData, vendorPerformanceData, deliverySummary, storeSummary, topCustomersData };
   }, [filteredData, taxasOperadoras, custosData, custosEmbalagem]);
-  
+
+  // Cálculo de projeção de faturamento
+  const faturamentoProjetado = React.useMemo(() => {
+    // Só calcula se tiver data importada e estiver filtrando o mês atual
+    if (!lastImportDate || !date?.from || !date?.to) return null;
+
+    const currentMonth = new Date();
+    const isCurrentMonth =
+      date.from.getMonth() === currentMonth.getMonth() &&
+      date.from.getFullYear() === currentMonth.getFullYear();
+
+    if (!isCurrentMonth) return null;
+
+    // Faturamento atual do período
+    const faturamentoAtual = summaryData.faturamento;
+
+    // Quantidade de dias desde o primeiro dia até a data importada
+    const diasDecorridos = differenceInDays(lastImportDate, date.from) + 1;
+
+    // Total de dias do mês
+    const diasTotaisMes = differenceInDays(endOfMonth(currentMonth), startOfMonth(currentMonth)) + 1;
+
+    // Média diária
+    const mediaDiaria = faturamentoAtual / diasDecorridos;
+
+    // Projeção total do mês
+    const projecao = mediaDiaria * diasTotaisMes;
+
+    return {
+      valor: projecao,
+      diasDecorridos,
+      diasTotaisMes,
+      mediaDiaria,
+      faturamentoAtual,
+    };
+  }, [summaryData.faturamento, lastImportDate, date]);
+
   const handleLogout = async () => {
     const auth = await getAuthClient();
     if(auth) {
@@ -617,7 +714,7 @@ export default function DashboardPage() {
                                 { label: 'Últimos 30 dias', range: { from: subDays(today, 29), to: today } },
                                 { label: 'Esta semana', range: { from: startOfWeek(today), to: endOfWeek(today) } },
                                 { label: 'Semana passada', range: { from: startOfWeek(subDays(today, 7)), to: endOfWeek(subDays(today, 7)) } },
-                                { label: 'Este mês', range: { from: startOfMonth(today), to: endOfMonth(today) } },
+                                { label: 'Este mês', range: { from: startOfMonth(today), to: currentMonthLimit } },
                                 { label: 'Mês passado', range: { from: startOfMonth(subMonths(today, 1)), to: endOfMonth(subMonths(today, 1)) } },
                                 { label: 'Máximo', range: { from: new Date(2023, 0, 1), to: today } },
                             ]}
@@ -663,6 +760,8 @@ export default function DashboardPage() {
                 value={summaryData.faturamento}
                 icon={<DollarSign className="h-5 w-5 text-primary" />}
                 isCurrency
+                secondaryValue={faturamentoProjetado ? `Projeção: ${faturamentoProjetado.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}` : undefined}
+                tertiaryValue={faturamentoProjetado ? `${faturamentoProjetado.diasDecorridos}/${faturamentoProjetado.diasTotaisMes} dias (média: ${faturamentoProjetado.mediaDiaria.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}/dia)` : undefined}
             />
             <SummaryCard
                 title="Custo Total (CMV)"

@@ -496,15 +496,33 @@ export default function VendasPage() {
   const { toast } = useToast();
 
   const today = new Date();
-  const [date, setDate] = React.useState<DateRange | undefined>({
-    from: startOfMonth(new Date()),
-    to: endOfMonth(new Date()),
-  });
 
   // Estado para "Dados Importados Até"
   const [lastImportDate, setLastImportDate] = React.useState<Date | undefined>();
   const [savedLastImportDate, setSavedLastImportDate] = React.useState<Date | undefined>();
   const [isSavingImportDate, setIsSavingImportDate] = React.useState(false);
+
+  // Calcula a data limite para o mês vigente baseado em "Dados Importados Até"
+  const currentMonthLimit = React.useMemo(() => {
+    if (!savedLastImportDate) return endOfMonth(new Date());
+
+    // Se a data importada for do mês atual, usa ela como limite
+    const currentMonth = new Date();
+    const importMonth = savedLastImportDate.getMonth();
+    const importYear = savedLastImportDate.getFullYear();
+
+    if (importMonth === currentMonth.getMonth() && importYear === currentMonth.getFullYear()) {
+      return savedLastImportDate;
+    }
+
+    // Senão, usa o último dia do mês
+    return endOfMonth(new Date());
+  }, [savedLastImportDate]);
+
+  const [date, setDate] = React.useState<DateRange | undefined>({
+    from: startOfMonth(new Date()),
+    to: currentMonthLimit,
+  });
 
   // Usar hooks otimizados com cache e filtros de data
   const {
@@ -661,6 +679,24 @@ export default function VendasPage() {
         if (metaUnsub) metaUnsub();
     };
   }, []);
+
+  // Atualiza o filtro de data quando "Dados Importados Até" mudar
+  React.useEffect(() => {
+    setDate(prev => {
+      // Só atualiza se o filtro atual for do mês vigente
+      const isCurrentMonth = prev?.from &&
+        prev.from.getMonth() === new Date().getMonth() &&
+        prev.from.getFullYear() === new Date().getFullYear();
+
+      if (isCurrentMonth) {
+        return {
+          from: startOfMonth(new Date()),
+          to: currentMonthLimit,
+        };
+      }
+      return prev;
+    });
+  }, [currentMonthLimit]);
 
   React.useEffect(() => {
       const loadPrefs = async () => {
@@ -1551,12 +1587,6 @@ React.useEffect(() => {
         <NavMenu />
         <div className="flex w-full items-center gap-4 md:ml-auto md:gap-2 lg:gap-4">
             <div className="ml-auto flex items-center gap-2">
-              {savedLastImportDate && (
-                <Badge variant="secondary" className="text-xs">
-                  <CalendarIcon className="mr-1 h-3 w-3" />
-                  Importado até: {format(savedLastImportDate, "dd/MM/yyyy", { locale: ptBR })}
-                </Badge>
-              )}
               <RefreshButton
                 onRefresh={handleRefreshAll}
                 isLoading={isLoadingData}
@@ -1699,7 +1729,7 @@ React.useEffect(() => {
                           { label: 'Últimos 30 dias', range: { from: subDays(today, 29), to: today } },
                           { label: 'Esta semana', range: { from: startOfWeek(today), to: endOfWeek(today) } },
                           { label: 'Semana passada', range: { from: startOfWeek(subDays(today, 7)), to: endOfWeek(subDays(today, 7)) } },
-                          { label: 'Este mês', range: { from: startOfMonth(today), to: endOfMonth(today) } },
+                          { label: 'Este mês', range: { from: startOfMonth(today), to: currentMonthLimit } },
                           { label: 'Mês passado', range: { from: startOfMonth(subMonths(today, 1)), to: endOfMonth(subMonths(today, 1)) } },
                           { label: 'Máximo', range: { from: new Date(2023, 0, 1), to: today } },
                       ]}

@@ -3,11 +3,15 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, Calendar as CalendarIcon } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import { useApp } from '@/contexts/app-context';
 import { Logo } from '@/components/icons';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { format } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
+import { getDbClient } from '@/lib/firebase';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -46,6 +50,31 @@ const navLinks = [
 export function NavMenu() {
   const { userRole, appSettings } = useApp();
   const pathname = usePathname();
+  const [lastImportDate, setLastImportDate] = React.useState<Date | undefined>();
+
+  // Carregar "Dados Importados Até" do metadata de vendas
+  React.useEffect(() => {
+    let metaUnsub: () => void;
+    (async () => {
+      const db = await getDbClient();
+      if (!db) return;
+
+      const { doc, onSnapshot } = await import("firebase/firestore");
+      metaUnsub = onSnapshot(doc(db, "metadata", "vendas"), (docSnap) => {
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          if (data.lastImportDate) {
+            const importDate = data.lastImportDate.toDate ? data.lastImportDate.toDate() : new Date(data.lastImportDate);
+            setLastImportDate(importDate);
+          }
+        }
+      });
+    })();
+
+    return () => {
+      if (metaUnsub) metaUnsub();
+    };
+  }, []);
 
   if (!userRole || !appSettings) {
     return null; // Or a loading state
@@ -117,6 +146,12 @@ export function NavMenu() {
         <Logo className="size-8 text-primary" />
         <span className="text-xl font-semibold font-headline">Visão de Vendas</span>
       </Link>
+      {lastImportDate && (
+        <Badge variant="secondary" className="text-xs whitespace-nowrap">
+          <CalendarIcon className="mr-1 h-3 w-3" />
+          Importado até: {format(lastImportDate, "dd/MM/yyyy", { locale: ptBR })}
+        </Badge>
+      )}
       {navLinks.map(link => {
         if ('href' in link) {
           return renderLink(link as { href: string, label: string });

@@ -9,6 +9,7 @@ interface SummaryCardProps {
   icon: React.ReactNode;
   isCurrency?: boolean;
   secondaryValue?: string;
+  tertiaryValue?: string;
 }
 
 const formatValue = (value: number, isCurrency: boolean) => {
@@ -23,7 +24,7 @@ const formatValue = (value: number, isCurrency: boolean) => {
     return value.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
-export default function SummaryCard({ title, value, icon, isCurrency = false, secondaryValue }: SummaryCardProps) {
+export default function SummaryCard({ title, value, icon, isCurrency = false, secondaryValue, tertiaryValue }: SummaryCardProps) {
   return (
     <Card className="shadow-sm hover:shadow-md transition-shadow">
       <CardContent className="p-5">
@@ -33,9 +34,12 @@ export default function SummaryCard({ title, value, icon, isCurrency = false, se
             {icon}
           </div>
         </div>
-        <div className="flex items-end gap-2">
-          <div className="text-3xl font-bold font-headline">{formatValue(value, isCurrency)}</div>
-          {secondaryValue && <div className="text-sm font-medium text-green-500 pb-1">{secondaryValue}</div>}
+        <div className="flex flex-col gap-1">
+          <div className="flex items-end gap-2">
+            <div className="text-3xl font-bold font-headline">{formatValue(value, isCurrency)}</div>
+            {secondaryValue && <div className="text-sm font-medium text-green-500 pb-1">{secondaryValue}</div>}
+          </div>
+          {tertiaryValue && <div className="text-xs text-muted-foreground">{tertiaryValue}</div>}
         </div>
       </CardContent>
     </Card>
