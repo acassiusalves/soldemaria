@@ -28,6 +28,7 @@ type ProductMetric = {
   averagePrice: number;
   share: number;
   dailyAverage?: number;
+  monthlyAverage?: number;
   previousRevenue?: number;
   [key: string]: string | number | undefined; // For monthly columns
 };
@@ -64,7 +65,7 @@ export default function ProductPerformanceTable({ data, hasComparison }: Product
   const monthlyColumns = useMemo(() => {
     if (!data || data.length === 0) return [];
     const firstProduct = data[0];
-    const knownKeys = ['name', 'code', 'revenue', 'quantity', 'orders', 'averagePrice', 'share', 'dailyAverage', 'previousRevenue', 'cumulativePercentage', 'class'];
+    const knownKeys = ['name', 'code', 'revenue', 'quantity', 'orders', 'averagePrice', 'share', 'dailyAverage', 'monthlyAverage', 'previousRevenue', 'cumulativePercentage', 'class'];
     return Object.keys(firstProduct).filter(key => !knownKeys.includes(key));
   }, [data]);
 
@@ -154,6 +155,7 @@ export default function ProductPerformanceTable({ data, hasComparison }: Product
                     <SortableHeader tkey="orders" label="Pedidos" className="text-right" />
                     <SortableHeader tkey="averagePrice" label="Preço Médio" className="text-right" />
                     <SortableHeader tkey="dailyAverage" label="Média/Dia" className="text-right" />
+                    <SortableHeader tkey="monthlyAverage" label="Média 4M" className="text-right" />
                     {monthlyColumns.map(monthKey => (
                       <TableHead key={monthKey} className="text-right text-xs">{monthKey}</TableHead>
                     ))}
@@ -190,6 +192,7 @@ export default function ProductPerformanceTable({ data, hasComparison }: Product
                         <TableCell className="text-right">{formatNumber(product.orders)}</TableCell>
                         <TableCell className="text-right">{formatCurrency(product.averagePrice)}</TableCell>
                         <TableCell className="text-right font-medium">{formatNumber(product.dailyAverage || 0)}</TableCell>
+                        <TableCell className="text-right font-medium">{formatNumber(product.monthlyAverage || 0)}</TableCell>
                         {monthlyColumns.map(monthKey => (
                           <TableCell key={monthKey} className="text-right text-sm">
                             {formatNumber(typeof product[monthKey] === 'number' ? product[monthKey] as number : 0)}

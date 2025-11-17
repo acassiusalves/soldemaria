@@ -145,9 +145,15 @@ const calculateProductMetrics = (data: VendaDetalhada[], allDataForMonths?: Vend
 
     const sortedProducts = Object.entries(products).map(([name, metrics]) => {
         const monthlyData: Record<string, number> = {};
+        let totalMonthlyQuantity = 0;
         last4Months.forEach(month => {
-            monthlyData[month.label] = metrics.monthlyQuantities[month.key] || 0;
+            const quantity = metrics.monthlyQuantities[month.key] || 0;
+            monthlyData[month.label] = quantity;
+            totalMonthlyQuantity += quantity;
         });
+
+        // Calcular média dos últimos 4 meses
+        const monthlyAverage = totalMonthlyQuantity / 4;
 
         return {
             name,
@@ -158,6 +164,7 @@ const calculateProductMetrics = (data: VendaDetalhada[], allDataForMonths?: Vend
             averagePrice: metrics.quantity > 0 ? metrics.revenue / metrics.quantity : 0,
             share: totalRevenue > 0 ? (metrics.revenue / totalRevenue) * 100 : 0,
             dailyAverage: daysInPeriod > 0 ? metrics.quantity / daysInPeriod : 0,
+            monthlyAverage,
             ...monthlyData,
         };
     }).sort((a,b) => b.revenue - a.revenue);
