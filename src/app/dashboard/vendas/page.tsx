@@ -93,6 +93,7 @@ import type { VendaDetalhada, CustomCalculation, FormulaItem, Operadora, Embalag
 import { SupportDataDialog } from "@/components/support-data-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Progress } from "@/components/ui/progress";
+import { Badge } from "@/components/ui/badge";
 import { Logo } from "@/components/icons";
 import { CalculationDialog } from "@/components/calculation-dialog";
 import SummaryCard from "@/components/summary-card";
@@ -500,6 +501,11 @@ export default function VendasPage() {
     to: endOfMonth(new Date()),
   });
 
+  // Estado para "Dados Importados Até"
+  const [lastImportDate, setLastImportDate] = React.useState<Date | undefined>();
+  const [savedLastImportDate, setSavedLastImportDate] = React.useState<Date | undefined>();
+  const [isSavingImportDate, setIsSavingImportDate] = React.useState(false);
+
   // Usar hooks otimizados com cache e filtros de data
   const {
     data: vendasData,
@@ -640,6 +646,13 @@ export default function VendasPage() {
 
               setColumns(fetchedColumns);
               setUploadedFileNames(data.uploadedFileNames || []);
+
+              // Carregar "Dados Importados Até"
+              if (data.lastImportDate) {
+                const importDate = data.lastImportDate.toDate ? data.lastImportDate.toDate() : new Date(data.lastImportDate);
+                setLastImportDate(importDate);
+                setSavedLastImportDate(importDate);
+              }
           }
         });
     })();
@@ -1389,6 +1402,34 @@ React.useEffect(() => {
     _t({ title: "Dados em revisão removidos" });
   };
 
+  const handleSaveLastImportDate = async () => {
+    if (!lastImportDate) return;
+
+    setIsSavingImportDate(true);
+    try {
+      const db = await getDbClient();
+      if (!db) return;
+
+      const metaRef = doc(db, "metadata", "vendas");
+      await setDoc(metaRef, { lastImportDate: Timestamp.fromDate(lastImportDate) }, { merge: true });
+
+      setSavedLastImportDate(lastImportDate);
+      toast({
+        title: "Data Salva!",
+        description: `Marcador "Importado até ${format(lastImportDate, "dd/MM/yyyy", { locale: ptBR })}" foi salvo com sucesso.`,
+      });
+    } catch (error) {
+      console.error("Erro ao salvar data de importação:", error);
+      toast({
+        title: "Erro ao Salvar",
+        description: "Não foi possível salvar a data. Tente novamente.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSavingImportDate(false);
+    }
+  };
+
   const handleClearAllData = async () => {
     const db = await getDbClient();
     if(!db) return;
@@ -1510,6 +1551,12 @@ React.useEffect(() => {
         <NavMenu />
         <div className="flex w-full items-center gap-4 md:ml-auto md:gap-2 lg:gap-4">
             <div className="ml-auto flex items-center gap-2">
+              {savedLastImportDate && (
+                <Badge variant="secondary" className="text-xs">
+                  <CalendarIcon className="mr-1 h-3 w-3" />
+                  Importado até: {format(savedLastImportDate, "dd/MM/yyyy", { locale: ptBR })}
+                </Badge>
+              )}
               <RefreshButton
                 onRefresh={handleRefreshAll}
                 isLoading={isLoadingData}
@@ -1617,46 +1664,92 @@ React.useEffect(() => {
                  </div>
               </div>
           </CardHeader>
-          <CardContent>
-            <Popover>
-              <PopoverTrigger asChild>
+          <CardContent className="space-y-4">
+            <div>
+              <label className="text-sm font-medium mb-2 block">Período para Análise</label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    id="date"
+                    variant={"outline"}
+                    className={cn("w-[300px] justify-start text-left font-normal", !date && "text-muted-foreground")}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {date?.from ? (
+                      date.to ? (<>{format(date.from, "dd/MM/y", { locale: ptBR })} - {format(date.to, "dd/MM/y", { locale: ptBR })}</>) : (format(date.from, "dd/MM/y", { locale: ptBR }))
+                    ) : (<span>Selecione uma data</span>)}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                   <Calendar
+                      locale={ptBR}
+                      initialFocus
+                      mode="range"
+                      defaultMonth={date?.from}
+                      selected={date}
+                      onSelect={setDate}
+                      numberOfMonths={2}
+                      presets={[
+                          { label: 'Hoje', range: { from: today, to: today } },
+                          { label: 'Ontem', range: { from: subDays(today, 1), to: subDays(today, 1) } },
+                          { label: 'Hoje e ontem', range: { from: subDays(today, 1), to: today } },
+                          { label: 'Últimos 7 dias', range: { from: subDays(today, 6), to: today } },
+                          { label: 'Últimos 14 dias', range: { from: subDays(today, 13), to: today } },
+                          { label: 'Últimos 28 dias', range: { from: subDays(today, 27), to: today } },
+                          { label: 'Últimos 30 dias', range: { from: subDays(today, 29), to: today } },
+                          { label: 'Esta semana', range: { from: startOfWeek(today), to: endOfWeek(today) } },
+                          { label: 'Semana passada', range: { from: startOfWeek(subDays(today, 7)), to: endOfWeek(subDays(today, 7)) } },
+                          { label: 'Este mês', range: { from: startOfMonth(today), to: endOfMonth(today) } },
+                          { label: 'Mês passado', range: { from: startOfMonth(subMonths(today, 1)), to: endOfMonth(subMonths(today, 1)) } },
+                          { label: 'Máximo', range: { from: new Date(2023, 0, 1), to: today } },
+                      ]}
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+
+            <div className="border-t pt-4">
+              <label className="text-sm font-medium mb-2 block">Dados Importados Até</label>
+              <div className="flex items-center gap-2">
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant={"outline"}
+                      className={cn("w-[300px] justify-start text-left font-normal", !lastImportDate && "text-muted-foreground")}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {lastImportDate ? format(lastImportDate, "dd/MM/yyyy", { locale: ptBR }) : "Selecione a data"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      locale={ptBR}
+                      mode="single"
+                      selected={lastImportDate}
+                      onSelect={setLastImportDate}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
                 <Button
-                  id="date"
-                  variant={"outline"}
-                  className={cn("w-[300px] justify-start text-left font-normal", !date && "text-muted-foreground")}
+                  onClick={handleSaveLastImportDate}
+                  disabled={!lastImportDate || isSavingImportDate}
+                  size="sm"
                 >
-                  <CalendarIcon className="mr-2 h-4 w-4" />
-                  {date?.from ? (
-                    date.to ? (<>{format(date.from, "dd/MM/y", { locale: ptBR })} - {format(date.to, "dd/MM/y", { locale: ptBR })}</>) : (format(date.from, "dd/MM/y", { locale: ptBR }))
-                  ) : (<span>Selecione uma data</span>)}
+                  {isSavingImportDate ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Save className="mr-2 h-4 w-4" />
+                  )}
+                  {isSavingImportDate ? "Salvando..." : "Salvar"}
                 </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
-                 <Calendar
-                    locale={ptBR}
-                    initialFocus
-                    mode="range"
-                    defaultMonth={date?.from}
-                    selected={date}
-                    onSelect={setDate}
-                    numberOfMonths={2}
-                    presets={[
-                        { label: 'Hoje', range: { from: today, to: today } },
-                        { label: 'Ontem', range: { from: subDays(today, 1), to: subDays(today, 1) } },
-                        { label: 'Hoje e ontem', range: { from: subDays(today, 1), to: today } },
-                        { label: 'Últimos 7 dias', range: { from: subDays(today, 6), to: today } },
-                        { label: 'Últimos 14 dias', range: { from: subDays(today, 13), to: today } },
-                        { label: 'Últimos 28 dias', range: { from: subDays(today, 27), to: today } },
-                        { label: 'Últimos 30 dias', range: { from: subDays(today, 29), to: today } },
-                        { label: 'Esta semana', range: { from: startOfWeek(today), to: endOfWeek(today) } },
-                        { label: 'Semana passada', range: { from: startOfWeek(subDays(today, 7)), to: endOfWeek(subDays(today, 7)) } },
-                        { label: 'Este mês', range: { from: startOfMonth(today), to: endOfMonth(today) } },
-                        { label: 'Mês passado', range: { from: startOfMonth(subMonths(today, 1)), to: endOfMonth(subMonths(today, 1)) } },
-                        { label: 'Máximo', range: { from: new Date(2023, 0, 1), to: today } },
-                    ]}
-                />
-              </PopoverContent>
-            </Popover>
+              </div>
+              {savedLastImportDate && (
+                <p className="text-xs text-muted-foreground mt-2">
+                  ✓ Última atualização: {format(savedLastImportDate, "dd/MM/yyyy", { locale: ptBR })}
+                </p>
+              )}
+            </div>
           </CardContent>
           {isSaving && (
             <div className="px-6 pb-4">
