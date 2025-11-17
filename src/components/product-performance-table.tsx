@@ -27,7 +27,9 @@ type ProductMetric = {
   orders: number;
   averagePrice: number;
   share: number;
+  dailyAverage?: number;
   previousRevenue?: number;
+  [key: string]: string | number | undefined; // For monthly columns
 };
 
 type SortKey = keyof ProductMetric;
@@ -58,6 +60,14 @@ export default function ProductPerformanceTable({ data, hasComparison }: Product
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [searchTerm, setSearchTerm] = useState("");
 
+  // Extract monthly column names (like "nov/24", "dez/24", etc.)
+  const monthlyColumns = useMemo(() => {
+    if (!data || data.length === 0) return [];
+    const firstProduct = data[0];
+    const knownKeys = ['name', 'code', 'revenue', 'quantity', 'orders', 'averagePrice', 'share', 'dailyAverage', 'previousRevenue', 'cumulativePercentage', 'class'];
+    return Object.keys(firstProduct).filter(key => !knownKeys.includes(key));
+  }, [data]);
+
   const handleSort = (key: SortKey) => {
     if (sortKey === key) {
         setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
@@ -80,8 +90,11 @@ export default function ProductPerformanceTable({ data, hasComparison }: Product
 
   const sortedData = useMemo(() => {
     return [...filteredData].sort((a,b) => {
-        if(a[sortKey] < b[sortKey]) return sortDirection === 'asc' ? -1 : 1;
-        if(a[sortKey] > b[sortKey]) return sortDirection === 'asc' ? 1 : -1;
+        const aVal = a[sortKey];
+        const bVal = b[sortKey];
+        if(aVal === undefined || bVal === undefined) return 0;
+        if(aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
+        if(aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
         return 0;
     })
   }, [filteredData, sortKey, sortDirection]);
@@ -140,6 +153,10 @@ export default function ProductPerformanceTable({ data, hasComparison }: Product
                     <SortableHeader tkey="quantity" label="Unidades" className="text-right" />
                     <SortableHeader tkey="orders" label="Pedidos" className="text-right" />
                     <SortableHeader tkey="averagePrice" label="Preço Médio" className="text-right" />
+                    <SortableHeader tkey="dailyAverage" label="Média/Dia" className="text-right" />
+                    {monthlyColumns.map(monthKey => (
+                      <TableHead key={monthKey} className="text-right text-xs">{monthKey}</TableHead>
+                    ))}
                     <SortableHeader tkey="share" label="Participação" className="w-[200px] text-right" />
                 </TableRow>
                 </TableHeader>
@@ -172,6 +189,12 @@ export default function ProductPerformanceTable({ data, hasComparison }: Product
                         <TableCell className="text-right">{formatNumber(product.quantity)}</TableCell>
                         <TableCell className="text-right">{formatNumber(product.orders)}</TableCell>
                         <TableCell className="text-right">{formatCurrency(product.averagePrice)}</TableCell>
+                        <TableCell className="text-right font-medium">{formatNumber(product.dailyAverage || 0)}</TableCell>
+                        {monthlyColumns.map(monthKey => (
+                          <TableCell key={monthKey} className="text-right text-sm">
+                            {formatNumber(typeof product[monthKey] === 'number' ? product[monthKey] as number : 0)}
+                          </TableCell>
+                        ))}
                         <TableCell className="text-right">
                             <div className="flex items-center justify-end gap-4">
                                 <span className="w-16 text-right">{product.share.toFixed(2)}%</span>

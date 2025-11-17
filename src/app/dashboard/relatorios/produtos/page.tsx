@@ -20,7 +20,7 @@ import type { VendaDetalhada } from "@/lib/data";
 import { useSalesData } from "@/hooks/use-firestore-data-v2";
 import { RefreshButton } from "@/components/refresh-button";
 import { DateRange } from "react-day-picker";
-import { endOfDay, format, isValid, parseISO, startOfMonth, endOfMonth, subDays, startOfWeek, endOfWeek, subMonths } from "date-fns";
+import { endOfDay, format, isValid, parseISO, startOfMonth, endOfMonth, subDays, startOfWeek, endOfWeek, subMonths, differenceInDays } from "date-fns";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -57,8 +57,14 @@ const numBR = (v: any): number => {
   return 0;
 };
 
-const calculateProductMetrics = (data: VendaDetalhada[]) => {
-    const products: Record<string, { code: string; revenue: number; quantity: number; orders: Set<string> }> = {};
+const calculateProductMetrics = (data: VendaDetalhada[], allDataForMonths?: VendaDetalhada[], dateRange?: { from: Date, to: Date }) => {
+    const products: Record<string, {
+        code: string;
+        revenue: number;
+        quantity: number;
+        orders: Set<string>;
+        monthlyQuantities: Record<string, number>;
+    }> = {};
 
     data.forEach(sale => {
         const productName = sale.descricao?.trim();
@@ -69,24 +75,92 @@ const calculateProductMetrics = (data: VendaDetalhada[]) => {
         const productCode = sale.item ? String(sale.item).trim() : '';
 
         if (!products[productName]) {
-            products[productName] = { code: productCode, revenue: 0, quantity: 0, orders: new Set() };
+            products[productName] = {
+                code: productCode,
+                revenue: 0,
+                quantity: 0,
+                orders: new Set(),
+                monthlyQuantities: {}
+            };
         }
         products[productName].revenue += revenue;
         products[productName].quantity += quantity;
         products[productName].orders.add(String(sale.codigo));
     });
 
+    // Calcular vendas dos últimos 4 meses
+    if (allDataForMonths) {
+        const now = new Date();
+        const last4Months: Array<{ key: string; label: string }> = [];
+        for (let i = 3; i >= 0; i--) {
+            const monthDate = subMonths(now, i);
+            last4Months.push({
+                key: format(monthDate, 'yyyy-MM'),
+                label: format(monthDate, 'MMM/yy', { locale: ptBR })
+            });
+        }
+
+        allDataForMonths.forEach(sale => {
+            const productName = sale.descricao?.trim();
+            if (!productName) return;
+
+            const saleDate = toDate(sale.data);
+            if (!saleDate) return;
+
+            const monthKey = format(saleDate, 'yyyy-MM');
+            const quantity = numBR(sale.quantidade);
+
+            if (!products[productName]) {
+                products[productName] = {
+                    code: sale.item ? String(sale.item).trim() : '',
+                    revenue: 0,
+                    quantity: 0,
+                    orders: new Set(),
+                    monthlyQuantities: {}
+                };
+            }
+
+            if (!products[productName].monthlyQuantities[monthKey]) {
+                products[productName].monthlyQuantities[monthKey] = 0;
+            }
+            products[productName].monthlyQuantities[monthKey] += quantity;
+        });
+    }
+
     const totalRevenue = Object.values(products).reduce((sum, p) => sum + p.revenue, 0);
 
-    const sortedProducts = Object.entries(products).map(([name, metrics]) => ({
-        name,
-        code: metrics.code,
-        revenue: metrics.revenue,
-        quantity: metrics.quantity,
-        orders: metrics.orders.size,
-        averagePrice: metrics.quantity > 0 ? metrics.revenue / metrics.quantity : 0,
-        share: totalRevenue > 0 ? (metrics.revenue / totalRevenue) * 100 : 0,
-    })).sort((a,b) => b.revenue - a.revenue);
+    // Calcular os últimos 4 meses
+    const now = new Date();
+    const last4Months: Array<{ key: string; label: string }> = [];
+    for (let i = 3; i >= 0; i--) {
+        const monthDate = subMonths(now, i);
+        last4Months.push({
+            key: format(monthDate, 'yyyy-MM'),
+            label: format(monthDate, 'MMM/yy', { locale: ptBR })
+        });
+    }
+
+    // Calcular número de dias no período filtrado
+    const daysInPeriod = dateRange ? differenceInDays(dateRange.to, dateRange.from) + 1 : 1;
+
+    const sortedProducts = Object.entries(products).map(([name, metrics]) => {
+        const monthlyData: Record<string, number> = {};
+        last4Months.forEach(month => {
+            monthlyData[month.label] = metrics.monthlyQuantities[month.key] || 0;
+        });
+
+        return {
+            name,
+            code: metrics.code,
+            revenue: metrics.revenue,
+            quantity: metrics.quantity,
+            orders: metrics.orders.size,
+            averagePrice: metrics.quantity > 0 ? metrics.revenue / metrics.quantity : 0,
+            share: totalRevenue > 0 ? (metrics.revenue / totalRevenue) * 100 : 0,
+            dailyAverage: daysInPeriod > 0 ? metrics.quantity / daysInPeriod : 0,
+            ...monthlyData,
+        };
+    }).sort((a,b) => b.revenue - a.revenue);
 
     let cumulativeRevenue = 0;
     const abcData = sortedProducts.map(p => {
@@ -130,6 +204,13 @@ export default function ProdutosPage() {
       lastUpdated: vendasLastUpdated
     } = useSalesData(date?.from, date?.to || date?.from);
 
+    // Buscar dados dos últimos 4 meses para as colunas mensais
+    const last4MonthsStart = startOfMonth(subMonths(new Date(), 3));
+    const last4MonthsEnd = endOfMonth(new Date());
+    const {
+      data: last4MonthsData,
+    } = useSalesData(last4MonthsStart, last4MonthsEnd);
+
     React.useEffect(() => {
       setMounted(true);
     }, []);
@@ -143,11 +224,13 @@ export default function ProdutosPage() {
     }, [allSales, compareDate]);
 
     const { tableData, abcChartData } = React.useMemo(() => {
-        const { tableData: currentMetrics, abcChartData: currentAbcData } = calculateProductMetrics(allSales);
+        const dateRangeObj = date?.from && date?.to ? { from: date.from, to: date.to } : undefined;
+        const { tableData: currentMetrics, abcChartData: currentAbcData } = calculateProductMetrics(allSales, last4MonthsData, dateRangeObj);
         if (!compareDate) {
             return { tableData: currentMetrics, abcChartData: currentAbcData };
         }
-        const { tableData: previousMetrics } = calculateProductMetrics(comparisonData);
+        const compareDateRangeObj = compareDate?.from && compareDate?.to ? { from: compareDate.from, to: compareDate.to } : undefined;
+        const { tableData: previousMetrics } = calculateProductMetrics(comparisonData, last4MonthsData, compareDateRangeObj);
         const previousMetricsMap = new Map(previousMetrics.map(p => [p.name, p]));
 
         const combinedTableData = currentMetrics.map(currentProduct => ({
@@ -156,7 +239,7 @@ export default function ProdutosPage() {
         }));
 
         return { tableData: combinedTableData, abcChartData: currentAbcData };
-    }, [allSales, comparisonData, compareDate]);
+    }, [allSales, comparisonData, compareDate, last4MonthsData, date]);
     
     const hasComparison = !!compareDate;
 
