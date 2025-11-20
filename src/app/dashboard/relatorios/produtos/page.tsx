@@ -88,13 +88,13 @@ const calculateProductMetrics = (data: VendaDetalhada[], allDataForMonths?: Vend
         products[productName].orders.add(String(sale.codigo));
     });
 
-    // Calcular vendas dos últimos 4 meses
+    // Calcular vendas dos últimos 3 meses (excluindo o mês vigente)
     if (allDataForMonths) {
         const now = new Date();
-        const last4Months: Array<{ key: string; label: string }> = [];
-        for (let i = 3; i >= 0; i--) {
+        const last3Months: Array<{ key: string; label: string }> = [];
+        for (let i = 3; i >= 1; i--) {
             const monthDate = subMonths(now, i);
-            last4Months.push({
+            last3Months.push({
                 key: format(monthDate, 'yyyy-MM'),
                 label: format(monthDate, 'MMM/yy', { locale: ptBR })
             });
@@ -129,12 +129,12 @@ const calculateProductMetrics = (data: VendaDetalhada[], allDataForMonths?: Vend
 
     const totalRevenue = Object.values(products).reduce((sum, p) => sum + p.revenue, 0);
 
-    // Calcular os últimos 4 meses
+    // Calcular os últimos 3 meses (excluindo o mês vigente)
     const now = new Date();
-    const last4Months: Array<{ key: string; label: string }> = [];
-    for (let i = 3; i >= 0; i--) {
+    const last3Months: Array<{ key: string; label: string }> = [];
+    for (let i = 3; i >= 1; i--) {
         const monthDate = subMonths(now, i);
-        last4Months.push({
+        last3Months.push({
             key: format(monthDate, 'yyyy-MM'),
             label: format(monthDate, 'MMM/yy', { locale: ptBR })
         });
@@ -146,14 +146,14 @@ const calculateProductMetrics = (data: VendaDetalhada[], allDataForMonths?: Vend
     const sortedProducts = Object.entries(products).map(([name, metrics]) => {
         const monthlyData: Record<string, number> = {};
         let totalMonthlyQuantity = 0;
-        last4Months.forEach(month => {
+        last3Months.forEach(month => {
             const quantity = metrics.monthlyQuantities[month.key] || 0;
             monthlyData[month.label] = quantity;
             totalMonthlyQuantity += quantity;
         });
 
-        // Calcular média dos últimos 4 meses
-        const monthlyAverage = totalMonthlyQuantity / 4;
+        // Calcular média dos últimos 3 meses (excluindo mês vigente)
+        const monthlyAverage = totalMonthlyQuantity / 3;
 
         return {
             name,
@@ -211,12 +211,12 @@ export default function ProdutosPage() {
       lastUpdated: vendasLastUpdated
     } = useSalesData(date?.from, date?.to || date?.from);
 
-    // Buscar dados dos últimos 4 meses para as colunas mensais
-    const last4MonthsStart = startOfMonth(subMonths(new Date(), 3));
-    const last4MonthsEnd = endOfMonth(new Date());
+    // Buscar dados dos últimos 3 meses (excluindo o mês vigente) para as colunas mensais
+    const last3MonthsStart = startOfMonth(subMonths(new Date(), 3));
+    const last3MonthsEnd = endOfMonth(subMonths(new Date(), 1));
     const {
-      data: last4MonthsData,
-    } = useSalesData(last4MonthsStart, last4MonthsEnd);
+      data: last3MonthsData,
+    } = useSalesData(last3MonthsStart, last3MonthsEnd);
 
     React.useEffect(() => {
       setMounted(true);
@@ -232,12 +232,12 @@ export default function ProdutosPage() {
 
     const { tableData, abcChartData } = React.useMemo(() => {
         const dateRangeObj = date?.from && date?.to ? { from: date.from, to: date.to } : undefined;
-        const { tableData: currentMetrics, abcChartData: currentAbcData } = calculateProductMetrics(allSales, last4MonthsData, dateRangeObj);
+        const { tableData: currentMetrics, abcChartData: currentAbcData } = calculateProductMetrics(allSales, last3MonthsData, dateRangeObj);
         if (!compareDate) {
             return { tableData: currentMetrics, abcChartData: currentAbcData };
         }
         const compareDateRangeObj = compareDate?.from && compareDate?.to ? { from: compareDate.from, to: compareDate.to } : undefined;
-        const { tableData: previousMetrics } = calculateProductMetrics(comparisonData, last4MonthsData, compareDateRangeObj);
+        const { tableData: previousMetrics } = calculateProductMetrics(comparisonData, last3MonthsData, compareDateRangeObj);
         const previousMetricsMap = new Map(previousMetrics.map(p => [p.name, p]));
 
         const combinedTableData = currentMetrics.map(currentProduct => ({
@@ -246,7 +246,7 @@ export default function ProdutosPage() {
         }));
 
         return { tableData: combinedTableData, abcChartData: currentAbcData };
-    }, [allSales, comparisonData, compareDate, last4MonthsData, date]);
+    }, [allSales, comparisonData, compareDate, last3MonthsData, date]);
     
     const hasComparison = !!compareDate;
 

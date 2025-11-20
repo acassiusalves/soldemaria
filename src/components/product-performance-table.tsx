@@ -155,7 +155,7 @@ export default function ProductPerformanceTable({ data, hasComparison }: Product
                     <SortableHeader tkey="orders" label="Pedidos" className="text-right" />
                     <SortableHeader tkey="averagePrice" label="Preço Médio" className="text-right" />
                     <SortableHeader tkey="dailyAverage" label="Média/Dia" className="text-right" />
-                    <SortableHeader tkey="monthlyAverage" label="Média 4M" className="text-right" />
+                    <SortableHeader tkey="monthlyAverage" label="Média 3M" className="text-right" />
                     {monthlyColumns.map(monthKey => (
                       <TableHead key={monthKey} className="text-right text-xs">{monthKey}</TableHead>
                     ))}
